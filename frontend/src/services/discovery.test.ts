@@ -1,7 +1,7 @@
 /** Focused tests for the LAN discovery resolver. */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { resolveServer, getApiBaseUrl, isTauriEnvironment, hasRequiredTxtFields, identityMatches, buildBaseUrl } from './discovery';
+import { resolveServer, getApiBaseUrl, isTauriEnvironment, hasRequiredTxtFields, identityMatches, buildBaseUrl, verifyManualServer, isServerSetupState, resolveApiBase, type DiscoveryInfo } from './discovery';
 
 // Mock Tauri invoke
 vi.mock('@tauri-apps/api/core', () => ({
@@ -28,13 +28,14 @@ const mockDiscoveredServers = [
   },
 ];
 
-const mockDiscoveryInfo = {
+const mockDiscoveryInfo: DiscoveryInfo = {
   product: 'Lovely Tech POS System',
   protocol_version: '1.0.0',
   api_version: '1',
   app_version: '0.4.0',
   instance_id: 'abcdef01-2345-6789-abcd-ef0123456789',
   branch_code: 'SHOP-A',
+  setup_state: 'READY',
 };
 
 describe('discovery resolver', () => {
@@ -135,6 +136,109 @@ describe('discovery resolver', () => {
     it('returns false when branch_code mismatches', () => {
       const txt = { ...mockDiscoveredServers[0].txt_records, branch_code: 'SHOP-B' };
       expect(identityMatches(txt, mockDiscoveryInfo)).toBe(false);
+    });
+  });
+
+  describe('isServerSetupState', () => {
+    it('accepts the backend setup_state values', () => {
+      expect(isServerSetupState('READY')).toBe(true);
+      expect(isServerSetupState('NEW_SHOP_REQUIRED')).toBe(true);
+      expect(isServerSetupState('EXISTING_SHOP_REQUIRED')).toBe(true);
+    });
+
+    it('rejects unknown or missing setup_state values', () => {
+      expect(isServerSetupState('GARBAGE')).toBe(false);
+      expect(isServerSetupState('')).toBe(false);
+      expect(isServerSetupState(null)).toBe(false);
+      expect(isServerSetupState(undefined)).toBe(false);
+    });
+  });
+
+  describe('setup_state in discovery response', () => {
+    it('accepts setup_state from a verified discovery response', async () => {
+      Object.defineProperty(window, 'location', { value: { protocol: 'tauri:', hostname: 'localhost' }, writable: true, configurable: true });
+      vi.mocked(invoke).mockResolvedValue(mockDiscoveredServers);
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockDiscoveryInfo),
+      });
+
+      const result = await resolveServer();
+      expect(result.identity.setup_state).toBe('READY');
+    });
+
+    it('propagates NEW_SHOP_REQUIRED and EXISTING_SHOP_REQUIRED from the discovery response', async () => {
+      Object.defineProperty(window, 'location', { value: { protocol: 'tauri:', hostname: 'localhost' }, writable: true, configurable: true });
+      vi.mocked(invoke).mockResolvedValue(mockDiscoveredServers);
+
+      for (const setupState of ['NEW_SHOP_REQUIRED', 'EXISTING_SHOP_REQUIRED'] as const) {
+        globalThis.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve({ ...mockDiscoveryInfo, setup_state: setupState }),
+        });
+        const result = await resolveServer();
+        expect(result.identity.setup_state).toBe(setupState);
+      }
+    });
+
+    it('resolveApiBase returns the verified identity including setup_state', async () => {
+      Object.defineProperty(window, 'location', { value: { protocol: 'tauri:', hostname: 'localhost' }, writable: true, configurable: true });
+      vi.mocked(invoke).mockResolvedValue(mockDiscoveredServers);
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockDiscoveryInfo),
+      });
+
+      const resolution = await resolveApiBase();
+      expect(resolution.baseUrl).toBe('http://192.168.1.100:8000/api/v1');
+      expect(resolution.identity).not.toBeNull();
+      expect(resolution.identity!.setup_state).toBe('READY');
+      expect(resolution.identity!.instance_id).toBe('abcdef01-2345-6789-abcd-ef0123456789');
+    });
+
+    it('resolveApiBase returns no identity for a build-configured base URL', async () => {
+      vi.stubEnv('VITE_API_BASE', 'http://configured-server:8000/api/v1');
+      Object.defineProperty(window, 'location', { value: { protocol: 'tauri:', hostname: 'localhost' }, writable: true, configurable: true });
+      const resolution = await resolveApiBase();
+      expect(resolution.baseUrl).toBe('http://configured-server:8000/api/v1');
+      expect(resolution.identity).toBeNull();
+    });
+  });
+
+  describe('verifyManualServer setup_state validation', () => {
+    it('accepts a manually entered server and returns its setup_state', async () => {
+      Object.defineProperty(window, 'location', { value: { protocol: 'tauri:', hostname: 'localhost' }, writable: true, configurable: true });
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockDiscoveryInfo, setup_state: 'NEW_SHOP_REQUIRED' }),
+      });
+
+      const result = await verifyManualServer('192.168.1.50:8000');
+      expect(result.baseUrl).toBe('http://192.168.1.50:8000/api/v1');
+      expect(result.identity.setup_state).toBe('NEW_SHOP_REQUIRED');
+    });
+
+    it('rejects a manual server whose /discovery/info lacks setup_state', async () => {
+      Object.defineProperty(window, 'location', { value: { protocol: 'tauri:', hostname: 'localhost' }, writable: true, configurable: true });
+      const { setup_state: _omit, ...infoWithoutSetupState } = mockDiscoveryInfo;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(infoWithoutSetupState),
+      });
+
+      await expect(verifyManualServer('http://192.168.1.50:8000'))
+        .rejects.toThrow(/setup_state/);
+    });
+
+    it('rejects a manual server with an empty setup_state', async () => {
+      Object.defineProperty(window, 'location', { value: { protocol: 'tauri:', hostname: 'localhost' }, writable: true, configurable: true });
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockDiscoveryInfo, setup_state: '' }),
+      });
+
+      await expect(verifyManualServer('http://192.168.1.50:8000'))
+        .rejects.toThrow(/not a Lovely Tech POS server/);
     });
   });
 

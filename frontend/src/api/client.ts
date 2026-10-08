@@ -1,6 +1,7 @@
-import { getApiBaseUrl, verifyManualServer, getManualOverride, clearManualOverride } from '../services/discovery';
+import { resolveApiBase, verifyManualServer, getManualOverride, clearManualOverride, type DiscoveryInfo } from '../services/discovery';
 
 let _resolvedBaseUrl: string | null = null;
+let _resolvedIdentity: DiscoveryInfo | null = null;
 let _initPromise: Promise<string> | null = null;
 let _initError: Error | null = null;
 
@@ -19,8 +20,11 @@ async function resolveBaseUrl(): Promise<string> {
 
   _initPromise = (async () => {
     try {
-      const baseUrl = await getApiBaseUrl();
+      const { baseUrl, identity } = await resolveApiBase();
       _resolvedBaseUrl = baseUrl.replace(/\/$/, '');
+      // Identity (including setup_state) is only set when a server was
+      // actually verified through mDNS + HTTP /discovery/info this boot.
+      _resolvedIdentity = identity;
       _initError = null;
       return _resolvedBaseUrl;
     } catch (err) {
@@ -29,6 +33,9 @@ async function resolveBaseUrl(): Promise<string> {
       const override = getManualOverride();
       if (override) {
         _resolvedBaseUrl = override.replace(/\/$/, '');
+        // An override URL was not verified this boot, so its setup_state is
+        // unknown: the client must not treat the server as verified/READY.
+        _resolvedIdentity = null;
         _initError = null;
         return _resolvedBaseUrl;
       }
@@ -43,6 +50,16 @@ async function resolveBaseUrl(): Promise<string> {
 
 export function getApiBaseUrlSync(): string | null {
   return _resolvedBaseUrl;
+}
+
+/**
+ * Returns the identity of the server verified during API base resolution
+ * (mDNS + HTTP /discovery/info, or Admin manual verification), including
+ * its setup_state. Null when no server was verified this boot - callers
+ * must never assume READY without a verified identity.
+ */
+export function getResolvedServerIdentity(): DiscoveryInfo | null {
+  return _resolvedIdentity;
 }
 
 export function getApiBaseUrlOrThrow(): string {
@@ -73,6 +90,7 @@ export async function configureManualServer(input: string): Promise<{ baseUrl: s
   const verified = await verifyManualServer(input);
   const baseUrl = verified.baseUrl.replace(/\/$/, '');
   _resolvedBaseUrl = baseUrl;
+  _resolvedIdentity = verified.identity;
   _initError = null;
   return { baseUrl, identity: verified.identity };
 }

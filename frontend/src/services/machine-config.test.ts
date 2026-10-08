@@ -20,6 +20,7 @@ import {
   configHasSecrets,
   computeClientSetupState,
   computeServerSetupState,
+  applyVerifiedServerToClient,
   isTransientSetupState,
   isReadySetupState,
   requiresAdminSetup,
@@ -257,6 +258,111 @@ describe('setup state machine (Packet 15-H)', () => {
     it('does not regress from SETUP_ERROR', () => {
       const next = computeClientSetupState('SETUP_ERROR', 'success');
       expect(next).toBe('SETUP_ERROR');
+    });
+  });
+
+  describe('computeClientSetupState with verified server setup_state (Packet 15-I.3-B)', () => {
+    it('verified READY server → client READY', () => {
+      const next = computeClientSetupState('UNINITIALIZED', 'success', 'READY');
+      expect(next).toBe('READY');
+    });
+
+    it('verified NEW_SHOP_REQUIRED server → client waits (no client-side provisioning)', () => {
+      const next = computeClientSetupState('UNINITIALIZED', 'success', 'NEW_SHOP_REQUIRED');
+      expect(next).toBe('NEW_SHOP_REQUIRED');
+    });
+
+    it('verified EXISTING_SHOP_REQUIRED server → client waits (no client-side provisioning)', () => {
+      const next = computeClientSetupState('UNINITIALIZED', 'success', 'EXISTING_SHOP_REQUIRED');
+      expect(next).toBe('EXISTING_SHOP_REQUIRED');
+    });
+
+    it('waiting client transitions to READY once the server reports READY', () => {
+      expect(computeClientSetupState('NEW_SHOP_REQUIRED', 'success', 'READY')).toBe('READY');
+      expect(computeClientSetupState('EXISTING_SHOP_REQUIRED', 'success', 'READY')).toBe('READY');
+      expect(computeClientSetupState('CLIENT_SETUP_REQUIRED', 'success', 'READY')).toBe('READY');
+    });
+
+    it('READY client mirrors a server that reports NEW_SHOP_REQUIRED again', () => {
+      const next = computeClientSetupState('READY', 'success', 'NEW_SHOP_REQUIRED');
+      expect(next).toBe('NEW_SHOP_REQUIRED');
+      expect(next).not.toBe('READY');
+    });
+
+    it('unknown setup_state from a verified server never becomes READY', () => {
+      const next = computeClientSetupState('UNINITIALIZED', 'success', 'SOME_FUTURE_STATE');
+      expect(next).toBe('SETUP_ERROR');
+      expect(next).not.toBe('READY');
+    });
+
+    it('failed discovery never becomes READY', () => {
+      expect(computeClientSetupState('UNINITIALIZED', 'no_servers')).toBe('CLIENT_SETUP_REQUIRED');
+      expect(computeClientSetupState('UNINITIALIZED', 'all_unreachable')).toBe('CLIENT_SETUP_REQUIRED');
+      expect(computeClientSetupState('UNINITIALIZED', 'identity_mismatch')).toBe('SETUP_ERROR');
+      expect(computeClientSetupState('UNINITIALIZED', 'error')).toBe('SETUP_ERROR');
+      expect(computeClientSetupState('UNINITIALIZED', 'all_unreachable')).not.toBe('READY');
+      expect(computeClientSetupState('CLIENT_SETUP_REQUIRED', 'all_unreachable')).toBe('CLIENT_SETUP_REQUIRED');
+    });
+  });
+
+  describe('applyVerifiedServerToClient (Packet 15-I.3-B)', () => {
+    it('persists the backend instance_id as the stable server_reference', () => {
+      saveMachineConfig(createInitialMachineConfig('CLIENT'));
+      const updated = applyVerifiedServerToClient({
+        instance_id: '11111111-2222-3333-4444-555555555555',
+        setup_state: 'READY',
+      });
+      expect(updated).not.toBeNull();
+      expect(updated!.server_reference).toBe('11111111-2222-3333-4444-555555555555');
+      expect(updated!.setup_state).toBe('READY');
+      // Hostname/IP is never the persisted identity.
+      expect(updated!.server_reference).not.toMatch(/^http/);
+      expect(updated!.server_reference).not.toMatch(/\d+\.\d+\.\d+\.\d+/);
+    });
+
+    it('client waits when the verified server reports NEW_SHOP_REQUIRED', () => {
+      saveMachineConfig(createInitialMachineConfig('CLIENT'));
+      const updated = applyVerifiedServerToClient({
+        instance_id: '22222222-2222-3333-4444-555555555555',
+        setup_state: 'NEW_SHOP_REQUIRED',
+      });
+      expect(updated!.setup_state).toBe('NEW_SHOP_REQUIRED');
+      expect(updated!.server_reference).toBe('22222222-2222-3333-4444-555555555555');
+    });
+
+    it('client waits when the verified server reports EXISTING_SHOP_REQUIRED', () => {
+      saveMachineConfig(createInitialMachineConfig('CLIENT'));
+      const updated = applyVerifiedServerToClient({
+        instance_id: '33333333-3333-3333-4444-555555555555',
+        setup_state: 'EXISTING_SHOP_REQUIRED',
+      });
+      expect(updated!.setup_state).toBe('EXISTING_SHOP_REQUIRED');
+    });
+
+    it('preserves the existing client_id across verified applications and retries', () => {
+      const created = createInitialMachineConfig('CLIENT');
+      saveMachineConfig(created);
+      applyVerifiedServerToClient({ instance_id: 'aaa', setup_state: 'NEW_SHOP_REQUIRED' });
+      applyVerifiedServerToClient({ instance_id: 'aaa', setup_state: 'READY' });
+      const loaded = loadMachineConfig();
+      expect(loaded!.client_id).toBe(created.client_id);
+      expect(loaded!.setup_state).toBe('READY');
+    });
+
+    it('null verified response does not move the client to READY', () => {
+      saveMachineConfig(createInitialMachineConfig('CLIENT'));
+      const updated = applyVerifiedServerToClient(null);
+      expect(updated!.setup_state).toBe('SERVER_DETECTED');
+      expect(updated!.setup_state).not.toBe('READY');
+    });
+
+    it('returns null when no machine config exists', () => {
+      expect(applyVerifiedServerToClient({ instance_id: 'x', setup_state: 'READY' })).toBeNull();
+    });
+
+    it('returns null for SERVER role configs', () => {
+      saveMachineConfig(createInitialMachineConfig('SERVER'));
+      expect(applyVerifiedServerToClient({ instance_id: 'x', setup_state: 'READY' })).toBeNull();
     });
   });
 

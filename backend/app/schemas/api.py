@@ -394,3 +394,21 @@ class ProvisioningOut(BaseModel):
     protocol_version: str
     api_version: str
     setup_state: str
+
+
+class BootstrapIn(BaseModel):
+    branch_code: str = Field(min_length=1, max_length=30)
+    branch_name: str = Field(min_length=1, max_length=150)
+    admin_username: str = Field(min_length=1, max_length=80)
+    admin_password: str = Field(min_length=10, max_length=200)
+    admin_display_name: str = Field(min_length=1, max_length=150)
+
+
+class BootstrapOut(ProvisioningOut):
+    access_token: str
+    expires_at: datetime
+    token_type: str = "bearer"
+    user_id: UUID
+    username: str
+    display_name: str
+    role: str

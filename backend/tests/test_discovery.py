@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 import app.core.config as config
 import app.core.instance as instance_module
@@ -111,6 +112,88 @@ def test_discovery_route_is_registered():
     response = client.get("/discovery/info")
     assert response.status_code == 200
     assert "instance_id" in response.json()
+
+
+def test_discovery_setup_state_ready(tmp_path, monkeypatch):
+    """setup_state is READY when branch exists and identity is linked."""
+    identity_path = _write_identity(tmp_path, {"instance_id": "11111111-2222-3333-4444-555555555555", "branch_code": "MAIN"})
+    monkeypatch.setattr(config.settings, "instance_id_file", str(identity_path))
+
+    from app.models.master import Branch
+    from app.db.session import get_session_factory
+
+    # Create a matching branch in the database
+    db = get_session_factory()()
+    try:
+        existing = db.scalar(select(Branch).where(Branch.code == "MAIN"))
+        if existing is None:
+            db.add(Branch(code="MAIN", name="Main Branch", is_active=True))
+            db.commit()
+    finally:
+        db.close()
+
+    client = TestClient(app)
+    response = client.get("/discovery/info")
+    assert response.status_code == 200
+    assert response.json()["setup_state"] == "READY"
+
+
+def test_discovery_setup_state_new_shop_required(tmp_path, monkeypatch):
+    """setup_state is NEW_SHOP_REQUIRED when no branch exists for the instance."""
+    identity_path = _write_identity(tmp_path, {"instance_id": "22222222-2222-3333-4444-555555555555"})
+    monkeypatch.setattr(config.settings, "instance_id_file", str(identity_path))
+    # Use a branch code that does not exist in the database
+    monkeypatch.setattr(config.settings, "branch_code", "NONEXISTENT-BRANCH-XYZ")
+
+    client = TestClient(app)
+    response = client.get("/discovery/info")
+    assert response.status_code == 200
+    assert response.json()["setup_state"] == "NEW_SHOP_REQUIRED"
+
+
+def test_discovery_setup_state_existing_shop_required(tmp_path, monkeypatch):
+    """setup_state is EXISTING_SHOP_REQUIRED when branch exists but identity lacks branch_code."""
+    identity_path = _write_identity(tmp_path, {"instance_id": "33333333-3333-3333-4444-555555555555"})
+    monkeypatch.setattr(config.settings, "instance_id_file", str(identity_path))
+
+    from app.models.master import Branch
+    from app.db.session import get_session_factory
+
+    # Create a branch that the instance would look up (settings.branch_code fallback)
+    monkeypatch.setattr(config.settings, "branch_code", "ORPHAN")
+
+    db = get_session_factory()()
+    try:
+        existing = db.scalar(select(Branch).where(Branch.code == "ORPHAN"))
+        if existing is None:
+            db.add(Branch(code="ORPHAN", name="Orphan Branch", is_active=True))
+            db.commit()
+    finally:
+        db.close()
+
+    client = TestClient(app)
+    response = client.get("/discovery/info")
+    assert response.status_code == 200
+    assert response.json()["setup_state"] == "EXISTING_SHOP_REQUIRED"
+
+
+def test_discovery_existing_fields_remain_present(tmp_path, monkeypatch):
+    """All existing discovery fields remain present alongside setup_state."""
+    identity_path = _write_identity(tmp_path, {"instance_id": "abcdef01-2345-6789-abcd-ef0123456789"})
+    monkeypatch.setattr(config.settings, "instance_id_file", str(identity_path))
+
+    client = TestClient(app)
+    response = client.get("/discovery/info")
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["product"] == "Lovely Tech POS System"
+    assert body["protocol_version"] == "1.0.0"
+    assert body["api_version"] == "1"
+    assert body["app_version"] == config.settings.app_version
+    assert body["instance_id"] == "abcdef01-2345-6789-abcd-ef0123456789"
+    assert body["branch_code"] == config.settings.branch_code
+    assert "setup_state" in body
 
 
 def test_mdns_txt_record_matches_discovery_info(tmp_path, monkeypatch):

@@ -41,14 +41,14 @@ const stateMessages: Record<SetupState, { title: string; description: string; sh
   },
   NEW_SHOP_REQUIRED: {
     title: 'New shop setup required',
-    description: 'This server machine has no shop configured. An Admin must provision a new shop.',
+    description: 'The POS server has no shop configured yet. An Admin must provision a new shop on the server before this machine can continue.',
     showRetry: false,
     showManual: false,
     adminOnly: true,
   },
   EXISTING_SHOP_REQUIRED: {
     title: 'Existing shop setup required',
-    description: 'This server machine needs to be linked to an existing shop. An Admin must select the shop.',
+    description: 'The POS server must be linked to an existing shop. An Admin must select the shop on the server before this machine can continue.',
     showRetry: false,
     showManual: false,
     adminOnly: true,

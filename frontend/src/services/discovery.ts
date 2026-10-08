@@ -26,6 +26,14 @@ export interface DiscoveryInfo {
   app_version: string;
   instance_id: string;
   branch_code: string;
+  setup_state: ServerSetupState;
+}
+
+/** Server-side provisioning state reported by GET /discovery/info. */
+export type ServerSetupState = 'READY' | 'NEW_SHOP_REQUIRED' | 'EXISTING_SHOP_REQUIRED';
+
+export function isServerSetupState(value: unknown): value is ServerSetupState {
+  return value === 'READY' || value === 'NEW_SHOP_REQUIRED' || value === 'EXISTING_SHOP_REQUIRED';
 }
 
 export interface ResolvedServer {
@@ -88,6 +96,7 @@ async function fetchDiscoveryInfo(baseUrl: string, timeoutMs: number): Promise<D
       app_version: data.app_version,
       instance_id: data.instance_id,
       branch_code: data.branch_code,
+      setup_state: data.setup_state,
     };
   } finally {
     clearTimeout(timer);
@@ -139,7 +148,9 @@ export async function resolveServer(): Promise<ResolvedServer> {
         if (!identityMatches(server.txt_records, info)) {
           lastError = new Error(`Identity mismatch for ${baseUrl}: advertised TXT does not match /discovery/info`);
           lastErrorWasIdentityMismatch = true;
-          continue;
+          // TXT identity is a per-service property: no other address of the
+          // same service can change the mismatch, so stop trying this server.
+          break;
         }
         verified = { baseUrl, identity: info };
         break;
@@ -164,19 +175,43 @@ export async function resolveServer(): Promise<ResolvedServer> {
   return verified;
 }
 
-export async function getApiBaseUrl(): Promise<string> {
+export interface ApiBaseResolution {
+  baseUrl: string;
+  /**
+   * Identity of the verified server, including its setup_state.
+   * Null when no server was verified through mDNS + HTTP /discovery/info
+   * (build-configured base URL or non-Tauri environment).
+   */
+  identity: DiscoveryInfo | null;
+}
+
+/**
+ * Resolves the API base URL for the current environment.
+ *
+ * In a Tauri environment the base URL comes from mDNS discovery plus HTTP
+ * identity verification, so the verified server identity is returned
+ * alongside the base URL. Callers must use that identity's setup_state to
+ * drive client onboarding; a base URL alone proves nothing about the
+ * server's provisioning state.
+ */
+export async function resolveApiBase(): Promise<ApiBaseResolution> {
   const apiBase = import.meta.env.VITE_API_BASE;
   if (apiBase && !apiBase.startsWith('/')) {
-    return apiBase.replace(/\/$/, '');
+    return { baseUrl: apiBase.replace(/\/$/, ''), identity: null };
   }
 
   if (!isTauriEnvironment()) {
-    return '/api/v1';
+    return { baseUrl: '/api/v1', identity: null };
   }
 
+  const resolved = await resolveServer();
+  return { baseUrl: resolved.baseUrl, identity: resolved.identity };
+}
+
+export async function getApiBaseUrl(): Promise<string> {
   try {
-    const resolved = await resolveServer();
-    return resolved.baseUrl;
+    const { baseUrl } = await resolveApiBase();
+    return baseUrl;
   } catch (err) {
     const error = err as DiscoveryError;
     if (error.code === 'NO_TAURI') throw err;
@@ -212,7 +247,7 @@ export function clearManualOverride(): void {
 }
 
 const REQUIRED_IDENTITY_FIELDS = [
-  'product', 'instance_id', 'protocol_version', 'api_version', 'app_version', 'branch_code',
+  'product', 'instance_id', 'protocol_version', 'api_version', 'app_version', 'branch_code', 'setup_state',
 ] as const;
 
 function hasAllIdentityFields(info: Partial<DiscoveryInfo>): info is DiscoveryInfo {
@@ -264,7 +299,7 @@ export async function verifyManualServer(input: string): Promise<ResolvedServer>
   if (!hasAllIdentityFields(info)) {
     throw new Error(
       `Manual server at ${baseUrl} is not a Lovely Tech POS server: ` +
-      'the required identity fields (product, instance_id, protocol_version, api_version, app_version, branch_code) are missing.'
+      'the required identity fields (product, instance_id, protocol_version, api_version, app_version, branch_code, setup_state) are missing.'
     );
   }
 

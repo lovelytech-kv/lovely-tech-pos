@@ -7,12 +7,14 @@ import { DiscoveryStatus } from './components/DiscoveryStatus';
 import { AdminManualServerPanel } from './components/AdminManualServerPanel';
 import { SetupRequired } from './components/SetupRequired';
 import { isTauriEnvironment } from './services/discovery';
+import { getResolvedServerIdentity } from './api/client';
 import {
   getOrCreateMachineConfig,
   setMachineRole,
   setSetupState,
   clearTransientSetupState,
   loadMachineConfig,
+  applyVerifiedServerToClient,
   type MachineRole,
   type MachineConfig,
   type SetupState,
@@ -74,6 +76,20 @@ function App() {
     setSetupStateLocal(config.setup_state);
   }, []);
 
+  // Applies the verified server response to the CLIENT machine configuration.
+  // Only a verified /discovery/info response can move the client to READY;
+  // NEW_SHOP_REQUIRED / EXISTING_SHOP_REQUIRED mean the client waits for the
+  // server Admin - the client never provisions the server itself.
+  const applyVerifiedServerState = () => {
+    if (!isTauriEnvironment()) return;
+    const identity = getResolvedServerIdentity();
+    const updated = applyVerifiedServerToClient(identity);
+    if (updated) {
+      setMachineConfig(updated);
+      setSetupStateLocal(updated.setup_state);
+    }
+  };
+
   // Startup discovery runs once on mount. It does not block browser development:
   // in a non-Tauri environment ensureApiBaseResolved resolves to /api/v1 immediately.
   useEffect(() => {
@@ -83,19 +99,7 @@ function App() {
         await ensureApiBaseResolved();
         if (alive) {
           setBootPhase('ready');
-          // On successful discovery for a CLIENT, transition to SERVER_DETECTED
-          if (isTauriEnvironment()) {
-            const current = loadMachineConfig();
-            if (current?.machine_role === 'CLIENT') {
-              const nextState = computeClientSetupState(current.setup_state, 'success');
-              if (nextState === 'SERVER_DETECTED') {
-                setSetupState(nextState);
-                setSetupStateLocal(nextState);
-              } else if (isReadySetupState(nextState)) {
-                setSetupStateLocal(nextState);
-              }
-            }
-          }
+          applyVerifiedServerState();
         }
       } catch (err) {
         if (alive) {
@@ -112,6 +116,7 @@ function App() {
               const nextState = computeClientSetupState(current.setup_state, result);
               setSetupState(nextState);
               setSetupStateLocal(nextState);
+              setMachineConfig(prev => (prev ? { ...prev, setup_state: nextState } : prev));
             }
           }
         }
@@ -124,18 +129,7 @@ function App() {
     try {
       await resetApiBaseResolution();
       setBootPhase('ready');
-      if (isTauriEnvironment()) {
-        const current = loadMachineConfig();
-        if (current?.machine_role === 'CLIENT') {
-          const nextState = computeClientSetupState(current.setup_state, 'success');
-          if (nextState === 'SERVER_DETECTED') {
-            setSetupState(nextState);
-            setSetupStateLocal(nextState);
-          } else if (isReadySetupState(nextState)) {
-            setSetupStateLocal(nextState);
-          }
-        }
-      }
+      applyVerifiedServerState();
     } catch (err) {
       setBootPhase('failed');
       if (isTauriEnvironment()) {
@@ -149,6 +143,7 @@ function App() {
           const nextState = computeClientSetupState(current.setup_state, result);
           setSetupState(nextState);
           setSetupStateLocal(nextState);
+          setMachineConfig(prev => (prev ? { ...prev, setup_state: nextState } : prev));
         }
       }
     }
@@ -186,6 +181,9 @@ function App() {
         onConfigured={() => {
           setShowManualConfig(false);
           setBootPhase('ready');
+          // The manual server was verified through /discovery/info: its
+          // setup_state drives the client state exactly like automatic discovery.
+          applyVerifiedServerState();
         }}
         onBack={() => {
           setShowManualConfig(false);

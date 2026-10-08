@@ -15,6 +15,8 @@ SERVER machines continue to use the existing backend instance_id.
 CLIENT machines receive their own persistent client_id UUID.
 */
 
+import { isServerSetupState, type ServerSetupState } from './discovery';
+
 export type MachineRole = 'SERVER' | 'CLIENT';
 
 /** Explicit finite setup state machine. */
@@ -208,11 +210,34 @@ export function configHasSecrets(config: MachineConfig): boolean {
   return forbidden.some(term => serialized.includes(term));
 }
 
-/** Determine the next setup state for a CLIENT machine based on current state and discovery result. */
+/** Determine the next setup state for a CLIENT machine based on current state and discovery result.
+ *
+ * When discovery succeeded and a server was verified through mDNS + HTTP
+ * /discovery/info, the server-reported setup_state is authoritative: the client
+ * mirrors it. The client never performs server provisioning itself -
+ * NEW_SHOP_REQUIRED and EXISTING_SHOP_REQUIRED mean the client must wait for
+ * the server Admin to finish bootstrap/recovery.
+ */
 export function computeClientSetupState(
   current: SetupState | null,
-  discoveryResult: 'success' | 'identity_mismatch' | 'no_servers' | 'all_unreachable' | 'error'
+  discoveryResult: 'success' | 'identity_mismatch' | 'no_servers' | 'all_unreachable' | 'error',
+  serverSetupState?: string | null
 ): SetupState {
+  if (discoveryResult === 'success' && serverSetupState != null && serverSetupState !== '') {
+    if (isServerSetupState(serverSetupState)) {
+      switch (serverSetupState) {
+        case 'READY':
+          return 'READY';
+        case 'NEW_SHOP_REQUIRED':
+          return 'NEW_SHOP_REQUIRED';
+        case 'EXISTING_SHOP_REQUIRED':
+          return 'EXISTING_SHOP_REQUIRED';
+      }
+    }
+    // The server answered but reported an unknown setup_state: never assume READY.
+    return 'SETUP_ERROR';
+  }
+
   // If already in a durable setup-required state, don't regress
   const durableStates: SetupState[] = [
     'CLIENT_SETUP_REQUIRED',
@@ -228,7 +253,7 @@ export function computeClientSetupState(
 
   switch (discoveryResult) {
     case 'success':
-      return 'SERVER_DETECTED'; // Transient - will transition to CLIENT_SETUP_REQUIRED after verification
+      return 'SERVER_DETECTED'; // Transient - no verified server identity this boot
     case 'identity_mismatch':
       return 'SETUP_ERROR';
     case 'no_servers':
@@ -238,6 +263,39 @@ export function computeClientSetupState(
     default:
       return 'SETUP_ERROR';
   }
+}
+
+/** Summary of a verified server response, as returned by /discovery/info. */
+export interface VerifiedServerReference {
+  instance_id: string;
+  setup_state: string;
+}
+
+/**
+ * Applies a verified server response to the CLIENT machine configuration.
+ *
+ * The backend instance_id is persisted as the stable server_reference -
+ * hostnames and IP addresses change and are never used as the permanent
+ * server identity. The existing client_id is preserved and never regenerated.
+ * Returns the updated configuration, or null when no CLIENT config exists.
+ */
+export function applyVerifiedServerToClient(
+  verified: VerifiedServerReference | null
+): MachineConfig | null {
+  const existing = loadMachineConfig();
+  if (!existing || existing.machine_role !== 'CLIENT') return null;
+
+  const serverSetupState = verified && verified.setup_state !== '' ? verified.setup_state : null;
+  const nextState = computeClientSetupState(existing.setup_state, 'success', serverSetupState);
+
+  let updated: MachineConfig = existing;
+  if (verified && typeof verified.instance_id === 'string' && verified.instance_id !== '') {
+    const withReference = setServerReference(verified.instance_id);
+    if (withReference) updated = withReference;
+  }
+  const withState = setSetupState(nextState);
+  if (withState) updated = withState;
+  return updated;
 }
 
 /** Determine the next setup state for a SERVER machine. */
