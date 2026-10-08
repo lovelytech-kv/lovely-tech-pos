@@ -1,0 +1,17 @@
+[package]
+name = "lovely-tech-pos"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+mdns-sd = "0.14"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+# Opt-in only (diagnostics): lets F12 / right-click Inspect work in the installed exe.
+devtools = ["tauri/devtools"]

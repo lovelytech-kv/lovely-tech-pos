@@ -1,0 +1,37 @@
+"""Inventory, purchase lots and FIFO lineage.
+
+Revision ID: 0002_inventory_fifo
+Revises: 0001_database_foundation
+"""
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+revision = "0002_inventory_fifo"
+down_revision = "0001_database_foundation"
+branch_labels = None
+depends_on = None
+
+def upgrade():
+    uuid = postgresql.UUID(as_uuid=True)
+    op.create_table("purchases", sa.Column("id", uuid, primary_key=True), sa.Column("branch_id", uuid, sa.ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False), sa.Column("reference_no", sa.String(100)), sa.Column("supplier_id", uuid, sa.ForeignKey("suppliers.id", ondelete="RESTRICT")), sa.Column("purchase_date", sa.Date(), nullable=False), sa.Column("status", sa.String(30), nullable=False), sa.Column("notes", sa.Text()), sa.Column("version", sa.Integer(), nullable=False, server_default="1"), sa.Column("created_at", sa.DateTime(timezone=True), nullable=False), sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False))
+    op.create_index("ix_purchases_branch_date", "purchases", ["branch_id", "purchase_date"])
+    op.create_index("ix_purchases_pending_cost", "purchases", ["status"])
+    op.create_table("purchase_lines", sa.Column("id", uuid, primary_key=True), sa.Column("purchase_id", uuid, sa.ForeignKey("purchases.id", ondelete="RESTRICT"), nullable=False), sa.Column("item_id", uuid, sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=False), sa.Column("quantity", sa.Numeric(18,3), nullable=False), sa.Column("unit_cost", sa.Numeric(18,2)), sa.Column("line_date", sa.Date(), nullable=False), sa.Column("notes", sa.Text()), sa.Column("version", sa.Integer(), nullable=False, server_default="1"), sa.Column("created_at", sa.DateTime(timezone=True), nullable=False), sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False))
+    op.create_index("ix_purchase_lines_item", "purchase_lines", ["item_id"])
+    op.create_table("purchase_lots", sa.Column("id", uuid, primary_key=True), sa.Column("branch_id", uuid, sa.ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False), sa.Column("purchase_line_id", uuid, sa.ForeignKey("purchase_lines.id", ondelete="RESTRICT"), nullable=False), sa.Column("item_id", uuid, sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=False), sa.Column("original_quantity", sa.Numeric(18,3), nullable=False), sa.Column("remaining_quantity", sa.Numeric(18,3), nullable=False), sa.Column("unit_cost", sa.Numeric(18,2), nullable=False), sa.Column("lot_date", sa.Date(), nullable=False), sa.Column("is_closed", sa.Boolean(), nullable=False, server_default=sa.false()), sa.Column("version", sa.Integer(), nullable=False, server_default="1"), sa.Column("created_at", sa.DateTime(timezone=True), nullable=False), sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False))
+    op.create_index("ix_purchase_lots_fifo", "purchase_lots", ["branch_id", "item_id", "lot_date", "created_at"])
+    op.create_table("stock_movements", sa.Column("id", uuid, primary_key=True), sa.Column("branch_id", uuid, sa.ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False), sa.Column("item_id", uuid, sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=False), sa.Column("source_type", sa.String(50), nullable=False), sa.Column("source_id", uuid, nullable=False), sa.Column("quantity_delta", sa.Numeric(18,3), nullable=False), sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False), sa.Column("reason", sa.Text()))
+    op.create_index("ix_stock_movements_item_date", "stock_movements", ["branch_id", "item_id", "occurred_at"])
+    op.create_index("ix_stock_movements_source", "stock_movements", ["source_type", "source_id"])
+    op.create_table("fifo_allocations", sa.Column("id", uuid, primary_key=True), sa.Column("stock_movement_id", uuid, sa.ForeignKey("stock_movements.id", ondelete="RESTRICT"), nullable=False), sa.Column("purchase_lot_id", uuid, sa.ForeignKey("purchase_lots.id", ondelete="RESTRICT")), sa.Column("allocated_quantity", sa.Numeric(18,3), nullable=False), sa.Column("allocated_unit_cost", sa.Numeric(18,2)), sa.Column("allocation_status", sa.String(30), nullable=False), sa.Column("created_at", sa.DateTime(timezone=True), nullable=False))
+    op.create_index("ix_fifo_allocations_lot", "fifo_allocations", ["purchase_lot_id"])
+    op.create_index("ix_fifo_allocations_movement", "fifo_allocations", ["stock_movement_id"])
+    op.create_table("stock_adjustments", sa.Column("id", uuid, primary_key=True), sa.Column("branch_id", uuid, sa.ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False), sa.Column("item_id", uuid, sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=False), sa.Column("quantity_delta", sa.Numeric(18,3), nullable=False), sa.Column("reason", sa.Text(), nullable=False), sa.Column("approved_by", uuid, sa.ForeignKey("users.id", ondelete="RESTRICT")), sa.Column("version", sa.Integer(), nullable=False, server_default="1"), sa.Column("created_at", sa.DateTime(timezone=True), nullable=False), sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False))
+    op.create_table("damage_loss_records", sa.Column("id", uuid, primary_key=True), sa.Column("branch_id", uuid, sa.ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False), sa.Column("item_id", uuid, sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=False), sa.Column("quantity", sa.Numeric(18,3), nullable=False), sa.Column("reason", sa.Text(), nullable=False), sa.Column("source_type", sa.String(50)), sa.Column("source_id", uuid), sa.Column("approved_by", uuid, sa.ForeignKey("users.id", ondelete="RESTRICT")), sa.Column("version", sa.Integer(), nullable=False, server_default="1"), sa.Column("created_at", sa.DateTime(timezone=True), nullable=False), sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False))
+    op.create_table("warranty_holdings", sa.Column("id", uuid, primary_key=True), sa.Column("branch_id", uuid, sa.ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False), sa.Column("item_id", uuid, sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=False), sa.Column("warranty_claim_id", uuid), sa.Column("quantity", sa.Numeric(18,3), nullable=False), sa.Column("status", sa.String(30), nullable=False), sa.Column("version", sa.Integer(), nullable=False, server_default="1"), sa.Column("created_at", sa.DateTime(timezone=True), nullable=False), sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False))
+    op.create_table("serialized_units", sa.Column("id", uuid, primary_key=True), sa.Column("branch_id", uuid, sa.ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False), sa.Column("item_id", uuid, sa.ForeignKey("items.id", ondelete="RESTRICT"), nullable=False), sa.Column("serial_number", sa.String(100), nullable=False), sa.Column("status", sa.String(30), nullable=False), sa.Column("purchase_lot_id", uuid, sa.ForeignKey("purchase_lots.id", ondelete="RESTRICT")), sa.Column("version", sa.Integer(), nullable=False, server_default="1"), sa.Column("created_at", sa.DateTime(timezone=True), nullable=False), sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False), sa.UniqueConstraint("branch_id", "serial_number", name="uq_serialized_units_branch_serial"))
+    op.create_index("ix_serialized_units_item", "serialized_units", ["item_id"])
+
+def downgrade():
+    for t in ["serialized_units","warranty_holdings","damage_loss_records","stock_adjustments","fifo_allocations","stock_movements","purchase_lots","purchase_lines","purchases"]:
+        op.drop_table(t)
