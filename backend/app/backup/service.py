@@ -2,12 +2,46 @@ from __future__ import annotations
 import base64, hashlib, json, os, subprocess, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+import uuid
 from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.core.shop_identity import ShopIdentityStatus, inspect_shop_identity
 
 MAGIC = b"LTPOS-BACKUP-V1\n"
 
 class BackupError(ValueError):
     pass
+
+
+def validate_backup_envelope_metadata(metadata: object) -> uuid.UUID:
+    """Validate authenticated metadata required before a database restore."""
+    if not isinstance(metadata, dict) or metadata.get("format") != "LTPOS-BACKUP-V1":
+        raise BackupError("Unsupported backup envelope")
+
+    raw_shop_id = metadata.get("shop_id")
+    if raw_shop_id is None:
+        raise BackupError("Backup envelope is missing shop identity")
+    try:
+        return uuid.UUID(str(raw_shop_id))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise BackupError("Backup envelope has malformed shop identity") from exc
+
+
+def inspect_restored_shop_identity(database_url: str, expected_shop_id: uuid.UUID):
+    engine = create_engine(libpq_url(database_url), pool_pre_ping=True)
+    try:
+        session_factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+        with session_factory() as db:
+            inspection = inspect_shop_identity(db)
+    finally:
+        engine.dispose()
+    if inspection.status is not ShopIdentityStatus.PRESENT or inspection.shop_id != expected_shop_id:
+        raise BackupError(
+            "Restored shop identity does not match the authenticated backup identity."
+        )
+    return inspection
 
 
 def libpq_url(database_url: str) -> str:
@@ -77,8 +111,7 @@ def restore_postgres_backup(*, pg_dump: str, pg_restore: str, psql: str, databas
     if not encrypted_backup.exists():
         raise BackupError("Backup file not found")
     meta, raw_dump = decrypt_backup(encrypted_backup.read_bytes(), secret=secret)
-    if meta.get("format") != "LTPOS-BACKUP-V1" or meta.get("format") is None:
-        raise BackupError("Unsupported backup envelope")
+    expected_shop_id = validate_backup_envelope_metadata(meta)
     safety_output = Path(safety_output)
     safety_output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as td:
@@ -87,6 +120,7 @@ def restore_postgres_backup(*, pg_dump: str, pg_restore: str, psql: str, databas
         write_verified_backup(safety_raw.read_bytes(),safety_output,secret=secret,metadata={"source":"pre_restore_safety_backup","format":"custom"})
         restore_raw=Path(td)/"restore.dump"; restore_raw.write_bytes(raw_dump)
         subprocess.run([pg_restore,"--clean","--if-exists","--no-owner","--no-privileges","--exit-on-error","--dbname",database_url,str(restore_raw)],env=os.environ.copy(),check=True,capture_output=True,text=True,timeout=900)
+        inspect_restored_shop_identity(database_url, expected_shop_id)
         subprocess.run([psql,"--dbname",database_url,"--command","SELECT 1;"],env=os.environ.copy(),check=True,capture_output=True,text=True,timeout=60)
     return safety_output
 

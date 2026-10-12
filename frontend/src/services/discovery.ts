@@ -30,10 +30,17 @@ export interface DiscoveryInfo {
 }
 
 /** Server-side provisioning state reported by GET /discovery/info. */
-export type ServerSetupState = 'READY' | 'NEW_SHOP_REQUIRED' | 'EXISTING_SHOP_REQUIRED';
+export type ServerSetupState =
+  | 'READY'
+  | 'NEW_SHOP_REQUIRED'
+  | 'EXISTING_SHOP_REQUIRED'
+  | 'IDENTITY_ENROLLMENT_REQUIRED';
 
 export function isServerSetupState(value: unknown): value is ServerSetupState {
-  return value === 'READY' || value === 'NEW_SHOP_REQUIRED' || value === 'EXISTING_SHOP_REQUIRED';
+  return value === 'READY' ||
+    value === 'NEW_SHOP_REQUIRED' ||
+    value === 'EXISTING_SHOP_REQUIRED' ||
+    value === 'IDENTITY_ENROLLMENT_REQUIRED';
 }
 
 export interface ResolvedServer {
@@ -61,7 +68,7 @@ export function buildBaseUrl(address: string, port: number): string {
   return `http://${address}:${port}/api/v1`;
 }
 
-export function identityMatches(txt: Record<string, string>, info: DiscoveryInfo): boolean {
+export function identityMatches(txt: Record<string, string> | DiscoveryInfo, info: DiscoveryInfo): boolean {
   return (
     txt.product === info.product &&
     txt.instance_id === info.instance_id &&
@@ -80,11 +87,22 @@ async function fetchDiscoveryInfo(baseUrl: string, timeoutMs: number): Promise<D
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(getDiscoveryEndpoint(baseUrl), {
-      method: 'GET',
-      cache: 'no-store',
-      signal: controller.signal,
-    });
+    let res: Response;
+    try {
+      res = await fetch(getDiscoveryEndpoint(baseUrl), {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error(`Discovery request to ${baseUrl} timed out.`);
+      }
+      if (error instanceof TypeError) {
+        throw new Error(`Cannot reach the POS server at ${baseUrl}. Check the server address and LAN connection.`);
+      }
+      throw error;
+    }
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
@@ -251,7 +269,7 @@ const REQUIRED_IDENTITY_FIELDS = [
 ] as const;
 
 function hasAllIdentityFields(info: Partial<DiscoveryInfo>): info is DiscoveryInfo {
-  return REQUIRED_IDENTITY_FIELDS.every(field => typeof info[field] === 'string' && (info[field] as string) !== '');
+  return REQUIRED_IDENTITY_FIELDS.every(field => typeof info[field] === 'string' && (field === 'setup_state' || info[field] !== ''));
 }
 
 /**
@@ -302,6 +320,33 @@ export async function verifyManualServer(input: string): Promise<ResolvedServer>
       'the required identity fields (product, instance_id, protocol_version, api_version, app_version, branch_code, setup_state) are missing.'
     );
   }
+  if (!isServerSetupState(info.setup_state)) {
+    throw new Error(`Manual server at ${baseUrl} reported an invalid setup_state: ${JSON.stringify(info.setup_state)}`);
+  }
 
   return { baseUrl, identity: info };
+}
+
+/**
+ * Fetches and validates /discovery/info for an already-resolved base URL.
+ *
+ * Used after bootstrap to re-verify the server's current setup state instead
+ * of trusting the bootstrap response alone. The response must contain all
+ * required identity fields and a valid setup_state; otherwise an error is
+ * thrown so callers never treat an unverified server as READY.
+ */
+export async function fetchAndValidateDiscoveryInfo(baseUrl: string): Promise<DiscoveryInfo> {
+  const info = await fetchDiscoveryInfo(baseUrl, DISCOVERY_HTTP_TIMEOUT_MS);
+  if (!hasAllIdentityFields(info)) {
+    throw new Error(
+      `Discovery info from ${baseUrl} is incomplete: ` +
+      'the required identity fields (product, instance_id, protocol_version, api_version, app_version, branch_code, setup_state) are missing.'
+    );
+  }
+  if (!isServerSetupState(info.setup_state)) {
+    throw new Error(
+      `Discovery info from ${baseUrl} reported an invalid setup_state: ${JSON.stringify(info.setup_state)}`
+    );
+  }
+  return info;
 }

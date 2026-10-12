@@ -2,47 +2,88 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
-import tempfile
 from pathlib import Path
+import uuid
 
-from app.backup.service import libpq_url, decrypt_backup, write_verified_backup
+from app.backup.service import decrypt_backup, restore_postgres_backup, validate_backup_envelope_metadata
+from app.core.config import settings
+from app.core.restore_state import (
+    RestoreInterlockBusy,
+    RestoreState,
+    RestoreStateError,
+    acquire_restore_interlock,
+    append_restore_journal,
+    read_restore_state,
+    restore_state_path,
+    write_restore_state,
+)
 
 
 def run_restore(*, pg_dump: str, pg_restore: str, psql: str = "psql", database_url: str, encrypted_backup: Path,
                 safety_output: Path, secret: str, confirmed: bool) -> Path:
-    database_url = libpq_url(database_url)
     if not confirmed:
         raise SystemExit("Refusing restore: pass --confirm to acknowledge database replacement")
     if not encrypted_backup.exists():
         raise FileNotFoundError(encrypted_backup)
 
     blob = encrypted_backup.read_bytes()
-    meta, raw_dump = decrypt_backup(blob, secret=secret)
-    if meta.get("format") != "LTPOS-BACKUP-V1":
-        raise ValueError("Unsupported Lovely Tech backup envelope")
+    meta, _ = decrypt_backup(blob, secret=secret)
+    expected_shop_id = validate_backup_envelope_metadata(meta)
+    operation_id = uuid.uuid4()
+    control_root = Path(settings.backup_root)
+    state_path = restore_state_path(control_root)
 
-    safety_output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as td:
-        safety_raw = Path(td) / "safety.dump"
-        subprocess.run(
-            [pg_dump, "--format=custom", "--no-owner", "--no-privileges", "--file", str(safety_raw), database_url],
-            env=os.environ.copy(), check=True, capture_output=True, text=True, timeout=300,
-        )
-        write_verified_backup(
-            safety_raw.read_bytes(), safety_output, secret=secret,
-            metadata={"source": "pre_restore_safety_backup", "format": "custom"},
-        )
-
-        restore_raw = Path(td) / "restore.dump"
-        restore_raw.write_bytes(raw_dump)
-        subprocess.run(
-            [pg_restore, "--clean", "--if-exists", "--no-owner", "--no-privileges", "--exit-on-error", "--dbname", database_url, str(restore_raw)],
-            env=os.environ.copy(), check=True, capture_output=True, text=True, timeout=900,
-        )
-        # Lightweight post-restore integrity/connectivity check.
-        subprocess.run([psql, "--dbname", database_url, "--command", "SELECT 1;"], env=os.environ.copy(), check=True, capture_output=True, text=True, timeout=60)
-    return safety_output
+    with acquire_restore_interlock(control_root):
+        if state_path.exists():
+            current = read_restore_state(state_path)
+            if current.state is not RestoreState.READY:
+                raise RestoreStateError("Restore recovery is incomplete; restore is disabled.")
+        try:
+            write_restore_state(
+                state_path, state=RestoreState.RESTORE_IN_PROGRESS,
+                phase="BEFORE_REPLACEMENT", operation_id=operation_id,
+                expected_shop_id=expected_shop_id,
+            )
+            append_restore_journal(
+                safety_output.parent,
+                {"event": "RESTORE_IN_PROGRESS", "operation_id": str(operation_id),
+                 "expected_shop_id": str(expected_shop_id)},
+            )
+            safety = restore_postgres_backup(
+                pg_dump=pg_dump, pg_restore=pg_restore, psql=psql,
+                database_url=database_url, encrypted_backup=encrypted_backup,
+                safety_output=safety_output, secret=secret,
+            )
+            append_restore_journal(
+                control_root,
+                {"event": "RECONCILIATION_SUCCEEDED", "operation_id": str(operation_id),
+                 "shop_id": str(expected_shop_id)},
+            )
+            write_restore_state(
+                state_path, state=RestoreState.READY,
+                phase="RECONCILIATION_SUCCEEDED",
+            )
+            return safety
+        except Exception as exc:
+            report_error = None
+            try:
+                write_restore_state(
+                    state_path, state=RestoreState.RECOVERY_REQUIRED,
+                    phase="FAILED", operation_id=operation_id,
+                    expected_shop_id=expected_shop_id, error=str(exc)[:500],
+                )
+                append_restore_journal(
+                    control_root,
+                    {"event": "RESTORE_FAILED", "operation_id": str(operation_id),
+                     "error": str(exc)[:500]},
+                )
+            except Exception as report_exc:
+                report_error = report_exc
+            if report_error is not None:
+                raise RestoreStateError(
+                    "Restore failed and recovery state could not be durably reported."
+                ) from report_error
+            raise
 
 
 def main() -> None:

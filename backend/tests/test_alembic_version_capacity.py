@@ -98,6 +98,6 @@ def test_version_capacity_migration_chain():
     cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     head = script.get_current_head()
-    assert head == "0031_alembic_version_id_capacity"
+    assert head == "0032_shop_identity_metadata"
     revision = script.get_revision(head)
-    assert revision.down_revision == "0030_audit_immutability"
+    assert revision.down_revision == "0031_alembic_version_id_capacity"

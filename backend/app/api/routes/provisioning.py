@@ -8,11 +8,20 @@ uninitialized server. Unauthenticated, creates branch, admin user, and initial s
 """
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select
+from sqlalchemy import func, inspect, literal, select, text
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from app.api.deps import db_session, issue_session, current_user
 from app.core.config import settings
 from app.core.instance import get_instance_id, get_branch_code, save_branch_code, load_instance_identity
+from app.core.shop_identity import (
+    ShopIdentityError,
+    ShopIdentityStatus,
+    initialize_shop_identity,
+    inspect_shop_identity,
+)
+from app.core.restore_state import (initialize_restore_state, acquire_restore_interlock, RestoreInterlockBusy, RestoreStateError, RestoreState)
+from app.db.base import Base
 from app.models.master import Branch, User, Role
 from app.models.security import AuditLog
 from app.schemas.api import ProvisioningIn, ProvisioningOut, BootstrapIn, BootstrapOut
@@ -21,14 +30,31 @@ from app.security.reauth import require_admin_reauth
 
 router = APIRouter(prefix="/provisioning", tags=["provisioning"])
 
+_BOOTSTRAP_LOCK_KEY = 0x4C54504F53
+_BOOTSTRAP_SCHEMA_REVISION = "0032_shop_identity_metadata"
+_BOOTSTRAP_REVISION_COLUMN_MIN_LENGTH = 64
+_BOOTSTRAP_REQUIRED_COLUMNS = {
+    "alembic_version": {"version_num"},
+    "document_counters": {"prefix", "branch_id", "next_value"},
+}
+
 
 def _get_setup_state(db: Session) -> str:
     """Determine the current setup state for the frontend state machine."""
+    shop_identity = inspect_shop_identity(db)
+    if shop_identity.status in {
+        ShopIdentityStatus.ENROLLMENT_REQUIRED,
+        ShopIdentityStatus.INVALID,
+    }:
+        return "IDENTITY_ENROLLMENT_REQUIRED"
+    if shop_identity.status is ShopIdentityStatus.EMPTY:
+        return "NEW_SHOP_REQUIRED"
+
     # Check if branch exists in DB for the current instance's branch_code
     current_branch_code = get_branch_code()
     branch = db.scalar(select(Branch).where(Branch.code == current_branch_code))
     if branch is None:
-        return "NEW_SHOP_REQUIRED"
+        return "EXISTING_SHOP_REQUIRED"
     identity = __import__('app.core.instance', fromlist=['load_instance_identity']).load_instance_identity()
     if not identity.get("branch_code"):
         return "EXISTING_SHOP_REQUIRED"
@@ -135,30 +161,145 @@ def provision_shop(
 
 def _is_bootstrap_allowed(db: Session) -> bool:
     """Check if bootstrap is allowed (server is completely uninitialized for this instance)."""
-    # Check instance.json for branch_code - this is the primary indicator
-    # that this server instance has been initialized
-    identity = load_instance_identity()
+    bind = db.get_bind()
+    try:
+        if bind.dialect.name == "postgresql":
+            # Set isolation before any statement, then serialize workers and processes.
+            db.execute(text("SET TRANSACTION ISOLATION LEVEL READ COMMITTED"))
+            isolation_level = db.execute(text("SHOW transaction_isolation")).scalar_one()
+            if isolation_level != "read committed":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Unsupported transaction isolation for bootstrap.",
+                )
+            db.execute(select(func.pg_advisory_xact_lock(_BOOTSTRAP_LOCK_KEY)))
+        elif bind.dialect.name == "sqlite":
+            app_env = (settings.app_env or "").strip().lower()
+            if (
+                app_env not in {"development", "test"}
+                or not settings.sqlite_bootstrap_fallback_enabled
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=(
+                        "SQLite bootstrap requires explicit test/development "
+                        "fallback opt-in."
+                    ),
+                )
+            # File-backed SQLite fallback; this is not the production lock contract.
+            db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Bootstrap is unsupported for this database dialect.",
+            )
+
+        existing_tables = set(inspect(bind).get_table_names())
+        required_tables = {
+            table.name for table in Base.metadata.sorted_tables
+        } | set(_BOOTSTRAP_REQUIRED_COLUMNS)
+        required_columns = {
+            table.name: {column.name for column in table.columns}
+            for table in Base.metadata.sorted_tables
+        }
+        for table_name, columns in _BOOTSTRAP_REQUIRED_COLUMNS.items():
+            required_columns.setdefault(table_name, set()).update(columns)
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to verify database schema for bootstrap.",
+        ) from exc
+
+    missing_tables = required_tables - existing_tables
+    if missing_tables:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database schema is incomplete. Bootstrap is not allowed.",
+        )
+
+    try:
+        inspector = inspect(bind)
+        missing_columns = {
+            table_name: columns - {
+                column["name"] for column in inspector.get_columns(table_name)
+            }
+            for table_name, columns in required_columns.items()
+        }
+        missing_columns = {
+            table_name: columns
+            for table_name, columns in missing_columns.items()
+            if columns
+        }
+        if missing_columns:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database schema is incomplete. Bootstrap is not allowed.",
+            )
+        version_column = next(
+            column
+            for column in inspector.get_columns("alembic_version")
+            if column["name"] == "version_num"
+        )
+        version_length = getattr(version_column["type"], "length", None)
+        if (
+            version_length is not None
+            and version_length < _BOOTSTRAP_REVISION_COLUMN_MIN_LENGTH
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database schema is incomplete. Bootstrap is not allowed.",
+            )
+        revisions = db.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+        if revisions != [_BOOTSTRAP_SCHEMA_REVISION]:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unsupported database schema revision for bootstrap.",
+            )
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to verify database schema for bootstrap.",
+        ) from exc
+
+    # A missing external identity binding cannot establish that a restored DB is empty.
+    # Static role/permission catalogs and migration metadata may be pre-seeded.
+    setup_tables = {"roles", "permissions"}
+    business_tables = [
+        table for table in Base.metadata.sorted_tables if table.name not in setup_tables
+    ]
+    for table in business_tables:
+        try:
+            if db.execute(select(literal(1)).select_from(table).limit(1)).first():
+                return False
+        except SQLAlchemyError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to verify database state for bootstrap.",
+            ) from exc
+
+    try:
+        counters = db.execute(text("SELECT 1 FROM document_counters LIMIT 1")).first()
+        if counters:
+            return False
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to verify database state for bootstrap.",
+        ) from exc
+
+    try:
+        identity = load_instance_identity()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to verify server identity for bootstrap.",
+        ) from exc
     if identity.get("branch_code"):
         return False
-    # Also check if there's already a branch in DB with the branch_code
-    # that this instance would use (shouldn't happen if instance.json is consistent)
-    current_branch_code = identity.get("branch_code")
-    if current_branch_code:
-        branch = db.scalar(select(Branch).where(Branch.code == current_branch_code))
-        if branch is not None:
-            return False
-    # Check if there are any users for this instance's branch
-    if current_branch_code:
-        branch = db.scalar(select(Branch).where(Branch.code == current_branch_code))
-        if branch is not None:
-            user = db.scalar(select(User).where(User.branch_id == branch.id).limit(1))
-            if user is not None:
-                return False
     return True
 
 
-@router.post("/bootstrap", response_model=BootstrapOut)
-def bootstrap_server(
+def _bootstrap_server_locked(
     payload: BootstrapIn,
     db: Session = Depends(db_session),
 ) -> BootstrapOut:
@@ -174,8 +315,32 @@ def bootstrap_server(
     if not _is_bootstrap_allowed(db):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Server already initialized. Bootstrap not allowed."
+            detail=(
+                "Server already initialized or existing shop state detected. "
+                "Bootstrap not allowed."
+            ),
         )
+
+    try:
+        restore_state = initialize_restore_state(settings.backup_root)
+    except (OSError, RestoreStateError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Restore recovery state is unavailable; bootstrap is disabled.",
+        ) from exc
+    if restore_state.state is not RestoreState.READY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Restore recovery is incomplete; bootstrap is disabled.",
+        )
+
+    try:
+        initialize_shop_identity(db)
+    except ShopIdentityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shop identity enrollment is required. Bootstrap is not allowed.",
+        ) from exc
 
     instance_id = get_instance_id()
 
@@ -276,3 +441,16 @@ def bootstrap_server(
         display_name=admin_user.display_name,
         role=admin_role.code,
     )
+
+@router.post("/bootstrap", response_model=BootstrapOut)
+def bootstrap_server(
+    payload: BootstrapIn,
+    db: Session = Depends(db_session),
+) -> BootstrapOut:
+    try:
+        with acquire_restore_interlock(settings.backup_root, wait=True):
+            return _bootstrap_server_locked(payload=payload, db=db)
+    except RestoreInterlockBusy as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Bootstrap or restore is already in progress.") from exc
+    except RestoreStateError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Restore recovery state is unavailable; bootstrap is disabled.") from exc

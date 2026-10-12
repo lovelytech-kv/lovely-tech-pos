@@ -38,11 +38,23 @@ async function fetchDiscoveryInfo(baseUrl, timeoutMs) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const res = await fetch(getDiscoveryEndpoint(baseUrl), {
-            method: 'GET',
-            cache: 'no-store',
-            signal: controller.signal,
-        });
+        let res;
+        try {
+            res = await fetch(getDiscoveryEndpoint(baseUrl), {
+                method: 'GET',
+                cache: 'no-store',
+                signal: controller.signal,
+            });
+        }
+        catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                throw new Error(`Discovery request to ${baseUrl} timed out.`);
+            }
+            if (error instanceof TypeError) {
+                throw new Error(`Cannot reach the POS server at ${baseUrl}. Check the server address and LAN connection.`);
+            }
+            throw error;
+        }
         if (!res.ok) {
             throw new Error(`HTTP ${res.status}`);
         }
@@ -184,7 +196,7 @@ const REQUIRED_IDENTITY_FIELDS = [
     'product', 'instance_id', 'protocol_version', 'api_version', 'app_version', 'branch_code', 'setup_state',
 ];
 function hasAllIdentityFields(info) {
-    return REQUIRED_IDENTITY_FIELDS.every(field => typeof info[field] === 'string' && info[field] !== '');
+    return REQUIRED_IDENTITY_FIELDS.every(field => typeof info[field] === 'string' && (field === 'setup_state' || info[field] !== ''));
 }
 /**
  * Verifies a manually entered server candidate.
@@ -234,5 +246,23 @@ export async function verifyManualServer(input) {
         throw new Error(`Manual server at ${baseUrl} is not a Lovely Tech POS server: ` +
             'the required identity fields (product, instance_id, protocol_version, api_version, app_version, branch_code, setup_state) are missing.');
     }
+    if (!isServerSetupState(info.setup_state)) {
+        throw new Error(`Manual server at ${baseUrl} reported an invalid setup_state: ${JSON.stringify(info.setup_state)}`);
+    }
     return { baseUrl, identity: info };
+}
+/**
+ * Fetches and validates /discovery/info for an already-resolved base URL.
+ * Callers must not treat an unverified server or setup state as READY.
+ */
+export async function fetchAndValidateDiscoveryInfo(baseUrl) {
+    const info = await fetchDiscoveryInfo(baseUrl, DISCOVERY_HTTP_TIMEOUT_MS);
+    if (!hasAllIdentityFields(info)) {
+        throw new Error(`Discovery info from ${baseUrl} is incomplete: ` +
+            'the required identity fields (product, instance_id, protocol_version, api_version, app_version, branch_code, setup_state) are missing.');
+    }
+    if (!isServerSetupState(info.setup_state)) {
+        throw new Error(`Discovery info from ${baseUrl} reported an invalid setup_state: ${JSON.stringify(info.setup_state)}`);
+    }
+    return info;
 }

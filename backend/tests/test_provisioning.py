@@ -91,6 +91,7 @@ def _setup_test_environment(monkeypatch, tmp_path):
     monkeypatch.setattr(config.settings, "instance_id_file", str(identity_path))
     # Use a non-existent branch_code to avoid conflicts with existing branches
     monkeypatch.setattr(config.settings, "branch_code", f"NONEXISTENT_{uuid.uuid4().hex[:8].upper()}")
+    monkeypatch.setattr(config.settings, "backup_root", str(tmp_path / "backups"))
     return instance_id
 
 
@@ -404,6 +405,7 @@ def test_provisioning_conflict_different_branch_code(tmp_path, monkeypatch):
     monkeypatch.setattr(config.settings, "instance_id_file", str(identity_path))
     # Use a non-existent branch_code to avoid conflicts with existing branches
     monkeypatch.setattr(config.settings, "branch_code", f"NONEXISTENT_{uuid.uuid4().hex[:8].upper()}")
+    monkeypatch.setattr(config.settings, "backup_root", str(tmp_path / "backups"))
     monkeypatch.setattr(config.settings, "critical_reauth_required", False)
 
     from app.db.session import get_session_factory
@@ -469,6 +471,7 @@ def _setup_bootstrap_environment(monkeypatch, tmp_path):
     identity_path = _write_identity(tmp_path, {"instance_id": instance_id})
     monkeypatch.setattr(config.settings, "instance_id_file", str(identity_path))
     monkeypatch.setattr(config.settings, "branch_code", f"NONEXISTENT_{uuid.uuid4().hex[:8].upper()}")
+    monkeypatch.setattr(config.settings, "backup_root", str(tmp_path / "backups"))
     return instance_id
 
 
@@ -962,7 +965,7 @@ def test_existing_provisioning_tests_still_pass(tmp_path, monkeypatch):
             json={"branch_code": "EXISTINGSHOP", "branch_name": "Existing Shop"},
             headers=headers,
         )
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
         data = response.json()
         assert data["status"] == "provisioned"
         assert data["branch_code"] == "EXISTINGSHOP"

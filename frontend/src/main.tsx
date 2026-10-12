@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { currentUser, logout, ensureApiBaseResolved, resetApiBaseResolution } from './api/client';
+import { currentUser, logout, ensureApiBaseResolved, resetApiBaseResolution, type BootstrapShopResponse, refreshServerSetupState } from './api/client';
 import { Login } from './features/auth/Login';
 import { POSHome } from './features/pos/POSHome';
 import { DiscoveryStatus } from './components/DiscoveryStatus';
 import { AdminManualServerPanel } from './components/AdminManualServerPanel';
 import { SetupRequired } from './components/SetupRequired';
-import { isTauriEnvironment } from './services/discovery';
+import { isTauriEnvironment, isServerSetupState } from './services/discovery';
 import { getResolvedServerIdentity } from './api/client';
 import {
   getOrCreateMachineConfig,
@@ -62,7 +62,7 @@ function App() {
     return () => window.removeEventListener('ltpos:session-expired', h);
   }, []);
 
-  // Machine-role foundation: in a Tauri build the app is always a CLIENT.
+  // Machine-role selection: preserve persisted role; if none, probe localhost backend.
   // In browser dev mode there is no machine role; we skip persistence.
   useEffect(() => {
     if (!isTauriEnvironment()) {
@@ -70,10 +70,56 @@ function App() {
       setSetupStateLocal(null);
       return;
     }
-    const config = getOrCreateMachineConfig('CLIENT');
-    setMachineRoleState(config.machine_role);
-    setMachineConfig(config);
-    setSetupStateLocal(config.setup_state);
+    const initializeRole = async () => {
+      const existing = loadMachineConfig();
+      if (existing && existing.machine_role === 'SERVER' || existing && existing.machine_role === 'CLIENT') {
+        setMachineRoleState(existing.machine_role);
+        setMachineConfig(existing);
+        setSetupStateLocal(existing.setup_state);
+        return;
+      }
+      // No valid persisted role - probe localhost
+      let selectedRole: MachineRole = 'CLIENT';
+      let detectedServerSetupState: SetupState = 'SETUP_ERROR';
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 800);
+        try {
+          const res = await fetch('http://127.0.0.1:8000/discovery/info', {
+            method: 'GET',
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (
+              data &&
+              typeof data === 'object' &&
+              data.product === 'Lovely Tech POS System' &&
+              typeof data.instance_id === 'string' &&
+              data.instance_id !== ''
+            ) {
+              selectedRole = 'SERVER';
+              detectedServerSetupState = isServerSetupState(data.setup_state)
+                ? data.setup_state
+                : 'SETUP_ERROR';
+            }
+          }
+        } finally {
+          clearTimeout(timeout);
+        }
+      } catch (err) {
+        selectedRole = 'CLIENT';
+      }
+      const config = getOrCreateMachineConfig(selectedRole);
+      const initializedConfig = selectedRole === 'SERVER'
+        ? setSetupState(detectedServerSetupState) ?? config
+        : config;
+      setMachineRoleState(config.machine_role);
+      setMachineConfig(initializedConfig);
+      setSetupStateLocal(initializedConfig.setup_state);
+    };
+    initializeRole();
   }, []);
 
   // Applies the verified server response to the CLIENT machine configuration.
@@ -83,6 +129,12 @@ function App() {
   const applyVerifiedServerState = () => {
     if (!isTauriEnvironment()) return;
     const identity = getResolvedServerIdentity();
+    if (!identity || !isServerSetupState(identity.setup_state)) {
+      const updated = setSetupState('SETUP_ERROR');
+      if (updated) setMachineConfig(updated);
+      setSetupStateLocal('SETUP_ERROR');
+      return;
+    }
     const updated = applyVerifiedServerToClient(identity);
     if (updated) {
       setMachineConfig(updated);
@@ -126,6 +178,25 @@ function App() {
   }, []);
 
   const handleRetryDiscovery = async () => {
+    const current = loadMachineConfig();
+    if (isTauriEnvironment() && current?.machine_role === 'SERVER' && current.setup_state === 'SETUP_ERROR') {
+      try {
+        const identity = await refreshServerSetupState();
+        if (!isServerSetupState(identity.setup_state) || identity.setup_state !== 'READY') {
+          throw new Error('The server has not reached READY.');
+        }
+        applyVerifiedServerState();
+        const updated = setSetupState('READY');
+        if (updated) setMachineConfig(updated);
+        setSetupStateLocal('READY');
+      } catch {
+        const updated = setSetupState('SETUP_ERROR');
+        if (updated) setMachineConfig(updated);
+        setSetupStateLocal('SETUP_ERROR');
+      }
+      return;
+    }
+
     try {
       await resetApiBaseResolution();
       setBootPhase('ready');
@@ -157,6 +228,34 @@ function App() {
   const handleBackToDiscovery = () => {
     setShowManualConfig(false);
     setBootPhase('failed');
+  };
+
+  // Bootstrap success (NEW_SHOP_REQUIRED server Admin): establish the same
+  // authenticated session that a normal login establishes (the token + user
+  // are already persisted by bootstrapShop via the shared persistSession),
+  // then refresh /discovery/info to verify the server's current setup state.
+  // Only a verified READY discovery response advances the SERVER setup state.
+  const handleBootstrapSuccess = async (result: BootstrapShopResponse) => {
+    setUser(result);
+    if (!isTauriEnvironment()) return;
+
+    try {
+      const identity = await refreshServerSetupState();
+      // Only advance when the refreshed identity confirms READY.
+      if (isServerSetupState(identity.setup_state) && identity.setup_state === 'READY') {
+        applyVerifiedServerState();
+        const updated = setSetupState('READY');
+        if (updated) setMachineConfig(updated);
+        setSetupStateLocal('READY');
+      }
+    } catch {
+      // Refresh failed or identity is invalid: keep the authenticated session
+      // intact and let the existing SETUP_ERROR/retry UI surface the problem.
+      // Do not repeat bootstrap automatically.
+      const updated = setSetupState('SETUP_ERROR');
+      if (updated) setMachineConfig(updated);
+      setSetupStateLocal('SETUP_ERROR');
+    }
   };
 
   // If we're in a transient discovery state, clear it on successful boot
@@ -206,6 +305,7 @@ function App() {
         <SetupRequired
           state={currentSetupState}
           isAdmin={isAdmin}
+          machineRole="CLIENT"
           onRetryDiscovery={handleRetryDiscovery}
           onConfigureManual={handleConfigureManual}
           onBackToDiscovery={handleBackToDiscovery}
@@ -213,21 +313,34 @@ function App() {
       );
     }
 
-    // For SERVER machines (not implemented in this packet, but reserved)
+    // For SERVER machines
     if (machineRole === 'SERVER' && !isReadySetupState(currentSetupState)) {
       const isAdmin = user?.role.toUpperCase() === 'ADMIN';
-      if (requiresAdminSetup(currentSetupState) && !isAdmin) {
+      const firstRunBootstrap = currentSetupState === 'NEW_SHOP_REQUIRED';
+      if (requiresAdminSetup(currentSetupState) && !isAdmin && !firstRunBootstrap) {
         return (
           <SetupRequired
             state={currentSetupState}
             isAdmin={false}
+            machineRole="SERVER"
             onRetryDiscovery={handleRetryDiscovery}
             onConfigureManual={handleConfigureManual}
             onBackToDiscovery={handleBackToDiscovery}
           />
         );
       }
-      // Admin would see the setup flow here (future packets)
+      // Admin would see the setup flow here
+      return (
+        <SetupRequired
+          state={currentSetupState}
+          isAdmin={isAdmin || firstRunBootstrap}
+          machineRole="SERVER"
+          onRetryDiscovery={handleRetryDiscovery}
+          onConfigureManual={handleConfigureManual}
+          onBackToDiscovery={handleBackToDiscovery}
+          onBootstrapSuccess={handleBootstrapSuccess}
+        />
+      );
     }
   }
 

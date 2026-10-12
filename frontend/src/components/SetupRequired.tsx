@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { AdminManualServerPanel } from '../components/AdminManualServerPanel';
+import { ServerBootstrapForm } from '../components/ServerBootstrapForm';
+import { ServerExistingShopForm, ServerExistingShopWaiting } from '../components/ServerExistingShopForm';
 import type { SetupState } from '../services/machine-config';
+import type { BootstrapShopResponse } from '../api/client';
 
 type Props = {
   state: SetupState;
   isAdmin: boolean;
+  machineRole: 'SERVER' | 'CLIENT';
   onRetryDiscovery: () => Promise<void>;
   onConfigureManual: () => void;
   onBackToDiscovery: () => void;
+  onBootstrapSuccess?: (result: BootstrapShopResponse) => void;
 };
 
 const stateMessages: Record<SetupState, { title: string; description: string; showRetry: boolean; showManual: boolean; adminOnly: boolean }> = {
@@ -53,6 +58,13 @@ const stateMessages: Record<SetupState, { title: string; description: string; sh
     showManual: false,
     adminOnly: true,
   },
+  IDENTITY_ENROLLMENT_REQUIRED: {
+    title: 'Shop identity enrollment required',
+    description: 'This database contains existing shop data without canonical shop identity metadata. Do not bootstrap or rebind this server. Keep writes blocked and contact the authorized administrator for an approved enrollment procedure.',
+    showRetry: false,
+    showManual: false,
+    adminOnly: true,
+  },
   RESTORE_REQUIRED: {
     title: 'Restore required',
     description: 'This server machine needs to be restored from a verified backup. An Admin must select the backup.',
@@ -79,15 +91,20 @@ const stateMessages: Record<SetupState, { title: string; description: string; sh
 export function SetupRequired({
   state,
   isAdmin,
+  machineRole,
   onRetryDiscovery,
   onConfigureManual,
   onBackToDiscovery,
+  onBootstrapSuccess,
 }: Props) {
   const [showManualConfig, setShowManualConfig] = useState(false);
+  const [showServerBootstrap, setShowServerBootstrap] = useState(false);
+  const [showServerExistingShop, setShowServerExistingShop] = useState(false);
   const info = stateMessages[state];
 
   if (state === 'READY') return null;
 
+  // Non-admin users see waiting message for admin-only states
   if (info.adminOnly && !isAdmin) {
     return (
       <div className="discovery-overlay">
@@ -102,6 +119,7 @@ export function SetupRequired({
     );
   }
 
+  // Transient discovery states
   if (state === 'DISCOVERING' || state === 'UNINITIALIZED' || state === 'SERVER_DETECTED') {
     return (
       <div className="discovery-overlay">
@@ -118,6 +136,118 @@ export function SetupRequired({
     );
   }
 
+  // SERVER-specific setup flows
+  if (machineRole === 'SERVER') {
+    if (state === 'IDENTITY_ENROLLMENT_REQUIRED') {
+      return (
+        <div className="discovery-overlay">
+          <div className="discovery-card glass-card">
+            <div className="discovery-error-icon" aria-hidden="true">!</div>
+            <h2>{info.title}</h2>
+            <p className="muted">{info.description}</p>
+          </div>
+        </div>
+      );
+    }
+
+    // NEW_SHOP_REQUIRED: Show bootstrap form
+    if (state === 'NEW_SHOP_REQUIRED') {
+      if (showServerBootstrap) {
+        return <ServerBootstrapForm onSuccess={onBootstrapSuccess} />;
+      }
+      return (
+        <div className="discovery-overlay">
+          <div className="discovery-card glass-card admin-manual-panel">
+            <div className="discovery-panel-head">
+              <div>
+                <span className="eyebrow">ADMIN · SERVER SETUP</span>
+                <h2>{info.title}</h2>
+                <p className="muted">{info.description}</p>
+              </div>
+            </div>
+            <div className="manual-actions">
+              <button className="primary" onClick={() => setShowServerBootstrap(true)}>
+                Provision new shop
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // EXISTING_SHOP_REQUIRED: Show existing shop provisioning form
+    if (state === 'EXISTING_SHOP_REQUIRED') {
+      if (showServerExistingShop) {
+        return <ServerExistingShopForm />;
+      }
+      return (
+        <div className="discovery-overlay">
+          <div className="discovery-card glass-card admin-manual-panel">
+            <div className="discovery-panel-head">
+              <div>
+                <span className="eyebrow">ADMIN · SERVER SETUP</span>
+                <h2>{info.title}</h2>
+                <p className="muted">{info.description}</p>
+              </div>
+            </div>
+            <div className="manual-actions">
+              <button className="primary" onClick={() => setShowServerExistingShop(true)}>
+                Complete existing shop setup
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // RESTORE_REQUIRED: Not implemented in this packet - show waiting state
+    if (state === 'RESTORE_REQUIRED') {
+      return (
+        <div className="discovery-overlay">
+          <div className="discovery-card glass-card">
+            <div className="discovery-error-icon" aria-hidden="true">!</div>
+            <h2>{info.title}</h2>
+            <p className="muted">{info.description}</p>
+            <div className="discovery-actions">
+              <button className="primary" onClick={onRetryDiscovery}>
+                Retry Discovery
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // SETUP_ERROR for SERVER
+    if (state === 'SETUP_ERROR') {
+      return (
+        <div className="discovery-overlay">
+          <div className="discovery-card glass-card">
+            <div className="discovery-error-icon" aria-hidden="true">!</div>
+            <h2>{info.title}</h2>
+            <p className="muted">{info.description}</p>
+            <div className="discovery-actions">
+              {info.showRetry && (
+                <button className="primary" onClick={onRetryDiscovery}>
+                  Retry Discovery
+                </button>
+              )}
+              {info.showManual && (
+                <button className="ghost" onClick={() => setShowManualConfig(true)}>
+                  Configure server manually
+                </button>
+              )}
+              <button className="ghost" onClick={onBackToDiscovery}>
+                Back to discovery
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // CLIENT-specific existing states (existing behavior)
   if (showManualConfig) {
     return (
       <AdminManualServerPanel

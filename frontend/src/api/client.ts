@@ -1,4 +1,4 @@
-import { resolveApiBase, verifyManualServer, getManualOverride, clearManualOverride, type DiscoveryInfo } from '../services/discovery';
+import { resolveApiBase, verifyManualServer, getManualOverride, clearManualOverride, fetchAndValidateDiscoveryInfo, identityMatches, isServerSetupState, type DiscoveryInfo } from '../services/discovery';
 
 let _resolvedBaseUrl: string | null = null;
 let _resolvedIdentity: DiscoveryInfo | null = null;
@@ -105,7 +105,7 @@ const REQUEST_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 15000);
 
 export type LoginResponse = {
   access_token: string; token_type: string; expires_at: string; user_id: string;
-  username: string; display_name: string; role: string; branch_id: string; must_change_password: boolean;
+  username: string; display_name: string; role: string; branch_id: string; must_change_password?: boolean;
 };
 
 export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
@@ -153,14 +153,80 @@ export async function checkServerHealth(): Promise<{ status: string; service?: s
   return body;
 }
 
+function persistSession(session: LoginResponse | BootstrapShopResponse): void {
+  localStorage.setItem('ltpos_token', session.access_token);
+  localStorage.setItem('ltpos_user', JSON.stringify(session));
+}
+
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const result = await api<LoginResponse>('/auth/login', {method:'POST', body:JSON.stringify({username,password})});
   if (!result || !result.access_token || typeof result.role !== 'string') {
     throw new Error('Login reply was incomplete. Check the server address and that client/server versions match.');
   }
-  localStorage.setItem('ltpos_token', result.access_token);
-  localStorage.setItem('ltpos_user', JSON.stringify(result));
+  persistSession(result);
   return result;
+}
+
+export type BootstrapShopResponse = {
+  access_token: string;
+  token_type: string;
+  expires_at: string;
+  user_id: string;
+  username: string;
+  display_name: string;
+  role: string;
+  branch_id: string;
+  setup_state: string;
+};
+
+export async function bootstrapShop(input: {
+  branch_code: string;
+  branch_name: string;
+  admin_username: string;
+  admin_password: string;
+  admin_display_name: string;
+}): Promise<BootstrapShopResponse> {
+  const result = await api<BootstrapShopResponse>('/provisioning/bootstrap', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!result || !result.access_token) {
+    throw new Error('Bootstrap reply was incomplete. The shop may not have been provisioned. Check the server logs and try again.');
+  }
+  persistSession(result);
+  return result;
+}
+
+/**
+ * After a successful bootstrap, re-fetch /discovery/info from the already
+ * resolved server base URL and validate it using the existing discovery
+ * validation rules. Only a verified READY setup state is accepted - the
+ * bootstrap response alone never marks the server READY.
+ *
+ * The authenticated session is preserved on failure; the error is surfaced
+ * so the caller can show the existing safe setup-error/retry UI.
+ */
+export async function refreshServerSetupState(): Promise<DiscoveryInfo> {
+  const baseUrl = await resolveBaseUrl();
+  assertServerConfigured(baseUrl);
+  const expectedIdentity = _resolvedIdentity;
+  if (!expectedIdentity) {
+    throw new Error('Cannot verify the server setup state without a previously verified server identity.');
+  }
+
+  const identity = await fetchAndValidateDiscoveryInfo(baseUrl);
+  if (!identityMatches(expectedIdentity, identity)) {
+    throw new Error('Server identity changed while verifying setup state. The refreshed identity does not match the verified server.');
+  }
+  if (!isServerSetupState(identity.setup_state) || identity.setup_state !== 'READY') {
+    throw new Error(
+      `Server setup state after bootstrap is not READY: ${JSON.stringify(identity.setup_state)}. ` +
+      'The server must reach READY before the client can proceed.'
+    );
+  }
+  _resolvedIdentity = identity;
+  _initError = null;
+  return identity;
 }
 
 export async function serverLogout(): Promise<void> {

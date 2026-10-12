@@ -1,7 +1,7 @@
 /** Focused tests for the LAN discovery resolver. */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { resolveServer, getApiBaseUrl, isTauriEnvironment, hasRequiredTxtFields, identityMatches, buildBaseUrl, verifyManualServer, isServerSetupState, resolveApiBase, type DiscoveryInfo } from './discovery';
+import { resolveServer, getApiBaseUrl, isTauriEnvironment, hasRequiredTxtFields, identityMatches, buildBaseUrl, verifyManualServer, isServerSetupState, resolveApiBase, fetchAndValidateDiscoveryInfo, type DiscoveryInfo } from './discovery';
 
 // Mock Tauri invoke
 vi.mock('@tauri-apps/api/core', () => ({
@@ -230,7 +230,7 @@ describe('discovery resolver', () => {
         .rejects.toThrow(/setup_state/);
     });
 
-    it('rejects a manual server with an empty setup_state', async () => {
+    it('rejects a manual server with an empty setup_state as invalid', async () => {
       Object.defineProperty(window, 'location', { value: { protocol: 'tauri:', hostname: 'localhost' }, writable: true, configurable: true });
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -238,7 +238,18 @@ describe('discovery resolver', () => {
       });
 
       await expect(verifyManualServer('http://192.168.1.50:8000'))
-        .rejects.toThrow(/not a Lovely Tech POS server/);
+        .rejects.toThrow(/invalid setup_state/);
+    });
+
+    it('rejects a manual server with an unknown setup_state', async () => {
+      Object.defineProperty(window, 'location', { value: { protocol: 'tauri:', hostname: 'localhost' }, writable: true, configurable: true });
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockDiscoveryInfo, setup_state: 'INITIALIZED' }),
+      });
+
+      await expect(verifyManualServer('http://192.168.1.50:8000'))
+        .rejects.toThrow(/invalid setup_state/);
     });
   });
 
@@ -384,6 +395,80 @@ describe('discovery resolver', () => {
 
       const promise = getApiBaseUrl();
       await expect(promise).rejects.toThrow('Automatic server discovery failed');
+    });
+  });
+
+  describe('fetchAndValidateDiscoveryInfo', () => {
+    const baseUrl = 'http://192.168.1.100:8000/api/v1';
+
+    it('returns validated identity when /discovery/info is complete and READY', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockDiscoveryInfo, setup_state: 'READY' }),
+      });
+
+      const identity = await fetchAndValidateDiscoveryInfo(baseUrl);
+      expect(identity.setup_state).toBe('READY');
+      expect(identity.instance_id).toBe(mockDiscoveryInfo.instance_id);
+    });
+
+    it('returns validated identity with non-READY setup_state', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockDiscoveryInfo, setup_state: 'NEW_SHOP_REQUIRED' }),
+      });
+
+      const identity = await fetchAndValidateDiscoveryInfo(baseUrl);
+      expect(identity.setup_state).toBe('NEW_SHOP_REQUIRED');
+    });
+
+    it('throws when /discovery/info is missing required identity fields', async () => {
+      const { setup_state: _omit, ...incomplete } = mockDiscoveryInfo;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(incomplete),
+      });
+
+      await expect(fetchAndValidateDiscoveryInfo(baseUrl))
+        .rejects.toThrow(/incomplete/);
+    });
+
+    it('throws when /discovery/info reports an invalid setup_state', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockDiscoveryInfo, setup_state: 'GARBAGE_STATE' }),
+      });
+
+      await expect(fetchAndValidateDiscoveryInfo(baseUrl))
+        .rejects.toThrow(/invalid setup_state/);
+    });
+
+    it('rejects an empty setup_state as invalid setup state', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...mockDiscoveryInfo, setup_state: '' }),
+      });
+
+      await expect(fetchAndValidateDiscoveryInfo(baseUrl))
+        .rejects.toThrow(/invalid setup_state/);
+    });
+
+    it('throws when HTTP response is not ok', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({}),
+      });
+
+      await expect(fetchAndValidateDiscoveryInfo(baseUrl))
+        .rejects.toThrow(/HTTP 503/);
+    });
+
+    it('throws when the network request fails', async () => {
+      globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+      await expect(fetchAndValidateDiscoveryInfo(baseUrl))
+        .rejects.toThrow(/Cannot reach/);
     });
   });
 });

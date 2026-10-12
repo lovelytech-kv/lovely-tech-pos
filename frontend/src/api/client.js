@@ -1,4 +1,4 @@
-import { resolveApiBase, verifyManualServer, getManualOverride } from '../services/discovery';
+import { resolveApiBase, verifyManualServer, getManualOverride, fetchAndValidateDiscoveryInfo, identityMatches, isServerSetupState } from '../services/discovery';
 let _resolvedBaseUrl = null;
 let _resolvedIdentity = null;
 let _initPromise = null;
@@ -158,14 +158,47 @@ export async function checkServerHealth() {
         throw new Error('POS server health check returned an unexpected status.');
     return body;
 }
+function persistSession(session) {
+    localStorage.setItem('ltpos_token', session.access_token);
+    localStorage.setItem('ltpos_user', JSON.stringify(session));
+}
 export async function login(username, password) {
     const result = await api('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
     if (!result || !result.access_token || typeof result.role !== 'string') {
         throw new Error('Login reply was incomplete. Check the server address and that client/server versions match.');
     }
-    localStorage.setItem('ltpos_token', result.access_token);
-    localStorage.setItem('ltpos_user', JSON.stringify(result));
+    persistSession(result);
     return result;
+}
+export async function bootstrapShop(input) {
+    const result = await api('/provisioning/bootstrap', {
+        method: 'POST',
+        body: JSON.stringify(input),
+    });
+    if (!result || !result.access_token) {
+        throw new Error('Bootstrap reply was incomplete. The shop may not have been provisioned. Check the server logs and try again.');
+    }
+    persistSession(result);
+    return result;
+}
+export async function refreshServerSetupState() {
+    const baseUrl = await resolveBaseUrl();
+    assertServerConfigured(baseUrl);
+    const expectedIdentity = _resolvedIdentity;
+    if (!expectedIdentity) {
+        throw new Error('Cannot verify the server setup state without a previously verified server identity.');
+    }
+    const identity = await fetchAndValidateDiscoveryInfo(baseUrl);
+    if (!identityMatches(expectedIdentity, identity)) {
+        throw new Error('Server identity changed while verifying setup state. The refreshed identity does not match the verified server.');
+    }
+    if (!isServerSetupState(identity.setup_state) || identity.setup_state !== 'READY') {
+        throw new Error(`Server setup state after bootstrap is not READY: ${JSON.stringify(identity.setup_state)}. ` +
+            'The server must reach READY before the client can proceed.');
+    }
+    _resolvedIdentity = identity;
+    _initError = null;
+    return identity;
 }
 export async function serverLogout() {
     try {

@@ -1,56 +1,27 @@
-# Lovely Tech POS System
+# Lovely Tech POS documentation
 
-Production-oriented LAN POS foundation based on the locked v2.0 Requirements and Database/Technical Blueprint.
+This folder contains the current documentation set for Lovely Tech POS. The requirements PDF keeps its historical v2.0 filename but contains the reconciled requirements plus the deployment/recovery addendum; the database-blueprint PDF remains the v2.0 reference. The Markdown documents below are the maintained, implementation-aware project documentation.
 
-## Stack
-- PostgreSQL 18
-- Python 3.13
-- FastAPI
-- SQLAlchemy 2.x
-- Alembic
-- React + TypeScript
-- Tauri 2
+## Canonical documents
 
-## Current milestone
-Database foundation is implemented: UUID identity, branches, users/roles/permissions, master data, document counters, audit/history primitives, idempotency primitives, record versions, and password hashing.
+- [Requirements](./REQUIREMENTS.md) — complete product and quality requirements.
+- [Project status](./PROJECT_STATUS.md) — evidence-based implementation, validation, blockers, and cleanup record.
+- [Architecture](./ARCHITECTURE.md) — component boundaries, data flow, security boundaries, and deployment model.
+- [Operations and recovery](./OPERATIONS_AND_RECOVERY.md) — installation, setup, server/client operation, backup, restore, and troubleshooting.
+- Deployment, discovery, and disaster recovery requirements and runbooks are documented in [Requirements](./REQUIREMENTS.md#14-deployment-server-discovery-and-disaster-recovery), [Architecture](./ARCHITECTURE.md#deployment-server-discovery-and-identity), and [Operations and recovery](./OPERATIONS_AND_RECOVERY.md#deployment-server-discovery-and-disaster-recovery).
+- [Data import and migration](./DATA_IMPORT_AND_MIGRATION.md) — historical spreadsheet import requirements and controlled migration process.
+- [Release checklist](./RELEASE_CHECKLIST.md) — required acceptance and release gates.
 
-## Run database
-```bash
-docker compose up -d postgres
-```
+The dedicated deployment, zero-IP discovery, identity, upgrade, and disaster-recovery requirements are in [Requirements section 14](./REQUIREMENTS.md#14-deployment-server-discovery-and-disaster-recovery). Architecture and operator runbooks separately distinguish intended behavior from current implementation evidence.
 
-## Run migrations
-```bash
-cd backend
-alembic upgrade head
-```
+## Source references
 
-## Run backend
-```bash
-uvicorn app.main:app --reload
-```
+- [Final requirements (updated edition; canonical v2.0 filename)](./Lovely_Tech_POS_Final_Requirements_v2.0.pdf)
+- [Database and technical blueprint v2.0](./Lovely_Tech_POS_Database_Technical_Blueprint_v2.0.pdf)
+- Tauri component setup notes remain in [`desktop/tauri/README.md`](../desktop/tauri/README.md).
 
+## Project overview
 
-## Foundation v12 hardening
-- Cashier split-payment POS UI (Cash/Card/Online) with exact total validation.
-- Admin-verified cashier password reset with forced password change.
-- One-time admin offline recovery remains available.
-- Purchase cost correction API with lineage safety and audit trail.
-- ESC/POS-style plain-text receipt and A5 warranty document templates.
-- Backend test suite: 22 passing.
+Lovely Tech POS is a LAN-oriented point-of-sale application. The intended production topology keeps PostgreSQL and the FastAPI service on the always-on Cashier laptop. Desktop clients communicate with the API over the LAN; client machines do not connect directly to PostgreSQL. Google Drive is optional backup/recovery storage, not live database synchronization.
 
-Live PostgreSQL, printer, Tauri, and two-laptop LAN verification still require the actual shop environment.
-
-## Current development/deployment decision
-
-The production server is intentionally planned for the **cashier laptop**, because it is normally powered on throughout business hours. The owner's laptop is the development/admin client and is not a required always-on server. The cashier Windows account remains a Standard User. See `docs/DEPLOYMENT_LAN.md`.
-
-## Development snapshot notes
-This snapshot continues the locked v25 architecture and requirements. It includes the v26 continuation hardening recorded in `docs/DEVELOPMENT_STATUS.md`. The source-of-truth PDFs remain in `docs/` and are not superseded by this status file.
-
-
-## Production acceleration / Windows deployment
-- Cashier server scripts: `scripts/windows/Start-LovelyTechServer.ps1`, `Install-LovelyTechServer.ps1`, `Configure-LovelyTechFirewall.ps1`, `Verify-LovelyTechServer.ps1`.
-- Owner client build: `scripts/windows/Build-LovelyTechClient.ps1 -ServerUrl http://CASHIER-IP:8000`.
-- Encrypted PostgreSQL backup/restore runners are under `scripts/`.
-- See `docs/WINDOWS_LAN_DEPLOYMENT.md` and `docs/PRODUCTION_ACCEPTANCE_MATRIX.md`.
+The current workspace includes backend, frontend, Tauri desktop wrapper, Windows deployment scripts, database migrations, and automated tests. Their implementation and verification status are deliberately separated in [Project status](./PROJECT_STATUS.md). The software must not be described as production-ready until the physical, security, data, and operational gates in the [release checklist](./RELEASE_CHECKLIST.md) have passed.

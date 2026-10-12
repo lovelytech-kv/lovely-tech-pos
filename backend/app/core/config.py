@@ -3,7 +3,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Lovely Tech POS System"
-    app_env: str = "development"
+    app_env: str = ""
+    # SQLite bootstrap is unsupported unless explicitly opted into for test/development.
+    sqlite_bootstrap_fallback_enabled: bool = False
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     database_url: str = "postgresql+psycopg://lovely_pos:change_me@localhost:5432/lovely_tech_pos"
