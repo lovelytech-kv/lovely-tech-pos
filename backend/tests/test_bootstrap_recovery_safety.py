@@ -23,7 +23,14 @@ from app.models.auth import UserSession
 from app.models.master import Branch, Permission, Role, RolePermission, User
 from app.models.sales import Customer, Sale
 from app.models.shop_identity import ShopIdentity
-from app.core.restore_state import RestoreState, read_restore_state, restore_state_path, write_restore_state
+from app.core.restore_state import (
+    RestoreState,
+    RestoreStateError,
+    initialize_restore_state,
+    read_restore_state,
+    restore_state_path,
+    write_restore_state,
+)
 from app.core.shop_identity import (
     ShopIdentityError,
     ShopIdentityStatus,
@@ -31,7 +38,7 @@ from app.core.shop_identity import (
     inspect_shop_identity,
 )
 
-_SUPPORTED_SCHEMA_REVISION = "0032_shop_identity_metadata"
+_SUPPORTED_SCHEMA_REVISION = "0036_import_batch_idempotency"
 _DOCUMENT_COUNTER_COLUMNS = {"prefix", "branch_id", "next_value"}
 
 
@@ -901,3 +908,56 @@ def test_restore_interlock_rejects_same_root_contention(tmp_path):
         with pytest.raises(RestoreInterlockBusy):
             with acquire_restore_interlock(tmp_path):
                 pass
+
+
+@pytest.mark.parametrize(
+    "existing_state", ["ready", "in_progress", "recovery_required", "malformed", "unreadable"]
+)
+def test_restore_state_initialization_never_overwrites_existing_state(
+    tmp_path, existing_state
+):
+    backup_root = tmp_path / "backups"
+    state_path = restore_state_path(backup_root)
+    if existing_state == "ready":
+        write_restore_state(state_path, state=RestoreState.READY, phase="EXISTING")
+    elif existing_state in {"in_progress", "recovery_required"}:
+        write_restore_state(
+            state_path,
+            state=(
+                RestoreState.RESTORE_IN_PROGRESS
+                if existing_state == "in_progress"
+                else RestoreState.RECOVERY_REQUIRED
+            ),
+            phase="EXISTING",
+            operation_id=uuid.uuid4(),
+            expected_shop_id=uuid.uuid4(),
+        )
+    elif existing_state == "malformed":
+        state_path.parent.mkdir(parents=True)
+        state_path.write_text("{malformed", encoding="utf-8")
+    else:
+        state_path.parent.mkdir(parents=True)
+        state_path.mkdir()
+
+    original = (
+        state_path.read_bytes()
+        if state_path.is_file()
+        else tuple(state_path.iterdir())
+    )
+    if existing_state in {"malformed", "unreadable"}:
+        with pytest.raises(RestoreStateError):
+            initialize_restore_state(backup_root)
+    else:
+        record = initialize_restore_state(backup_root)
+        expected = {
+            "ready": RestoreState.READY,
+            "in_progress": RestoreState.RESTORE_IN_PROGRESS,
+            "recovery_required": RestoreState.RECOVERY_REQUIRED,
+        }[existing_state]
+        assert record.state is expected
+
+    assert (
+        state_path.read_bytes()
+        if state_path.is_file()
+        else tuple(state_path.iterdir())
+    ) == original

@@ -119,8 +119,6 @@ def current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer), db
         session.revoked_at = now
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session locked due to inactivity")
-    if user is None or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
     session.last_seen_at = now
     db.commit()
     return user

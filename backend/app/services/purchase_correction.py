@@ -48,6 +48,10 @@ def recalculate_dependent_costs(session: Session, lot_id, new_cost: Decimal) -> 
         elif movement.source_type == "REPAIR_PART":
             affected_repairs.add(movement.source_id)
 
+    # Flush repriced allocation costs before aggregating dependent totals so
+    # the updated cost (not the persisted stale cost) is read under autoflush=False.
+    session.flush()
+
     # Refresh every affected sale from its actual FIFO allocations.
     for sale_id in affected_sales:
         sale = session.scalar(select(Sale).where(Sale.id == sale_id).with_for_update())

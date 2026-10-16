@@ -31,7 +31,7 @@ from app.security.reauth import require_admin_reauth
 router = APIRouter(prefix="/provisioning", tags=["provisioning"])
 
 _BOOTSTRAP_LOCK_KEY = 0x4C54504F53
-_BOOTSTRAP_SCHEMA_REVISION = "0032_shop_identity_metadata"
+_BOOTSTRAP_SCHEMA_REVISION = "0036_import_batch_idempotency"
 _BOOTSTRAP_REVISION_COLUMN_MIN_LENGTH = 64
 _BOOTSTRAP_REQUIRED_COLUMNS = {
     "alembic_version": {"version_num"},

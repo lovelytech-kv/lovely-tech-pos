@@ -105,19 +105,20 @@ def restore(backup_id:str, confirm:bool=False, admin_password:str|None=None, use
     settings=__import__('app.core.config',fromlist=['settings']).settings
     event=RestoreEvent(branch_id=user.branch_id,backup_point_id=point.id,actor_user_id=user.id,status='STARTED',reason='Admin restore started')
     db.add(event); db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='RESTORE_STARTED',entity_type='BACKUP_POINT',entity_id=point.id,timestamp=datetime.now(timezone.utc),after_json={'status':'STARTED'},source_transaction_id=point.id)); db.commit()
+    engine = db.get_bind()
     db.close()
+    engine.dispose()
     state_path=restore_state_path(settings.backup_root)
     operation_id=None
     expected_shop_id=None
     try:
         with acquire_restore_interlock(settings.backup_root):
-            if Path(state_path).exists():
-                try:
-                    current_state = read_restore_state(state_path)
-                except RestoreStateError as exc:
-                    raise HTTPException(status_code=503, detail="Restore recovery state is unavailable; restore is disabled.") from exc
-                if current_state.state is not RestoreState.READY:
-                    raise HTTPException(status_code=409, detail="Restore recovery is incomplete; restore is disabled.")
+            try:
+                current_state = read_restore_state(state_path)
+            except RestoreStateError as exc:
+                raise HTTPException(status_code=503, detail="Restore recovery state is unavailable; restore is disabled.") from exc
+            if current_state.state is not RestoreState.READY:
+                raise HTTPException(status_code=409, detail="Restore recovery is incomplete; restore is disabled.")
             try:
                 backup_path=Path(point.storage_target)/point.filename
                 meta,_=decrypt_backup(backup_path.read_bytes(),secret=settings.secret_key)
@@ -127,8 +128,8 @@ def restore(backup_id:str, confirm:bool=False, admin_password:str|None=None, use
                 append_restore_journal(settings.backup_root,{'event':'RESTORE_IN_PROGRESS','operation_id':str(operation_id),'backup_id':backup_id,'expected_shop_id':str(expected_shop_id)})
                 safety=Path(settings.backup_root)/f'pre-restore-{datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")}.ltbak'
                 restore_postgres_backup(pg_dump=settings.pg_dump_bin,pg_restore=settings.pg_restore_bin,psql=settings.psql_bin,database_url=settings.database_url,encrypted_backup=backup_path,safety_output=safety,secret=settings.secret_key)
-                append_restore_journal(settings.backup_root,{'event':'RECONCILIATION_SUCCEEDED','operation_id':str(operation_id),'backup_id':backup_id,'shop_id':str(expected_shop_id)})
                 write_restore_state(state_path,state=RestoreState.READY,phase='RECONCILIATION_SUCCEEDED')
+                append_restore_journal(settings.backup_root,{'event':'RECONCILIATION_SUCCEEDED','operation_id':str(operation_id),'backup_id':backup_id,'shop_id':str(expected_shop_id)})
                 return {'backup_id':str(point.id),'status':'SUCCEEDED','safety_backup':str(safety)}
             except Exception as exc:
                 report_error = None

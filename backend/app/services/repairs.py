@@ -145,7 +145,7 @@ class RepairService:
         if repair is None or repair.status == "CANCELLED": raise RepairValidationError("Repair is not available")
         movement_id = uuid.uuid4()
         allocation = self.fifo.consume(branch_id=branch_id, item_id=inp.item_id, quantity=inp.quantity, source_type="REPAIR_PART", source_id=movement_id, occurred_at=datetime.now(timezone.utc), reason=f"Repair {repair.repair_no}")
-        part = RepairPart(repair_id=repair.id, item_id=inp.item_id, quantity=inp.quantity, charge_amount=self.money(inp.charge_amount), fifo_cost=self.money(allocation.total_cost), status="USED", stock_movement_id=movement_id, notes=inp.notes)
+        part = RepairPart(repair_id=repair.id, item_id=inp.item_id, quantity=inp.quantity, charge_amount=self.money(inp.charge_amount), fifo_cost=self.money(allocation.total_cost), status="USED", stock_movement_id=allocation.movement_id, notes=inp.notes)
         self.session.add(part); self.session.flush()
         self._audit(branch_id, actor_user_id, "REPAIR_PART_USED", repair, datetime.now(timezone.utc), {"item_id": str(inp.item_id), "quantity": str(inp.quantity), "fifo_cost": str(part.fifo_cost)})
         return part

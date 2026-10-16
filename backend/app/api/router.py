@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from app.api.routes import historical_import
 from app.api.routes import auth, sales, reports, permissions, operations, returns, warranty, purchases, inventory, admin, backup, documents, stock_control, items, customers, provisioning
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth.router)
@@ -19,4 +20,5 @@ api_router.include_router(stock_control.router)
 api_router.include_router(provisioning.router)
 
 api_router.include_router(items.router)
+api_router.include_router(historical_import.router)
 api_router.include_router(customers.router)

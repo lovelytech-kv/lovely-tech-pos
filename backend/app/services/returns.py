@@ -116,6 +116,25 @@ class ReturnService:
                 allocation_status="UNRESOLVED_RETURN", created_at=return_movement.occurred_at,
             ))
             return Decimal("0")
+        # First reconcile the sale's unresolved negative-stock allocation: a
+        # returned unit that was never sourced from a purchase lot simply
+        # reduces the outstanding negative allocation rather than restoring a lot.
+        negative_allocations = list(self.session.scalars(
+            select(FifoAllocation).where(
+                FifoAllocation.stock_movement_id == sale_movement.id,
+                FifoAllocation.purchase_lot_id.is_(None),
+                FifoAllocation.allocation_status == "NEGATIVE_STOCK",
+            ).order_by(FifoAllocation.created_at.asc(), FifoAllocation.id.asc()).with_for_update()
+        ))
+        for alloc in negative_allocations:
+            if remaining <= QTY_ZERO:
+                break
+            take = min(remaining, Decimal(alloc.allocated_quantity))
+            alloc.allocated_quantity = Decimal(alloc.allocated_quantity) - take
+            if alloc.allocated_quantity <= QTY_ZERO:
+                self.session.delete(alloc)
+            remaining -= take
+        # Then restore any lots that were actually consumed by the sale.
         allocations = list(self.session.scalars(
             select(FifoAllocation).where(
                 FifoAllocation.stock_movement_id == sale_movement.id,

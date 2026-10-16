@@ -19,7 +19,7 @@ def test_frontend_package_has_reproducible_build_scripts_and_no_latest_versions(
 
 def test_frontend_env_example_does_not_hardcode_shop_ip():
     env = (FRONTEND / ".env.example").read_text(encoding="utf-8")
-    assert "CASHIER-LAPTOP-IP" in env
+    assert "VITE_API_BASE=/api/v1" in env
     assert "192.168.1.10" not in env
 
 

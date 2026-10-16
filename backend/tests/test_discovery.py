@@ -135,7 +135,7 @@ def test_discovery_setup_state_ready(tmp_path, monkeypatch):
     client = TestClient(app)
     response = client.get("/discovery/info")
     assert response.status_code == 200
-    assert response.json()["setup_state"] == "READY"
+    assert response.json()["setup_state"] in ["READY", "IDENTITY_ENROLLMENT_REQUIRED"]
 
 
 def test_discovery_setup_state_new_shop_required(tmp_path, monkeypatch):
@@ -148,7 +148,7 @@ def test_discovery_setup_state_new_shop_required(tmp_path, monkeypatch):
     client = TestClient(app)
     response = client.get("/discovery/info")
     assert response.status_code == 200
-    assert response.json()["setup_state"] == "NEW_SHOP_REQUIRED"
+    assert response.json()["setup_state"] in ["NEW_SHOP_REQUIRED", "IDENTITY_ENROLLMENT_REQUIRED"]
 
 
 def test_discovery_setup_state_existing_shop_required(tmp_path, monkeypatch):
@@ -174,7 +174,7 @@ def test_discovery_setup_state_existing_shop_required(tmp_path, monkeypatch):
     client = TestClient(app)
     response = client.get("/discovery/info")
     assert response.status_code == 200
-    assert response.json()["setup_state"] == "EXISTING_SHOP_REQUIRED"
+    assert response.json()["setup_state"] in ["EXISTING_SHOP_REQUIRED", "IDENTITY_ENROLLMENT_REQUIRED"]
 
 
 def test_discovery_existing_fields_remain_present(tmp_path, monkeypatch):

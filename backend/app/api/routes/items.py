@@ -7,7 +7,7 @@ from app.api.deps import db_session, require_permission
 from app.models.master import User, Item, ItemBarcode, Category, ItemType, WarrantyDefault
 from app.models.security import AuditLog
 from app.schemas.items import ItemCreateIn, ItemUpdateIn, BarcodeIn, WarrantyDefaultIn
-from app.services.numbering import NumberingService
+from app.services.items import ItemCreationError, create_item_from_schema
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -57,24 +57,18 @@ def _out(item, barcodes):
 
 @router.post("")
 def create_item(payload: ItemCreateIn, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
-    if not db.get(Category, payload.category_id) or not db.get(ItemType, payload.item_type_id):
-        raise HTTPException(400, "Category or item type not found")
-    if payload.item_code and user.role.code.upper() != 'ADMIN':
-        raise HTTPException(403, 'Preserving an imported item code is Admin-only')
-    code = payload.item_code.strip() if payload.item_code else NumberingService.next_number(db, "ITEM", str(user.branch_id))
-    if db.scalar(select(Item.id).where(Item.item_code==code)):
-        raise HTTPException(409, 'Item code already exists')
-    item = Item(item_code=code, description=payload.description.strip(), brand=payload.brand, model=payload.model,
-                category_id=payload.category_id, item_type_id=payload.item_type_id,
-                master_sale_price=payload.master_sale_price)
-    db.add(item); db.flush()
-    if payload.barcode:
-        db.add(ItemBarcode(item_id=item.id, barcode=payload.barcode.strip(), is_primary=True))
-    db.add(AuditLog(branch_id=user.branch_id, actor_user_id=user.id, action_type="ITEM_CREATED",
-                    entity_type="ITEM", entity_id=item.id, timestamp=datetime.now(timezone.utc),
-                    after_json={"item_code": code, "description": item.description}))
+    try:
+        result = create_item_from_schema(
+            db,
+            payload,
+            branch_id=user.branch_id,
+            actor_user_id=user.id,
+            is_admin=user.role.code.upper() == "ADMIN",
+        )
+    except ItemCreationError as e:
+        raise HTTPException(400 if "not found" in str(e) else 403 if "Admin-only" in str(e) else 409, str(e))
     db.commit()
-    return _out(item, list(item.barcodes) if hasattr(item, "barcodes") else list(db.scalars(select(ItemBarcode).where(ItemBarcode.item_id == item.id)).all()))
+    return _out(result.item, list(result.item.barcodes) if hasattr(result.item, "barcodes") else list(db.scalars(select(ItemBarcode).where(ItemBarcode.item_id == result.item.id)).all()))
 
 @router.put("/{item_id}")
 def update_item(item_id: str, payload: ItemUpdateIn, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):

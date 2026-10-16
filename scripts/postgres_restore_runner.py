@@ -34,10 +34,12 @@ def run_restore(*, pg_dump: str, pg_restore: str, psql: str = "psql", database_u
     state_path = restore_state_path(control_root)
 
     with acquire_restore_interlock(control_root):
-        if state_path.exists():
+        try:
             current = read_restore_state(state_path)
-            if current.state is not RestoreState.READY:
-                raise RestoreStateError("Restore recovery is incomplete; restore is disabled.")
+        except RestoreStateError as exc:
+            raise RestoreStateError("Restore recovery state is unavailable; restore is disabled.") from exc
+        if current.state is not RestoreState.READY:
+            raise RestoreStateError("Restore recovery is incomplete; restore is disabled.")
         try:
             write_restore_state(
                 state_path, state=RestoreState.RESTORE_IN_PROGRESS,
@@ -45,7 +47,7 @@ def run_restore(*, pg_dump: str, pg_restore: str, psql: str = "psql", database_u
                 expected_shop_id=expected_shop_id,
             )
             append_restore_journal(
-                safety_output.parent,
+                control_root,
                 {"event": "RESTORE_IN_PROGRESS", "operation_id": str(operation_id),
                  "expected_shop_id": str(expected_shop_id)},
             )
@@ -54,14 +56,14 @@ def run_restore(*, pg_dump: str, pg_restore: str, psql: str = "psql", database_u
                 database_url=database_url, encrypted_backup=encrypted_backup,
                 safety_output=safety_output, secret=secret,
             )
+            write_restore_state(
+                state_path, state=RestoreState.READY,
+                phase="RECONCILIATION_SUCCEEDED",
+            )
             append_restore_journal(
                 control_root,
                 {"event": "RECONCILIATION_SUCCEEDED", "operation_id": str(operation_id),
                  "shop_id": str(expected_shop_id)},
-            )
-            write_restore_state(
-                state_path, state=RestoreState.READY,
-                phase="RECONCILIATION_SUCCEEDED",
             )
             return safety
         except Exception as exc:

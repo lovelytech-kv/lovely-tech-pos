@@ -8,3 +8,4 @@ from app.models.finance import *
 from app.models.auth import *
 
 from app.models.backup import BackupPoint, RestoreEvent
+from app.models.import_staging import ImportBatch, ImportStagingRow

@@ -8,5 +8,6 @@ from app.models.finance import DaySession, DayEnd, ReloadEntry, OtherCashIn
 from app.models.auth import UserSession
 from app.models.backup import BackupPoint, RestoreEvent
 from app.models.shop_identity import ShopIdentity
+from app.models.import_staging import ImportBatch, ImportStagingRow
 
 __all__ = [name for name in globals() if not name.startswith('_')]

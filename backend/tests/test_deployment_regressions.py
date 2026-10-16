@@ -44,7 +44,7 @@ def test_app_has_error_boundary_instead_of_blank_screen():
 
 def test_client_build_verifies_server_url_is_baked_in():
     text = (ROOT / "scripts" / "windows" / "Build-LovelyTechClient.ps1").read_text(encoding="utf-8")
-    assert "NOT found in the built client" in text
+    assert "was found in the built client" in text
 
 
 def test_tauri_has_windows_icon_required_by_build():

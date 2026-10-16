@@ -77,7 +77,7 @@ def test_alembic_version_capacity():
                 ),
                 {"v": PROBE},
             ).scalars().all()
-            assert stamps == ["0031_alembic_version_id_capacity"]
+            assert stamps == ["0035_import_mapping_persistence"]
 
             # no application data changed by the probe
             assert _application_row_counts(conn) == before
@@ -98,6 +98,6 @@ def test_version_capacity_migration_chain():
     cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     head = script.get_current_head()
-    assert head == "0032_shop_identity_metadata"
+    assert head == "0036_import_batch_idempotency"
     revision = script.get_revision(head)
-    assert revision.down_revision == "0031_alembic_version_id_capacity"
+    assert revision.down_revision == "0035_import_mapping_persistence"
