@@ -143,6 +143,11 @@ describe('discovery resolver', () => {
       expect(buildBaseUrl('192.168.1.100', 8000)).toBe('http://192.168.1.100:8000/api/v1');
       expect(buildBaseUrl('10.0.0.5', 9443)).toBe('http://10.0.0.5:9443/api/v1');
     });
+
+    it('brackets IPv6 literals so the URL is valid', () => {
+      expect(buildBaseUrl('fe80::1', 8000)).toBe('http://[fe80::1]:8000/api/v1');
+      expect(() => new URL(buildBaseUrl('fe80::1', 8000))).not.toThrow();
+    });
   });
 
   describe('resolveServer', () => {

@@ -68,7 +68,7 @@ def purchase_history(user: User = Depends(require_permission('PURCHASE_COST')), 
             version=l.version, purchase_version=p.version, purchase_id=p.id, purchase_line_id=l.id, purchase_date=p.purchase_date,
             line_date=l.line_date, reference_no=p.reference_no, supplier_id=p.supplier_id,
             supplier_name=s.name if s else None, item_id=l.item_id, item_code=i.item_code, item_description=i.description,
-            quantity=l.quantity, unit_cost=l.unit_cost, status=p.status
+            quantity=l.quantity, unit_cost=l.unit_cost, payment_method=p.payment_method, status=p.status
         ) for p,l,s,i in rows
     ]
 

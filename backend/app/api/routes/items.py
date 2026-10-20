@@ -61,7 +61,7 @@ def create_item(payload: ItemCreateIn, user: User = Depends(require_permission("
         raise HTTPException(400, "Category or item type not found")
     if payload.item_code and user.role.code.upper() != 'ADMIN':
         raise HTTPException(403, 'Preserving an imported item code is Admin-only')
-    code = payload.item_code.strip() if payload.item_code else NumberingService.next_number(db, "ITEM", str(user.branch_id))
+    code = payload.item_code.strip() if payload.item_code else NumberingService.next_number(db, "ITEM", str(user.branch_id), label="LVT", sep="", width=4)
     if db.scalar(select(Item.id).where(Item.item_code==code)):
         raise HTTPException(409, 'Item code already exists')
     item = Item(item_code=code, description=payload.description.strip(), brand=payload.brand, model=payload.model,

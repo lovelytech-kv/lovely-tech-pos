@@ -139,3 +139,21 @@ Frontend acceptance hardening added serialized sale selection, customer creation
 - Added purchase history using the dedicated history endpoint with date filtering.
 - Added audited Admin correction UI for cost, quantity, date, reference, and supplier assignment, including re-authentication and optimistic-lock versions.
 - Preserved cashier cost privacy and idempotent purchase submission.
+
+## Verification & bug-fix batch — 2026-10-20 (first run on real PostgreSQL + real browser)
+Verified by actually executing (previously "UNVERIFIED"):
+- Backend pytest against PostgreSQL 16: **263 passed**. Fresh `alembic upgrade head` + `bootstrap_security.py` + live uvicorn + `scripts/smoke_api.py`: **ALL PASS**.
+- Frontend: `tsc -b` PASS, `vite build` PASS, `vitest` 87/87 PASS. Real Chromium (Playwright) drove login, every tab as Cashier and Admin, Day Start and Repair intake + advance payment against the live server.
+
+Defects found and fixed (each has a regression test):
+- **Frontend called `/operations/...` endpoints that the server never served** (Day Start/Shift/Day End, Reload, Cash-in, Reopen, all Repair screens, approval review, credit settlements → HTTP 404). Guarded by `test_frontend_api_paths.py`.
+- **Adding a repair part crashed (HTTP 500)**: `repair_parts.stock_movement_id` referenced a random UUID instead of the FIFO movement.
+- **Shift End did not require a verified backup** (only Day End did) — now enforced (Requirements 15).
+- **mDNS advertisement ran its blocking sync API on the event-loop thread**: LAN discovery never registered and startup stalled ~25 s. Now runs in a worker thread (startup ~3 s).
+- `/api/v1/health` (probed by the client's online indicator) did not exist; alias added.
+- Vite dev server had no `/api` proxy although `.env.example` assumed one.
+- Earlier in this batch: item codes now `LVT0001` style, `ITEM_EDIT` granted to Cashier by bootstrap, `POST /returns` and exchange crashes, repair-payment kwargs, IPv6 discovery URLs, missing `openpyxl`/`reportlab` dependencies.
+
+Still NOT verified (needs the real shop machines): Windows/Tauri packaging, two-client LAN concurrency, thermal/A5 printers, USB scanner, real Google Drive upload.
+
+Open design question: backup creation/verification is Admin-only (`BACKUP_MANAGE`), so a Cashier cannot complete Shift/Day End until an Admin has produced a verified backup that day. Requirements 15 implies the close flow should be able to trigger it.

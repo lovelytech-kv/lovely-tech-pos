@@ -399,6 +399,7 @@ class ExchangeService:
             status="COMPLETED",
         )
         self.session.add(ex)
+        self.session.flush()  # assign ex.id before it is referenced by the audit/document rows
         ret.version += 1
         self.session.add(AuditLog(
             branch_id=request.branch_id,

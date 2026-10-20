@@ -57,7 +57,7 @@ def repair_detail(repair_id:str,user:User=Depends(require_permission('REPAIR_CRE
 
 @router.post('/repairs/{repair_id}/payment', dependencies=[Depends(require_permission('REPAIR_PAYMENT'))])
 def repair_payment(repair_id:str,payload:RepairPaymentIn,user:User=Depends(require_permission('REPAIR_PAYMENT')),db:Session=Depends(db_session)):
-    p=commit_or_400(db,lambda:RepairService(db).add_payment(repair_id,user.branch_id,user.id,RepairPaymentInput(**payload.model_dump()),idempotency_key=payload.idempotency_key)); return {'payment_id':str(p.id),'amount':p.amount,'method':p.payment_method,'proof_no':p.proof_no}
+    p=commit_or_400(db,lambda:RepairService(db).add_payment(repair_id,user.branch_id,user.id,RepairPaymentInput(method=payload.method,amount=payload.amount,reference=payload.reference or payload.proof_reference,payment_type=payload.payment_type),idempotency_key=payload.idempotency_key)); return {'payment_id':str(p.id),'amount':p.amount,'method':p.payment_method,'proof_no':p.proof_no}
 
 @router.post('/repairs/{repair_id}/finalize', dependencies=[Depends(require_permission('REPAIR_UPDATE'))])
 def repair_finalize(repair_id:str,payload:RepairFinalizeIn,user:User=Depends(require_permission('REPAIR_UPDATE')),db:Session=Depends(db_session)):
@@ -109,6 +109,8 @@ def day_cash_in(payload:CashInIn,user:User=Depends(require_permission('DAY_MANAG
 
 @router.post('/day/shift-end', dependencies=[Depends(require_permission('DAY_MANAGE'))])
 def shift_end(payload: DateRangeIn, user: User=Depends(require_permission('DAY_MANAGE')), db: Session=Depends(db_session)):
+    # Requirements 15: Cashier Shift End requires a verified backup, exactly like Day End.
+    _require_verified_backup_for_close(db, user.branch_id, payload.start)
     r=commit_or_400(db, lambda: DayFinanceService(db).shift_end(branch_id=user.branch_id, business_date=payload.start, user_id=user.id))
     return {'day_session_id':str(r.id),'status':r.status,'shift_end_at':r.shift_end_at}
 

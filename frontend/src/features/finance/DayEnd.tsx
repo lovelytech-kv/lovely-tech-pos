@@ -27,7 +27,7 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
 
   async function load() {
     try {
-      const [day, back] = await Promise.all([api('/operations/day/status'), api('/backup/status')]);
+      const [day, back] = await Promise.all([api('/day/status'), api('/backup/status')]);
       setStatus(day); setBackup(back);
     } catch (e) { onError?.((e as Error).message); }
   }
@@ -46,32 +46,32 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     if (Math.abs(Number(openingCash) - openingCounted) > 0.0001) return onError?.('Opening cash must equal the denomination total.');
     try {
       setBusy(true);
-      await api('/operations/day/start', { method: 'POST', body: JSON.stringify({ business_date: today(), opening_cash: openingCash, denominations: Object.fromEntries(DENOMS.map(d => [String(d), Number(openingDenoms[String(d)] || 0)])) }) });
+      await api('/day/start', { method: 'POST', body: JSON.stringify({ business_date: today(), opening_cash: openingCash, denominations: Object.fromEntries(DENOMS.map(d => [String(d), Number(openingDenoms[String(d)] || 0)])) }) });
       await load();
     } catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function shiftEnd() {
     if (!status?.day_session_id || busy) return;
-    try { setBusy(true); await api('/operations/day/shift-end', { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
+    try { setBusy(true); await api('/day/shift-end', { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function continueBusiness() {
     if (!isAdmin || !status?.business_date || busy) return;
-    try { setBusy(true); await api('/operations/day/continue', { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
+    try { setBusy(true); await api('/day/continue', { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function addReload() {
     if (!status?.day_session_id || !reload || busy) return;
-    try { setBusy(true); await api('/operations/day/reload', { method: 'POST', body: JSON.stringify({ day_session_id: status.day_session_id, provider: reloadProvider, amount: reload }) }); setReload(''); await load(); }
+    try { setBusy(true); await api('/day/reload', { method: 'POST', body: JSON.stringify({ day_session_id: status.day_session_id, provider: reloadProvider, amount: reload }) }); setReload(''); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function addCashIn() {
     if (!cashIn || busy) return;
-    try { setBusy(true); await api('/operations/day/cash-in', { method: 'POST', body: JSON.stringify({ amount: cashIn, note: 'POS cash-in' }) }); setCashIn(''); await load(); }
+    try { setBusy(true); await api('/day/cash-in', { method: 'POST', body: JSON.stringify({ amount: cashIn, note: 'POS cash-in' }) }); setCashIn(''); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
@@ -81,7 +81,7 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     if (!cashCountStarted) return onError?.('Enter the physical cash denominations before Day End. Zero cash is allowed if intentionally counted.');
     try {
       setBusy(true);
-      await api(`/operations/day/${status.day_session_id}/end`, { method: 'POST', body: JSON.stringify({ actual_cash: String(counted), denominations: Object.fromEntries(DENOMS.map(d => [String(d), Number(counts[String(d)] || 0)])), reason: reason.trim(), note: note.trim() || null, version: status.version }) });
+      await api(`/day/${status.day_session_id}/end`, { method: 'POST', body: JSON.stringify({ actual_cash: String(counted), denominations: Object.fromEntries(DENOMS.map(d => [String(d), Number(counts[String(d)] || 0)])), reason: reason.trim(), note: note.trim() || null, version: status.version }) });
       setCounts({}); setCashCountStarted(false); setReason(''); setNote(''); await load();
     } catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
@@ -94,14 +94,14 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     if (status.version == null) return onError?.('Day version is missing; refresh before correcting opening cash.');
     const password = window.prompt('Admin password (re-authentication required)') || '';
     if (!password) return;
-    try { setBusy(true); await api(`/operations/day/opening-correction?admin_password=${encodeURIComponent(password)}`, { method:'POST', body:JSON.stringify({day_session_id:status.day_session_id,opening_cash:correctionCash,denominations:Object.fromEntries(DENOMS.map(d=>[String(d),Number(correctionDenoms[String(d)]||0)])),reason:correctionReason.trim(),version:status.version}) }); setCorrectionCash(''); setCorrectionReason(''); setCorrectionDenoms({}); await load(); } catch(e){ onError?.((e as Error).message); } finally { setBusy(false); }
+    try { setBusy(true); await api(`/day/opening-correction?admin_password=${encodeURIComponent(password)}`, { method:'POST', body:JSON.stringify({day_session_id:status.day_session_id,opening_cash:correctionCash,denominations:Object.fromEntries(DENOMS.map(d=>[String(d),Number(correctionDenoms[String(d)]||0)])),reason:correctionReason.trim(),version:status.version}) }); setCorrectionCash(''); setCorrectionReason(''); setCorrectionDenoms({}); await load(); } catch(e){ onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function reopen() {
     if (!isAdmin || !status?.business_date || busy) return;
     const password = window.prompt('Admin password (re-authentication required)') || '';
     if (!password) return;
-    try { setBusy(true); await api(`/operations/day/reopen?admin_password=${encodeURIComponent(password)}`, { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
+    try { setBusy(true); await api(`/day/reopen?admin_password=${encodeURIComponent(password)}`, { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 

@@ -29,7 +29,26 @@ def _utcnow():
 
 
 def _first_user_id(conn):
-    return conn.execute(text("SELECT id FROM users ORDER BY created_at LIMIT 1")).scalar()
+    """Return an existing user id, or create a throwaway user inside the caller's
+    (rolled-back) transaction so the tests also pass on a freshly migrated, empty DB."""
+    existing = conn.execute(text("SELECT id FROM users ORDER BY created_at LIMIT 1")).scalar()
+    if existing is not None:
+        return existing
+    now = _utcnow()
+    role_id, branch_id, user_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    conn.execute(text(
+        "INSERT INTO roles (id, code, name, is_system, created_at, updated_at) "
+        "VALUES (:id, :code, 'LT Test Role', false, :ts, :ts)"
+    ), {"id": role_id, "code": f"LT_{role_id.hex[:10]}", "ts": now})
+    conn.execute(text(
+        "INSERT INTO branches (id, code, name, is_active, created_at, updated_at) "
+        "VALUES (:id, :code, 'LT Test Branch', true, :ts, :ts)"
+    ), {"id": branch_id, "code": f"LT{branch_id.hex[:10]}", "ts": now})
+    conn.execute(text(
+        "INSERT INTO users (id, username, password_hash, display_name, role_id, branch_id, created_at, updated_at) "
+        "VALUES (:id, :name, 'x', 'LT Test User', :role, :branch, :ts, :ts)"
+    ), {"id": user_id, "name": f"lt_{user_id.hex[:10]}", "role": role_id, "branch": branch_id, "ts": now})
+    return user_id
 
 
 def _insert_row(conn, table, row_id, user_id, now):

@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,11 +15,19 @@ validate_production_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    start_mdns_advertisement()
+    # zeroconf's synchronous register/unregister API must NOT run on the event-loop thread:
+    # it raises EventLoopBlocked after a long timeout, so LAN discovery silently never worked
+    # and startup stalled ~25s. Run it in a worker thread, in the background, so the API is
+    # reachable immediately.
+    mdns_task = asyncio.create_task(asyncio.to_thread(start_mdns_advertisement))
     try:
         yield
     finally:
-        stop_mdns_advertisement()
+        try:
+            await mdns_task
+        except Exception:  # pragma: no cover - start_mdns_advertisement already logs failures
+            pass
+        await asyncio.to_thread(stop_mdns_advertisement)
 
 
 app = FastAPI(
@@ -41,6 +50,8 @@ app.add_middleware(
 app.include_router(api_router)
 app.include_router(discovery_router)
 
+# The web/desktop client probes `${API base}/health` (i.e. /api/v1/health); /health stays for scripts.
+@app.get("/api/v1/health", tags=["system"], include_in_schema=False)
 @app.get("/health", tags=["system"])
 def health() -> dict[str, str]:
     return {"status": "ok", "service": settings.app_name, "version": app.version}
