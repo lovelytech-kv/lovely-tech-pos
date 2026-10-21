@@ -2,6 +2,9 @@ from datetime import date
 from decimal import Decimal
 from sqlalchemy import select
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from app.backup.auto import ensure_close_backup
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission
 from app.models.master import User
@@ -20,19 +23,24 @@ from datetime import datetime, timezone, time
 
 router=APIRouter(tags=["operations"])
 
-def _require_verified_backup_for_close(db: Session, branch_id, business_date: date) -> None:
+def _close_backup_gate(db: Session, user: User, what: str):
+    """Requirements 15: Shift End / Day End complete only after a backup is VERIFIED.
+
+    Returns None when a fresh verified backup exists (the close may proceed). Otherwise an automatic
+    backup (with automatic retries) is running in the background and a 202 is returned; the client
+    asks again and the close completes as soon as the backup is verified. A job that exhausted its
+    retries raises 503 and nothing is closed.
+    """
     from app.core.config import settings
     if not settings.require_verified_backup_for_close:
-        return
-    start_dt = datetime.combine(business_date, time.min, tzinfo=timezone.utc)
-    latest = db.scalar(select(BackupPoint).where(
-        BackupPoint.branch_id == branch_id,
-        BackupPoint.state == "VERIFIED",
-        BackupPoint.verified_at.is_not(None),
-        BackupPoint.verified_at >= start_dt,
-    ).order_by(BackupPoint.verified_at.desc()).limit(1))
-    if latest is None:
-        raise HTTPException(409, "Verified backup required before Shift End / Day End. Create and verify a backup, or use a configured alternate backup target.")
+        return None
+    st = ensure_close_backup(db, branch_id=user.branch_id, user_id=user.id)
+    if st.ready:
+        return None
+    if st.state == "FAILED":
+        raise HTTPException(503, f"BACKUP_FAILED: The automatic backup could not be verified after {st.max_attempts} attempts, "
+                                 f"so {what} was NOT completed and nothing was changed. Press the button again to retry, or contact the Admin.")
+    return JSONResponse(status_code=202, content=jsonable_encoder(st.as_payload()))
 
 def commit_or_400(db, fn):
     try:
@@ -109,8 +117,8 @@ def day_cash_in(payload:CashInIn,user:User=Depends(require_permission('DAY_MANAG
 
 @router.post('/day/shift-end', dependencies=[Depends(require_permission('DAY_MANAGE'))])
 def shift_end(payload: DateRangeIn, user: User=Depends(require_permission('DAY_MANAGE')), db: Session=Depends(db_session)):
-    # Requirements 15: Cashier Shift End requires a verified backup, exactly like Day End.
-    _require_verified_backup_for_close(db, user.branch_id, payload.start)
+    gate = _close_backup_gate(db, user, "Shift End")
+    if gate is not None: return gate
     r=commit_or_400(db, lambda: DayFinanceService(db).shift_end(branch_id=user.branch_id, business_date=payload.start, user_id=user.id))
     return {'day_session_id':str(r.id),'status':r.status,'shift_end_at':r.shift_end_at}
 
@@ -125,7 +133,8 @@ def day_end(day_session_id:str,payload:DayEndIn,user:User=Depends(require_permis
     day = db.get(__import__('app.models.finance', fromlist=['DaySession']).DaySession, day_session_id)
     if not day or day.branch_id != user.branch_id:
         raise HTTPException(404, 'Day session not found')
-    _require_verified_backup_for_close(db, user.branch_id, day.business_date)
+    gate = _close_backup_gate(db, user, "Day End")
+    if gate is not None: return gate
     if payload.version is None: raise HTTPException(409,'Day version is required; reload the record')
     r=commit_or_400(db,lambda:DayFinanceService(db).end_day(day_session_id=day_session_id,user_id=user.id,**payload.model_dump())); return {'day_session_id':str(r.day_session_id),'expected_cash':r.expected_cash,'actual_cash':r.actual_cash,'difference':r.difference}
 

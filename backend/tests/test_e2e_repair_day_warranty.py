@@ -180,12 +180,51 @@ def test_warranty_claim_requires_admin_decision_and_cashier_cannot_decide(ctx):
     assert r.status_code == 200, r.text
 
 
-def test_shift_end_requires_verified_backup_then_day_cannot_start_twice(ctx):
+def _status(ready, state, attempt=0, max_attempts=10, step=""):
+    from app.backup.auto import CloseBackupStatus
+    return CloseBackupStatus(ready, state, attempt, max_attempts, step)
+
+
+def test_shift_end_waits_for_automatic_backup_and_completes_only_after_it_is_verified(ctx):
+    """Requirements 15 + automatic backup: no manual button; the close finishes only after a verified backup."""
+    from unittest.mock import patch
     c = ctx["c"]
     day = _ensure_day(ctx)
-    # Requirements 15: Shift End / Day End require a verified backup.
-    r = c.post("/api/v1/day/shift-end", headers=ctx["C"], json={"start": date.today().isoformat(), "end": date.today().isoformat()})
-    assert r.status_code == 409 and "backup" in r.text.lower(), r.text
+    body = {"start": date.today().isoformat(), "end": date.today().isoformat()}
+    target = "app.api.routes.operations.ensure_close_backup"
+
+    # 1) Backup is still running (automatic retries in progress): 202, nothing closed.
+    with patch(target, return_value=_status(False, "RUNNING", attempt=2, step="retrying in 4s")):
+        r = c.post("/api/v1/day/shift-end", headers=ctx["C"], json=body)
+    assert r.status_code == 202, r.text
+    assert r.json()["backup_status"] == "RUNNING" and r.json()["attempt"] == 2
+    assert c.get("/api/v1/day/status", headers=ctx["C"]).json()["status"] == "OPEN"
+
+    # 2) Backup failed after every automatic retry: 503, nothing closed, no internal detail leaked to the cashier.
+    with patch(target, return_value=_status(False, "FAILED", attempt=10)):
+        r = c.post("/api/v1/day/shift-end", headers=ctx["C"], json=body)
+    assert r.status_code == 503 and "BACKUP_FAILED" in r.text and "NOT completed" in r.text
+    assert c.get("/api/v1/day/status", headers=ctx["C"]).json()["status"] == "OPEN"
+
+    # Day End is gated the same way and never closes the day while the backup is pending.
+    with patch(target, return_value=_status(False, "RUNNING")):
+        r = c.post(f"/api/v1/day/{day['day_session_id']}/end", headers=ctx["C"], json={
+            "actual_cash": "0", "denominations": {}, "reason": "e2e", "version": day.get("version")})
+    assert r.status_code == 202 and c.get("/api/v1/day/status", headers=ctx["C"]).json()["status"] == "OPEN"
+
+    # 3) Backup verified: Shift End now completes. (Admin then continues the day to keep the shared test day open.)
+    with patch(target, return_value=_status(True, "READY")):
+        r = c.post("/api/v1/day/shift-end", headers=ctx["C"], json=body)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "SHIFT_ENDED"
+    r = c.post("/api/v1/day/continue", headers=ctx["A"], json=body)
+    assert r.status_code == 200, r.text
+    assert c.get("/api/v1/day/status", headers=ctx["C"]).json()["status"] == "OPEN"
+
+
+def test_day_cannot_start_twice(ctx):
+    c = ctx["c"]
+    day = _ensure_day(ctx)
     dup = c.post("/api/v1/day/start", headers=ctx["C"], json={
         "business_date": date.today().isoformat(), "opening_cash": "1000", "denominations": {"1000": 1}})
     assert dup.status_code in (400, 409), dup.text

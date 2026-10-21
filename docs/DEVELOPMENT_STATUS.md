@@ -156,4 +156,12 @@ Defects found and fixed (each has a regression test):
 
 Still NOT verified (needs the real shop machines): Windows/Tauri packaging, two-client LAN concurrency, thermal/A5 printers, USB scanner, real Google Drive upload.
 
-Open design question: backup creation/verification is Admin-only (`BACKUP_MANAGE`), so a Cashier cannot complete Shift/Day End until an Admin has produced a verified backup that day. Requirements 15 implies the close flow should be able to trigger it.
+Resolved (2026-10-21): the open design question above is closed by the automatic close backup below.
+
+## Automatic backup at Shift End / Day End — 2026-10-21
+- No backup button: pressing Shift End or Day End makes the server take a backup automatically (`pg_dump` → encrypt → decrypt-verify → Google Drive upload when configured). The close is performed **only after a backup is VERIFIED**; until then the endpoint answers `202 {backup_status: RUNNING, attempt, max_attempts}` and the client (Cash / Day screen) shows progress and asks again every 3 s.
+- **Automatic retries**: a failed attempt is retried with exponential back-off (2 s, 4 s, … capped at `BACKUP_CLOSE_RETRY_MAX_DELAY_SECONDS`) up to `BACKUP_CLOSE_MAX_ATTEMPTS` (default 10). If every attempt fails the close is refused with `503 BACKUP_FAILED`, **nothing is changed**, the failure is audited (`BACKUP_AUTO_CLOSE_FAILED`), and the next press starts a fresh retry cycle. Failed attempts are stored as `FAILED` points and are never restorable.
+- Google Drive upload is retried (`BACKUP_UPLOAD_ATTEMPTS`). If Drive stays unreachable the backup falls back to the separate `BACKUP_ALTERNATE_TARGET` (USB/external/network folder) where the copy is verified too; the point stays `PENDING_SYNC` and a background task (`BACKUP_SYNC_RETRY_INTERVAL_SECONDS`) uploads queued backups once the network returns. With no alternate target configured the verified local backup is accepted (as before).
+- A verified backup younger than `BACKUP_CLOSE_REUSE_SECONDS` (default 60 s, minimum 30 s) satisfies a close, so fixing a validation error and pressing Day End again does not dump the database twice.
+- The cashier only sees progress/“failed” text; the technical reason (with DB password and secret redacted) is Admin-only (audit log / backup points).
+- Verified live: real `pg_dump` via the UI (202 → backup → 200 SHIFT_ENDED); a `pg_dump` that failed twice then worked completed Shift End automatically on attempt 3; with `pg_dump` missing the close was refused (503) and the day stayed OPEN.
