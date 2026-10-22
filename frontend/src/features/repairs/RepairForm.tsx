@@ -49,7 +49,7 @@ export function RepairForm({ onCreated, onError }: Props) {
           form.imei.trim() ? `IMEI/Serial: ${form.imei.trim()}` : '',
           form.special_note.trim(),
         ].filter(Boolean);
-        const createdRepair = await api('/operations/repairs', {
+        const createdRepair = await api('/repairs', {
           method: 'POST',
           body: JSON.stringify({
             device_brand: form.device_brand.trim() || null,
@@ -71,7 +71,7 @@ export function RepairForm({ onCreated, onError }: Props) {
       if (advance > 0 && created) {
         const paymentAmount = pendingAdvance?.amount ?? form.advance_payment;
         const paymentMethod = pendingAdvance?.method ?? form.advance_method;
-        advanceResult = await api(`/operations/repairs/${created.repair_id}/payment`, {
+        advanceResult = await api(`/repairs/${created.repair_id}/payment`, {
           method: 'POST',
           body: JSON.stringify({
             method: paymentMethod,

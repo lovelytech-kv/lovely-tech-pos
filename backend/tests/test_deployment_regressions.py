@@ -42,9 +42,12 @@ def test_app_has_error_boundary_instead_of_blank_screen():
     assert "getDerivedStateFromError" in text and "<ErrorBoundary>" in text
 
 
-def test_client_build_verifies_server_url_is_baked_in():
+def test_client_build_verifies_no_server_url_is_baked_in():
     text = (ROOT / "scripts" / "windows" / "Build-LovelyTechClient.ps1").read_text(encoding="utf-8")
-    assert "NOT found in the built client" in text
+    # Production clients resolve the server via mDNS; the build must prove that NO LAN
+    # address was baked into the bundle (replaces the older "URL is baked in" check).
+    assert "was found in the built client" in text
+    assert "must NOT bake in a LAN IP" in text
 
 
 def test_tauri_has_windows_icon_required_by_build():

@@ -19,8 +19,11 @@ def test_frontend_package_has_reproducible_build_scripts_and_no_latest_versions(
 
 def test_frontend_env_example_does_not_hardcode_shop_ip():
     env = (FRONTEND / ".env.example").read_text(encoding="utf-8")
-    assert "CASHIER-LAPTOP-IP" in env
+    # Production clients discover the server via mDNS; .env.example is dev-only and must
+    # neither hardcode a shop LAN IP nor point at an absolute server address.
+    assert "mDNS" in env
     assert "192.168.1.10" not in env
+    assert "VITE_API_BASE=/api/v1" in env
 
 
 def test_client_build_script_accepts_server_url_and_prefers_lockfile():

@@ -139,3 +139,29 @@ Frontend acceptance hardening added serialized sale selection, customer creation
 - Added purchase history using the dedicated history endpoint with date filtering.
 - Added audited Admin correction UI for cost, quantity, date, reference, and supplier assignment, including re-authentication and optimistic-lock versions.
 - Preserved cashier cost privacy and idempotent purchase submission.
+
+## Verification & bug-fix batch — 2026-10-20 (first run on real PostgreSQL + real browser)
+Verified by actually executing (previously "UNVERIFIED"):
+- Backend pytest against PostgreSQL 16: **263 passed**. Fresh `alembic upgrade head` + `bootstrap_security.py` + live uvicorn + `scripts/smoke_api.py`: **ALL PASS**.
+- Frontend: `tsc -b` PASS, `vite build` PASS, `vitest` 87/87 PASS. Real Chromium (Playwright) drove login, every tab as Cashier and Admin, Day Start and Repair intake + advance payment against the live server.
+
+Defects found and fixed (each has a regression test):
+- **Frontend called `/operations/...` endpoints that the server never served** (Day Start/Shift/Day End, Reload, Cash-in, Reopen, all Repair screens, approval review, credit settlements → HTTP 404). Guarded by `test_frontend_api_paths.py`.
+- **Adding a repair part crashed (HTTP 500)**: `repair_parts.stock_movement_id` referenced a random UUID instead of the FIFO movement.
+- **Shift End did not require a verified backup** (only Day End did) — now enforced (Requirements 15).
+- **mDNS advertisement ran its blocking sync API on the event-loop thread**: LAN discovery never registered and startup stalled ~25 s. Now runs in a worker thread (startup ~3 s).
+- `/api/v1/health` (probed by the client's online indicator) did not exist; alias added.
+- Vite dev server had no `/api` proxy although `.env.example` assumed one.
+- Earlier in this batch: item codes now `LVT0001` style, `ITEM_EDIT` granted to Cashier by bootstrap, `POST /returns` and exchange crashes, repair-payment kwargs, IPv6 discovery URLs, missing `openpyxl`/`reportlab` dependencies.
+
+Still NOT verified (needs the real shop machines): Windows/Tauri packaging, two-client LAN concurrency, thermal/A5 printers, USB scanner, real Google Drive upload.
+
+Resolved (2026-10-21): the open design question above is closed by the automatic close backup below.
+
+## Automatic backup at Shift End / Day End — 2026-10-21
+- No backup button: pressing Shift End or Day End makes the server take a backup automatically (`pg_dump` → encrypt → decrypt-verify → Google Drive upload when configured). The close is performed **only after a backup is VERIFIED**; until then the endpoint answers `202 {backup_status: RUNNING, attempt, max_attempts}` and the client (Cash / Day screen) shows progress and asks again every 3 s.
+- **Automatic retries**: a failed attempt is retried with exponential back-off (2 s, 4 s, … capped at `BACKUP_CLOSE_RETRY_MAX_DELAY_SECONDS`) up to `BACKUP_CLOSE_MAX_ATTEMPTS` (default 10). If every attempt fails the close is refused with `503 BACKUP_FAILED`, **nothing is changed**, the failure is audited (`BACKUP_AUTO_CLOSE_FAILED`), and the next press starts a fresh retry cycle. Failed attempts are stored as `FAILED` points and are never restorable.
+- Google Drive upload is retried (`BACKUP_UPLOAD_ATTEMPTS`). If Drive stays unreachable the backup falls back to the separate `BACKUP_ALTERNATE_TARGET` (USB/external/network folder) where the copy is verified too; the point stays `PENDING_SYNC` and a background task (`BACKUP_SYNC_RETRY_INTERVAL_SECONDS`) uploads queued backups once the network returns. With no alternate target configured the verified local backup is accepted (as before).
+- A verified backup younger than `BACKUP_CLOSE_REUSE_SECONDS` (default 60 s, minimum 30 s) satisfies a close, so fixing a validation error and pressing Day End again does not dump the database twice.
+- The cashier only sees progress/“failed” text; the technical reason (with DB password and secret redacted) is Admin-only (audit log / backup points).
+- Verified live: real `pg_dump` via the UI (202 → backup → 200 SHIFT_ENDED); a `pg_dump` that failed twice then worked completed Shift End automatically on attempt 3; with `pg_dump` missing the close was refused (503) and the day stayed OPEN.

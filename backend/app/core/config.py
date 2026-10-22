@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     google_drive_backup_path: str = "Lovely-Tech-POS"
     rclone_bin: str = "rclone"
     require_verified_backup_for_close: bool = True
+    # Automatic backup at Shift End / Day End (the close runs only after a backup is verified).
+    backup_close_max_attempts: int = 10          # automatic retries before the job reports FAILED
+    backup_close_retry_max_delay_seconds: int = 30
+    backup_close_reuse_seconds: int = 60         # a verified backup this fresh satisfies a close
+    backup_upload_attempts: int = 3              # Google Drive upload tries per backup before falling back
+    backup_alternate_target: str = ""            # separate folder (USB/external/network) used if Drive is unreachable
+    backup_sync_retry_interval_seconds: int = 300  # background retry of PENDING_SYNC backups
     app_version: str = "0.4.0"
     protocol_version: str = "1.0.0"
     api_version: str = "1"

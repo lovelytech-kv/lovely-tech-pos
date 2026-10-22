@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission, current_user
+from app.backup.auto import create_verified_backup
 from app.backup.service import create_postgres_dump, decrypt_backup, restore_postgres_backup, sync_backup_to_google_drive, BackupError
 from app.security.reauth import require_admin_reauth
 from app.models.backup import BackupPoint, RestoreEvent
@@ -16,33 +17,11 @@ router=APIRouter(prefix='/backup',tags=['backup'])
 
 @router.post('/create',response_model=BackupOut)
 def create(payload:BackupCreateIn,user:User=Depends(require_permission('BACKUP_MANAGE')),db:Session=Depends(db_session)):
-    settings=__import__('app.core.config',fromlist=['settings']).settings
-    safe_name=re.sub(r"[^A-Za-z0-9._-]", "_", payload.filename)
-    if not safe_name.lower().endswith('.ltbak'):
-        safe_name += '.ltbak'
-    root=Path(settings.backup_root).resolve()
-    root.mkdir(parents=True, exist_ok=True)
-    dest=(root / safe_name).resolve()
-    if root not in dest.parents:
-        raise HTTPException(400,'Invalid backup filename')
-    point=BackupPoint(branch_id=user.branch_id,state='CREATING',storage_target=str(root),filename=safe_name,created_by=user.id)
-    db.add(point); db.flush()
     try:
-        blob=create_postgres_dump(pg_dump=settings.pg_dump_bin,database_url=settings.database_url,destination=dest,secret=settings.secret_key,metadata={'backup_point_id':str(point.id)})
-        meta,_=decrypt_backup(blob.read_bytes(),secret=settings.secret_key)
-        point.state='VERIFIED'; point.sha256=meta['sha256']; point.verified_at=datetime.now(timezone.utc)
-        if settings.google_drive_rclone_remote:
-            try:
-                point.remote_path=sync_backup_to_google_drive(rclone_bin=settings.rclone_bin,remote=settings.google_drive_rclone_remote,remote_path=settings.google_drive_backup_path,local_file=dest)
-                point.sync_state='SYNCED'
-            except Exception as sync_exc:
-                point.sync_state='PENDING_SYNC'; point.failure_reason=f'Local backup verified; Google Drive sync pending: {str(sync_exc)[:1500]}'
-        else:
-            point.sync_state='LOCAL_ONLY'
-        db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='BACKUP_VERIFIED',entity_type='BACKUP_POINT',entity_id=point.id,timestamp=datetime.now(timezone.utc),after_json={'filename':safe_name,'sha256':point.sha256},source_transaction_id=point.id))
-        db.commit()
-    except Exception as exc:
-        point.state='FAILED'; point.failure_reason=str(exc)[:2000]; db.commit(); raise HTTPException(500,f'PostgreSQL backup failed: {exc}')
+        point=create_verified_backup(db,branch_id=user.branch_id,user_id=user.id,filename=payload.filename)
+    except BackupError as exc:
+        if str(exc)=='Invalid backup filename': raise HTTPException(400,'Invalid backup filename')
+        raise HTTPException(500,f'PostgreSQL backup failed: {exc}')
     return BackupOut(backup_id=point.id,state=point.state,filename=point.filename,sha256=point.sha256,verified_at=point.verified_at,sync_state=point.sync_state,remote_path=point.remote_path)
 
 @router.get('/status')
