@@ -35,3 +35,22 @@ def test_purchase_cost_does_not_reduce_day_end_drawer_expected_cash(ctx):
         "version": line["version"], "purchase_version": line["purchase_version"]})
     assert r.status_code == 200, r.text
     assert c.get("/api/v1/day/status", headers=ctx["C"]).json()["expected_cash"] == before
+
+
+def test_approved_cash_expense_does_not_reduce_day_end_drawer_but_reduces_cash_in_hands(ctx):
+    c = ctx["c"]
+    _ensure_day(ctx)
+    cats = c.get("/api/v1/admin/expense-categories", headers=ctx["A"]).json()
+    drawer_before = c.get("/api/v1/day/status", headers=ctx["C"]).json()["expected_cash"]
+    today = date.today().isoformat()
+    cih_before = c.post("/api/v1/reports/cash-in-hands", headers=ctx["A"], json={"start": today, "end": today}).json()["cash_in_hands"]
+    r = c.post("/api/v1/admin/expenses", headers=ctx["A"], json={
+        "category_id": cats[0]["id"], "expense_date": today, "amount": "321", "payment_method": "CASH", "description": "drawer rule"})
+    assert r.status_code == 200 and r.json()["status"] == "APPROVED", r.text   # Admin entries are approved at once
+    assert c.get("/api/v1/day/status", headers=ctx["C"]).json()["expected_cash"] == drawer_before
+    cih_after = c.post("/api/v1/reports/cash-in-hands", headers=ctx["A"], json={"start": today, "end": today}).json()["cash_in_hands"]
+    assert float(cih_before) - float(cih_after) == pytest.approx(321)
+    r = c.post("/api/v1/admin/expenses", headers=ctx["A"], json={
+        "category_id": cats[0]["id"], "expense_date": today, "amount": "100", "payment_method": "CARD", "description": "card also counts"})
+    cih_card = c.post("/api/v1/reports/cash-in-hands", headers=ctx["A"], json={"start": today, "end": today}).json()["cash_in_hands"]
+    assert float(cih_after) - float(cih_card) == pytest.approx(100)    # regardless of payment method

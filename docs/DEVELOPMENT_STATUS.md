@@ -185,7 +185,10 @@ purchased into stock or sold with an identity.
 Purchase payment method removed (Requirements 08): not asked, not accepted by the API, not stored (migration 0032). Purchases now reduce Cash In Hands
 regardless of method and never the Day-End drawer (Requirements 11). Run `alembic upgrade head` on the shop DB.
 
-Still open: Expenses still reduce the Day-End drawer for CASH expenses although Requirements 11 says they should not (needs owner decision); stock adjustment /
+Expenses no longer reduce the Day-End drawer (owner confirmed, Requirements 11); Cash In Hands counts every approved expense
+regardless of payment method.
+
+Still open: stock adjustment /
 damage on serialized items can desync units from movement-based stock; `SerializedUnit.purchase_lot_id` is not linked.
 
 ## UI sweep findings fixed (2026-10-23)

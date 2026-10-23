@@ -109,7 +109,7 @@ class ReportService:
         other_cash=self._d(self.session.scalar(select(func.coalesce(func.sum(OtherCashIn.amount),0)).where(OtherCashIn.branch_id==branch_id,func.date(OtherCashIn.transaction_datetime).between(start,end))))
         reloads=self._d(self.session.scalar(select(func.coalesce(func.sum(ReloadEntry.amount),0)).join(DaySession,DaySession.id==ReloadEntry.day_session_id).where(DaySession.branch_id==branch_id,func.date(ReloadEntry.created_at).between(start,end))))
         refunds=self._d(self.session.scalar(select(func.coalesce(func.sum(ReturnPayment.amount),0)).join(Return,Return.id==ReturnPayment.return_id).where(Return.branch_id==branch_id,func.date(ReturnPayment.payment_datetime).between(start,end),Return.status=='COMPLETED')))
-        expenses=self._d(self.session.scalar(select(func.coalesce(func.sum(Expense.amount),0)).where(Expense.branch_id==branch_id,Expense.expense_date.between(start,end),Expense.status=='APPROVED',Expense.payment_method=='CASH')))
+        expenses=self._d(self.session.scalar(select(func.coalesce(func.sum(Expense.amount),0)).where(Expense.branch_id==branch_id,Expense.expense_date.between(start,end),Expense.status=='APPROVED')))
         purchases=self._d(self.session.scalar(select(func.coalesce(func.sum(PurchaseLine.quantity*PurchaseLine.unit_cost),0)).join(Purchase,Purchase.id==PurchaseLine.purchase_id).where(Purchase.branch_id==branch_id,Purchase.purchase_date.between(start,end),PurchaseLine.unit_cost.is_not(None))))
         return self._d(sales_cash+repair_cash+settlements+other_income+other_cash+reloads-refunds-expenses-purchases)
 

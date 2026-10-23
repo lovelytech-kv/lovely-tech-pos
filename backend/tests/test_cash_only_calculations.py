@@ -10,11 +10,10 @@ from pathlib import Path
 BACKEND = Path(__file__).parents[1]
 
 
-def test_reports_cash_in_hands_filters_cash_expenses():
+def test_reports_cash_in_hands_counts_all_expenses_regardless_of_payment_method():
     content = (BACKEND / "app" / "services" / "reports.py").read_text()
-    # Expenses in cash-in-hands must be restricted to CASH only.
-    assert "Expense.payment_method=='CASH'" in content
-    assert "expenses=self._d(self.session.scalar(select(func.coalesce(func.sum(Expense.amount),0)).where(Expense.branch_id==branch_id,Expense.expense_date.between(start,end),Expense.status=='APPROVED',Expense.payment_method=='CASH')))" in content
+    # Requirements 11: Cash In Hands = all approved inflows - all outflows, regardless of payment method.
+    assert "Expense.payment_method" not in content
 
 
 def test_reports_cash_in_hands_counts_all_purchases_regardless_of_payment_method():
@@ -29,10 +28,10 @@ def test_reports_cash_in_hands_formula_unchanged_structure():
     assert "return self._d(sales_cash+repair_cash+settlements+other_income+other_cash+reloads-refunds-expenses-purchases)" in content
 
 
-def test_day_finance_expected_cash_subtracts_cash_expenses():
+def test_day_finance_expected_cash_does_not_subtract_expenses():
     content = (BACKEND / "app" / "services" / "day_finance.py").read_text()
-    assert "cash_expenses=self.session.scalar(select(func.coalesce(func.sum(Expense.amount),0)).where(Expense.branch_id==day.branch_id,Expense.expense_date==day.business_date,Expense.status=='APPROVED',Expense.payment_method=='CASH')) or 0" in content
-    assert "-Decimal(cash_expenses)" in content
+    # Requirements 11 (locked rule): expenses affect Cash In Hands but not the Day-End drawer.
+    assert "cash_expenses" not in content
 
 
 def test_day_finance_expected_cash_does_not_subtract_purchases():
@@ -44,4 +43,4 @@ def test_day_finance_expected_cash_does_not_subtract_purchases():
 def test_day_finance_expected_cash_formula_unchanged_structure():
     content = (BACKEND / "app" / "services" / "day_finance.py").read_text()
     # Opening + inflows - outflows, with new cash-only deductions inserted.
-    assert "return self.money(day.opening_cash+Decimal(cash_sales)+Decimal(repair_cash)+Decimal(settlement_cash)-Decimal(refund_cash)+Decimal(reloads)+Decimal(other)-Decimal(cash_expenses))" in content
+    assert "return self.money(day.opening_cash+Decimal(cash_sales)+Decimal(repair_cash)+Decimal(settlement_cash)-Decimal(refund_cash)+Decimal(reloads)+Decimal(other))" in content
