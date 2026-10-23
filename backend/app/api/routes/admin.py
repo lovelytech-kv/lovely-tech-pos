@@ -163,7 +163,7 @@ def expense_categories(user:User=Depends(require_permission('EXPENSE_ENTRY')),db
 def approvals(user:User=Depends(admin_user),db:Session=Depends(db_session)):
     from app.models.security import ApprovalRequest
     rows=db.scalars(select(ApprovalRequest).where(ApprovalRequest.branch_id==user.branch_id).order_by(ApprovalRequest.requested_at.desc()).limit(200)).all()
-    return [{'approval_id':str(x.id),'action_type':x.action_type,'status':x.status,'requester_user_id':str(x.requester_user_id),'reviewer_user_id':str(x.reviewer_user_id) if x.reviewer_user_id else None,'requested_at':x.requested_at,'reviewed_at':x.reviewed_at,'payload':x.payload_json,'reject_reason':x.reject_reason,'approval_action_id':x.approval_action_id} for x in rows]
+    return [{'approval_id':str(x.id),'action_type':x.action_type,'status':x.status,'requester_user_id':str(x.requester_user_id),'reviewer_user_id':str(x.reviewer_user_id) if x.reviewer_user_id else None,'requested_at':x.requested_at,'reviewed_at':x.reviewed_at,'payload':x.payload_json,'reject_reason':x.reject_reason,'approval_action_id':x.approval_action_id,'version':x.version} for x in rows]
 
 @router.get('/pending-expenses')
 def pending_expenses(user:User=Depends(admin_user),db:Session=Depends(db_session)):
@@ -189,6 +189,11 @@ def expense_decision(expense_id:str,approve:bool,reason:str|None=None,version:in
 def audit(user:User=Depends(admin_user),db:Session=Depends(db_session)):
     rows=db.scalars(select(AuditLog).where(AuditLog.branch_id==user.branch_id).order_by(AuditLog.timestamp.desc()).limit(300)).all()
     return [{'audit_id':str(x.id),'timestamp':x.timestamp,'actor_user_id':str(x.actor_user_id) if x.actor_user_id else None,'action_type':x.action_type,'entity_type':x.entity_type,'entity_id':str(x.entity_id) if x.entity_id else None,'reason':x.reason,'before':x.before_json,'after':x.after_json,'source_transaction_id':str(x.source_transaction_id) if x.source_transaction_id else None} for x in rows]
+
+@router.get('/pending-other-income')
+def pending_other_income(user:User=Depends(admin_user),db:Session=Depends(db_session)):
+    rows=db.scalars(select(OtherIncome).where(OtherIncome.branch_id==user.branch_id,OtherIncome.status=='PENDING_APPROVAL').order_by(OtherIncome.income_date.desc())).all()
+    return [{'other_income_id':str(x.id),'income_date':x.income_date,'amount':x.amount,'payment_method':x.payment_method,'description':x.description,'entered_by':str(x.entered_by),'status':x.status,'version':x.version} for x in rows]
 
 @router.post('/other-income/{other_income_id}/decision')
 def other_income_decision(other_income_id:str,approve:bool,reason:str|None=None,version:int|None=None,user:User=Depends(admin_user),db:Session=Depends(db_session)):
