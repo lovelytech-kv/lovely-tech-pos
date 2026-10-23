@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { money } from '../../services/money';
 
-type Item = { item_id: string; item_code: string; description: string; stock: string | number; sale_price?: string | number | null };
+type Item = { item_id: string; item_code: string; description: string; stock: string | number; sale_price?: string | number | null; is_serialized?: boolean };
+type Line = Item & { quantity: string; serials?: string };
+
+// One IMEI/serial per line (commas/spaces also accepted); duplicates inside the entry are caught client-side.
+export const parseSerials = (text?: string): string[] => (text || '').split(/[\s,;]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
 type Supplier = { supplier_id: string; name: string; contact_no?: string | null; address?: string | null };
 type Pending = {
   version: number | null;
@@ -30,7 +34,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (message: string) => void }) {
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Item[]>([]);
-  const [selected, setSelected] = useState<Array<Item & { quantity: string }>>([]);
+  const [selected, setSelected] = useState<Line[]>([]);
   const [quantity, setQuantity] = useState('1');
   const [date, setDate] = useState(today());
   const [reference, setReference] = useState('');
@@ -52,7 +56,8 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
   const [adminPassword, setAdminPassword] = useState('');
   const [savingCorrection, setSavingCorrection] = useState(false);
 
-  const selectedQty = useMemo(() => selected.reduce((sum, row) => sum + Number(row.quantity || 0), 0), [selected]);
+  const qtyOf = (row: Line) => row.is_serialized ? parseSerials(row.serials).length : Number(row.quantity || 0);
+  const selectedQty = useMemo(() => selected.reduce((sum, row) => sum + qtyOf(row), 0), [selected]);
 
   async function search() {
     try { setItems(await api<Item[]>(`/inventory/items/search?q=${encodeURIComponent(query)}`)); }
@@ -80,15 +85,21 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
 
   function add(item: Item) {
     setSelected(prev => prev.some(x => x.item_id === item.item_id)
-      ? prev.map(x => x.item_id === item.item_id ? { ...x, quantity } : x)
-      : [...prev, { ...item, quantity }]);
+      ? prev.map(x => x.item_id === item.item_id && !item.is_serialized ? { ...x, quantity } : x)
+      : [...prev, { ...item, quantity: item.is_serialized ? '0' : quantity, serials: '' }]);
+  }
+
+  function setSerials(itemId: string, text: string) {
+    setSelected(prev => prev.map(x => x.item_id === itemId ? { ...x, serials: text, quantity: String(parseSerials(text).length) } : x));
   }
 
   function remove(itemId: string) { setSelected(prev => prev.filter(x => x.item_id !== itemId)); }
 
   async function save() {
     if (!selected.length) { onError?.('Add at least one item.'); return; }
-    if (selected.some(x => !Number.isFinite(Number(x.quantity)) || Number(x.quantity) <= 0)) { onError?.('Every purchase quantity must be greater than zero.'); return; }
+    if (selected.some(x => !Number.isFinite(Number(x.quantity)) || Number(x.quantity) <= 0)) { onError?.('Every purchase quantity must be greater than zero. Phones need their IMEI/serial numbers entered.'); return; }
+    const all = selected.flatMap(x => x.is_serialized ? parseSerials(x.serials) : []);
+    if (new Set(all).size !== all.length) { onError?.('The same IMEI/serial is entered more than once.'); return; }
     setBusy(true);
     try {
       await api('/purchases', {
@@ -99,7 +110,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
           notes: notes.trim() || null,
           supplier_id: isAdmin ? (supplierId || null) : null,
           payment_method: paymentMethod,
-          lines: selected.map(x => ({ item_id: x.item_id, quantity: x.quantity, line_date: date })),
+          lines: selected.map(x => ({ item_id: x.item_id, quantity: x.is_serialized ? String(parseSerials(x.serials).length) : x.quantity, line_date: date, ...(x.is_serialized ? { serial_numbers: parseSerials(x.serials) } : {}) })),
           idempotency_key: purchaseKey,
         }),
       });
@@ -163,7 +174,10 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
       </div>
       <label className="wide-field">Notes<textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional purchase note" /></label>
       {selected.length > 0 && <div className="status-strip"><div><span>Lines</span><b>{selected.length}</b></div><div><span>Total quantity</span><b>{selectedQty}</b></div><div><span>Cost visibility</span><b className="status-good">Admin only</b></div></div>}
-      {selected.map(item => <div className="stock-row" key={item.item_id}><span><b>{item.item_code}</b> · {item.description} · Qty {item.quantity}</span><button className="danger-button" onClick={() => remove(item.item_id)}>Remove</button></div>)}
+      {selected.map(item => <div className="stock-row" key={item.item_id} style={item.is_serialized ? { flexDirection: 'column', alignItems: 'stretch', gap: 8 } : undefined}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span><b>{item.item_code}</b> · {item.description} · Qty {qtyOf(item)}{item.is_serialized ? ' · IMEI/serial tracked' : ''}</span><button className="danger-button" onClick={() => remove(item.item_id)}>Remove</button></div>
+        {item.is_serialized && <label className="wide-field">IMEI / Serial numbers (one per line — scan each phone) · {qtyOf(item)} entered<textarea aria-label={`IMEI list for ${item.item_code}`} value={item.serials || ''} onChange={e => setSerials(item.item_id, e.target.value)} placeholder="Scan or type one IMEI per line" /></label>}
+      </div>)}
       <div className="form-actions"><button disabled={busy || !selected.length} onClick={save}>{busy ? 'Saving…' : 'Save Purchase'}</button><span className="muted">No buy cost is entered in this workspace.</span></div>
     </div>
 

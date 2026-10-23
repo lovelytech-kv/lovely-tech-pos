@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.fifo.engine import FifoEngine
-from app.models.inventory import Purchase, PurchaseLine, StockMovement
-from app.models.master import Item
+from app.models.inventory import Purchase, PurchaseLine, SerializedUnit, StockMovement
+from app.models.master import Item, ItemType
 from app.models.security import AuditLog, IdempotencyKey
 from app.services.numbering import NumberingService
 
@@ -38,7 +38,7 @@ class PurchaseService:
             "payment_method": payment_method,
             "reference_no": reference_no.strip() if reference_no else None, "notes": notes,
             "supplier_id": str(supplier_id) if supplier_id else None, "admin_side": admin_side,
-            "lines": [{k: (str(v) if isinstance(v, Decimal) else str(v) if isinstance(v, uuid.UUID) else v) for k, v in sorted(x.items())} for x in lines],
+            "lines": [{k: (str(v) if isinstance(v, (Decimal, uuid.UUID, date)) else v) for k, v in sorted(x.items())} for x in lines],
         }
         request_hash = hashlib.sha256(json.dumps(request_payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         if idempotency_key:
@@ -84,6 +84,7 @@ class PurchaseService:
         )
         self.session.add(purchase)
         self.session.flush()
+        seen_serials: set[str] = set()
         for raw in lines:
             item_id = raw["item_id"]
             quantity = Decimal(raw["quantity"])
@@ -92,6 +93,7 @@ class PurchaseService:
             item = self.session.scalar(select(Item).where(Item.id == item_id, Item.is_active.is_(True)).with_for_update())
             if not item:
                 raise ValueError("Active item not found")
+            serials = self._validate_serials(branch_id, item, quantity, raw.get("serial_numbers"), seen_serials)
             line_date = raw.get("line_date") or purchase_date
             line = PurchaseLine(
                 purchase_id=purchase.id, item_id=item.id, quantity=quantity,
@@ -99,6 +101,8 @@ class PurchaseService:
             )
             self.session.add(line)
             self.session.flush()
+            for serial in serials:
+                self.session.add(SerializedUnit(branch_id=branch_id, item_id=item.id, serial_number=serial, status="IN_STOCK"))
             # Requirements: stock increases immediately even when cost is unknown.
             # The positive movement has no FIFO lot until Admin completes the cost.
             self.session.add(StockMovement(
@@ -120,6 +124,31 @@ class PurchaseService:
                 idem.response_json = {"purchase_id": str(purchase.id), "reference_no": purchase.reference_no}
                 idem.completed_at = datetime.now(timezone.utc)
         return purchase
+
+    def _validate_serials(self, branch_id, item: Item, quantity: Decimal, raw_serials, seen: set[str]) -> list[str]:
+        """Serialized items (phones) need one unique IMEI/serial per unit; others must not carry any."""
+        item_type = self.session.get(ItemType, item.item_type_id)
+        serialized = bool(item_type and item_type.is_serialized)
+        cleaned = [str(x).strip().upper() for x in (raw_serials or []) if str(x).strip()]
+        if not serialized:
+            if raw_serials:
+                raise ValueError(f"{item.item_code} is not a serialized item; remove the IMEI/serial numbers")
+            return []
+        if quantity != quantity.to_integral_value():
+            raise ValueError(f"Serialized item {item.item_code} must be purchased in whole units")
+        if len(cleaned) != int(quantity):
+            raise ValueError(f"{item.item_code} needs exactly {int(quantity)} IMEI/serial number(s); {len(cleaned)} entered")
+        for serial in cleaned:
+            if len(serial) > 100:
+                raise ValueError("IMEI/serial number is too long")
+            if serial in seen:
+                raise ValueError(f"IMEI/serial {serial} is entered more than once")
+            seen.add(serial)
+        taken = self.session.scalars(select(SerializedUnit.serial_number).where(
+            SerializedUnit.branch_id == branch_id, SerializedUnit.serial_number.in_(cleaned))).all()
+        if taken:
+            raise ValueError(f"IMEI/serial already exists in the system: {', '.join(sorted(taken))}")
+        return cleaned
 
     def complete_line_cost(self, *, purchase: Purchase, line: PurchaseLine, unit_cost: Decimal, actor_user_id: uuid.UUID | None = None) -> None:
         if purchase.status not in {"PENDING_COST", "COMPLETED"}:

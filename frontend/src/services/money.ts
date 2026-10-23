@@ -25,11 +25,11 @@ export function money(value: string | number | null | undefined): string {
 }
 
 export function moneyAdd(...values: Array<string | number | null | undefined>): string {
-  return money(values.reduce((sum, value) => sum + scaled(value, SCALE), 0n).toString());
+  return formatScaled(values.reduce((sum, value) => sum + scaled(value, SCALE), 0n), SCALE, 2);
 }
 
 export function moneySub(a: string | number | null | undefined, b: string | number | null | undefined): string {
-  return money((scaled(a, SCALE) - scaled(b, SCALE)).toString());
+  return formatScaled(scaled(a, SCALE) - scaled(b, SCALE), SCALE, 2);
 }
 
 /** Price has 2 decimals and quantity has up to 3 decimals; result is rounded to 2 decimals. */
@@ -37,7 +37,7 @@ export function moneyTimesQty(price: string | number, quantity: string | number)
   const p = scaled(price, SCALE);
   const q = scaled(quantity, QTY_SCALE);
   const product = p * q;
-  const divisor = SCALE * QTY_SCALE;
+  const divisor = QTY_SCALE; // price is in cents (x100), quantity in thousandths (x1000) -> result in cents
   const rounded = product >= 0n ? (product + divisor / 2n) / divisor : (product - divisor / 2n) / divisor;
   return formatScaled(rounded, SCALE, 2);
 }

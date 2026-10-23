@@ -95,6 +95,10 @@ def _ensure_day(ctx):
     r = c.get("/api/v1/day/status", headers=ctx["C"])
     if r.status_code == 200 and r.json().get("status") == "OPEN":
         return r.json()
+    if r.status_code == 200 and r.json().get("status") == "SHIFT_ENDED":  # an earlier test ended the shift: reopen it
+        cont = c.post("/api/v1/day/continue", headers=ctx["A"], json={"start": date.today().isoformat(), "end": date.today().isoformat()})
+        assert cont.status_code == 200, cont.text
+        return c.get("/api/v1/day/status", headers=ctx["C"]).json()
     r = c.post("/api/v1/day/start", headers=ctx["C"], json={
         "business_date": date.today().isoformat(), "opening_cash": "1000", "denominations": {"1000": 1}})
     assert r.status_code == 200, r.text

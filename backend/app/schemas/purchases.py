@@ -9,6 +9,8 @@ class PurchaseLineCreateIn(BaseModel):
     quantity: Decimal = Field(gt=0)
     line_date: date | None = None
     notes: str | None = None
+    # Required for serialized (IMEI/serial tracked) items: exactly one entry per unit purchased.
+    serial_numbers: list[str] | None = None
 
 class PurchaseCreateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")

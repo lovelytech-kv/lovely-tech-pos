@@ -165,3 +165,22 @@ Resolved (2026-10-21): the open design question above is closed by the automatic
 - A verified backup younger than `BACKUP_CLOSE_REUSE_SECONDS` (default 60 s, minimum 30 s) satisfies a close, so fixing a validation error and pressing Day End again does not dump the database twice.
 - The cashier only sees progress/“failed” text; the technical reason (with DB password and secret redacted) is Admin-only (audit log / backup points).
 - Verified live: real `pg_dump` via the UI (202 → backup → 200 SHIFT_ENDED); a `pg_dump` that failed twice then worked completed Shift End automatically on attempt 3; with `pg_dump` missing the close was refused (503) and the day stayed OPEN.
+
+## Serialized (IMEI) phones — verified 2026-10-23
+
+Found during the UI sweep: nothing could ever create a `SerializedUnit`, so phones with an IMEI could not be
+purchased into stock or sold with an identity.
+
+- Purchase: each serialized line needs exactly one IMEI per whole unit (trimmed + upper-cased); duplicates inside the
+  entry or already in the system are rejected, atomically. IMEI-tracked purchase quantity cannot be corrected afterwards.
+- Sale: a serialized item cannot be sold without an in-stock `serialized_unit_id`; the same phone cannot be sold twice.
+  Good returns put the phone back to IN_STOCK. Warranty lookup by IMEI works.
+- UI: Purchases has an IMEI box per phone line; POS gives every phone its own cart line, requires its IMEI before
+  checkout and lists only IN_STOCK units. Fixed the money helper `moneyTimesQty` (divisor was 100x too large).
+- Tests: `backend/tests/test_e2e_serialized.py`, `frontend/src/services/money.test.ts`, plus a real-Chromium run
+  (buy 2 IMEIs as cashier, sell both through the POS, units end SOLD, no API errors).
+- Run the backend suite on a FRESH database each time (day sessions persist between runs) and with the default
+  `REQUIRE_VERIFIED_BACKUP_FOR_CLOSE=true`: 283 passed.
+
+Still open: purchase payment method is asked/stored although Requirements 08 says it must not be; stock adjustment /
+damage on serialized items can desync units from movement-based stock; `SerializedUnit.purchase_lot_id` is not linked.
