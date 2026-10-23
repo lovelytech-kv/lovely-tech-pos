@@ -182,5 +182,8 @@ purchased into stock or sold with an identity.
 - Run the backend suite on a FRESH database each time (day sessions persist between runs) and with the default
   `REQUIRE_VERIFIED_BACKUP_FOR_CLOSE=true`: 283 passed.
 
-Still open: purchase payment method is asked/stored although Requirements 08 says it must not be; stock adjustment /
+Purchase payment method removed (Requirements 08): not asked, not accepted by the API, not stored (migration 0032). Purchases now reduce Cash In Hands
+regardless of method and never the Day-End drawer (Requirements 11). Run `alembic upgrade head` on the shop DB.
+
+Still open: Expenses still reduce the Day-End drawer for CASH expenses although Requirements 11 says they should not (needs owner decision); stock adjustment /
 damage on serialized items can desync units from movement-based stock; `SerializedUnit.purchase_lot_id` is not linked.

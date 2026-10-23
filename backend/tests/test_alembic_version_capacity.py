@@ -77,7 +77,7 @@ def test_alembic_version_capacity():
                 ),
                 {"v": PROBE},
             ).scalars().all()
-            assert stamps == ["0031_alembic_version_id_capacity"]
+            assert stamps == [_head()]
 
             # no application data changed by the probe
             assert _application_row_counts(conn) == before
@@ -93,11 +93,17 @@ def test_alembic_version_capacity():
         ).scalar() == 0
 
 
+def _head() -> str:
+    cfg = Config()
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    return ScriptDirectory.from_config(cfg).get_current_head()
+
+
 def test_version_capacity_migration_chain():
     cfg = Config()
     cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     script = ScriptDirectory.from_config(cfg)
-    head = script.get_current_head()
-    assert head == "0031_alembic_version_id_capacity"
-    revision = script.get_revision(head)
+    # 0031 widened alembic_version; later migrations must keep it in the chain.
+    revision = script.get_revision("0031_alembic_version_id_capacity")
     assert revision.down_revision == "0030_audit_immutability"
+    assert "0031_alembic_version_id_capacity" in {r.revision for r in script.walk_revisions()}

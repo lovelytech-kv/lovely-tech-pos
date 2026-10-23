@@ -24,18 +24,13 @@ class PurchaseService:
 
     def create_purchase(
         self, *, branch_id: uuid.UUID, actor_user_id: uuid.UUID, purchase_date: date,
-        payment_method: str = "CASH",
         lines: list[dict], reference_no: str | None = None, notes: str | None = None,
         supplier_id: uuid.UUID | None = None, admin_side: bool = False, idempotency_key: str | None = None,
     ) -> Purchase:
         if not lines:
             raise ValueError("At least one purchase line is required")
-        payment_method = (payment_method or "CASH").upper()
-        if payment_method not in {"CASH", "CARD", "ONLINE"}:
-            raise ValueError("Unsupported purchase payment method")
         request_payload = {
             "branch_id": str(branch_id), "actor_user_id": str(actor_user_id), "purchase_date": purchase_date.isoformat(),
-            "payment_method": payment_method,
             "reference_no": reference_no.strip() if reference_no else None, "notes": notes,
             "supplier_id": str(supplier_id) if supplier_id else None, "admin_side": admin_side,
             "lines": [{k: (str(v) if isinstance(v, (Decimal, uuid.UUID, date)) else v) for k, v in sorted(x.items())} for x in lines],
@@ -78,7 +73,6 @@ class PurchaseService:
             reference_no=reference_no.strip() if reference_no else None,
             supplier_id=supplier_id if admin_side else None,
             purchase_date=purchase_date,
-            payment_method=payment_method,
             status="PENDING_COST",
             notes=notes,
         )
@@ -114,7 +108,7 @@ class PurchaseService:
         self.session.add(AuditLog(
             branch_id=branch_id, actor_user_id=actor_user_id, action_type="PURCHASE_CREATED",
             entity_type="PURCHASE", entity_id=purchase.id, timestamp=datetime.now(timezone.utc),
-            after_json={"payment_method": payment_method, "status": purchase.status, "line_count": len(lines)},
+            after_json={"status": purchase.status, "line_count": len(lines)},
             source_transaction_id=purchase.id,
         ))
         self.session.flush()

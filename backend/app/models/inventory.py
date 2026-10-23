@@ -13,7 +13,7 @@ class Purchase(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT"))
     purchase_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="PENDING_COST")
-    payment_method: Mapped[str] = mapped_column(String(30), nullable=False, default="CASH")
+    payment_method: Mapped[str | None] = mapped_column(String(30), nullable=True)  # legacy: purchases no longer record a payment method (Req. 08)
     notes: Mapped[str | None] = mapped_column(Text)
     branch = relationship("Branch")
     supplier = relationship("Supplier")

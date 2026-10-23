@@ -17,11 +17,10 @@ def test_reports_cash_in_hands_filters_cash_expenses():
     assert "expenses=self._d(self.session.scalar(select(func.coalesce(func.sum(Expense.amount),0)).where(Expense.branch_id==branch_id,Expense.expense_date.between(start,end),Expense.status=='APPROVED',Expense.payment_method=='CASH')))" in content
 
 
-def test_reports_cash_in_hands_filters_cash_purchases():
+def test_reports_cash_in_hands_counts_all_purchases_regardless_of_payment_method():
     content = (BACKEND / "app" / "services" / "reports.py").read_text()
-    # Purchases in cash-in-hands must be restricted to CASH only.
-    assert "Purchase.payment_method=='CASH'" in content
-    assert "purchases=self._d(self.session.scalar(select(func.coalesce(func.sum(PurchaseLine.quantity*PurchaseLine.unit_cost),0)).join(Purchase,Purchase.id==PurchaseLine.purchase_id).where(Purchase.branch_id==branch_id,Purchase.purchase_date.between(start,end),PurchaseLine.unit_cost.is_not(None),Purchase.payment_method=='CASH')))" in content
+    # Requirements 08/11: purchases have no payment method; Cash In Hands subtracts all of them.
+    assert "Purchase.payment_method" not in content
 
 
 def test_reports_cash_in_hands_formula_unchanged_structure():
@@ -36,13 +35,13 @@ def test_day_finance_expected_cash_subtracts_cash_expenses():
     assert "-Decimal(cash_expenses)" in content
 
 
-def test_day_finance_expected_cash_subtracts_cash_purchases():
+def test_day_finance_expected_cash_does_not_subtract_purchases():
     content = (BACKEND / "app" / "services" / "day_finance.py").read_text()
-    assert "cash_purchases=self.session.scalar(select(func.coalesce(func.sum(PurchaseLine.quantity*PurchaseLine.unit_cost),0)).join(Purchase,Purchase.id==PurchaseLine.purchase_id).where(Purchase.branch_id==day.branch_id,Purchase.purchase_date==day.business_date,PurchaseLine.unit_cost.is_not(None),Purchase.payment_method=='CASH')) or 0" in content
-    assert "-Decimal(cash_purchases)" in content
+    # Requirements 11 (locked rule): purchases affect Cash In Hands but not the Day-End drawer.
+    assert "cash_purchases" not in content
 
 
 def test_day_finance_expected_cash_formula_unchanged_structure():
     content = (BACKEND / "app" / "services" / "day_finance.py").read_text()
     # Opening + inflows - outflows, with new cash-only deductions inserted.
-    assert "return self.money(day.opening_cash+Decimal(cash_sales)+Decimal(repair_cash)+Decimal(settlement_cash)-Decimal(refund_cash)+Decimal(reloads)+Decimal(other)-Decimal(cash_expenses)-Decimal(cash_purchases))" in content
+    assert "return self.money(day.opening_cash+Decimal(cash_sales)+Decimal(repair_cash)+Decimal(settlement_cash)-Decimal(refund_cash)+Decimal(reloads)+Decimal(other)-Decimal(cash_expenses))" in content

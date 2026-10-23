@@ -26,7 +26,6 @@ type History = Pending & {
   item_code: string;
   item_description: string;
   status: string;
-  payment_method?: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -40,7 +39,6 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
   const [supplierId, setSupplierId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [pending, setPending] = useState<Pending[]>([]);
   const [history, setHistory] = useState<History[]>([]);
@@ -109,12 +107,11 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
           reference_no: reference.trim() || null,
           notes: notes.trim() || null,
           supplier_id: isAdmin ? (supplierId || null) : null,
-          payment_method: paymentMethod,
           lines: selected.map(x => ({ item_id: x.item_id, quantity: x.is_serialized ? String(parseSerials(x.serials).length) : x.quantity, line_date: date, ...(x.is_serialized ? { serial_numbers: parseSerials(x.serials) } : {}) })),
           idempotency_key: purchaseKey,
         }),
       });
-      setSelected([]); setReference(''); setNotes(''); setSupplierId(''); setPaymentMethod('CASH'); setQuantity('1'); setPurchaseKey(crypto.randomUUID());
+      setSelected([]); setReference(''); setNotes(''); setSupplierId(''); setQuantity('1'); setPurchaseKey(crypto.randomUUID());
       await loadAdminData();
     } catch (e) { onError?.((e as Error).message); }
     finally { setBusy(false); }
@@ -169,7 +166,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
         <label>Date<input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
         <label>Reference<input value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier invoice / GRN" /></label>
         <label>Quantity<input type="number" min="0.001" step="0.001" value={quantity} onChange={e => setQuantity(e.target.value)} /></label>
-        <label>Payment Method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option value="CASH">Cash</option><option value="CARD">Card</option><option value="ONLINE">Online</option></select></label>
+
         {isAdmin && <label>Supplier<select value={supplierId} onChange={e => setSupplierId(e.target.value)}><option value="">No supplier</option>{suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}</select></label>}
       </div>
       <label className="wide-field">Notes<textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional purchase note" /></label>
@@ -191,7 +188,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
         <div className="section-head"><div><h2>Admin · Purchase History</h2><p className="muted">Review recorded supplier, quantity and FIFO cost, then make audited corrections.</p></div><button disabled={!historyLoaded} onClick={() => { setHistoryLoaded(false); loadHistory(); }}>Reload</button></div>
         <div className="form-grid compact"><label>From<input type="date" value={historyStart} onChange={e => setHistoryStart(e.target.value)} /></label><label>To<input type="date" value={historyEnd} onChange={e => setHistoryEnd(e.target.value)} /></label><button onClick={loadHistory}>Load History</button></div>
         {!historyLoaded ? <p className="muted">Select a date range and load history.</p> : !history.length ? <p className="muted">No purchase history in this date range.</p> : history.map(row => <div className="purchase-history-row" key={row.purchase_line_id}>
-          <div className="purchase-history-main"><b>{row.item_code} · {row.item_description}</b><span>{row.purchase_date} · Line {row.line_date} · Qty {row.quantity} · {row.reference_no || 'No reference'}</span><small>Supplier: {row.supplier_name || 'No supplier'} · Payment: {row.payment_method || 'CASH'} · Unit cost: {row.unit_cost == null ? 'Pending' : `Rs. ${money(row.unit_cost)}`} · Versions: line {row.version ?? '—'}, purchase {row.purchase_version ?? '—'}</small></div>
+          <div className="purchase-history-main"><b>{row.item_code} · {row.item_description}</b><span>{row.purchase_date} · Line {row.line_date} · Qty {row.quantity} · {row.reference_no || 'No reference'}</span><small>Supplier: {row.supplier_name || 'No supplier'} · Unit cost: {row.unit_cost == null ? 'Pending' : `Rs. ${money(row.unit_cost)}`} · Versions: line {row.version ?? '—'}, purchase {row.purchase_version ?? '—'}</small></div>
           <div className="button-row"><button onClick={() => openCorrection(row, 'cost')} disabled={row.unit_cost == null}>Cost</button><button onClick={() => openCorrection(row, 'quantity')}>Qty</button><button onClick={() => openCorrection(row, 'date')}>Date</button><button onClick={() => openCorrection(row, 'reference')}>Reference</button><button onClick={() => openCorrection(row, 'supplier')}>Supplier</button></div>
         </div>)}
       </div>
