@@ -1,6 +1,9 @@
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from psycopg import errors as psycopg_errors
+from sqlalchemy.exc import DataError
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.router import api_router
@@ -58,6 +61,16 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
 )
+
+
+@app.exception_handler(DataError)
+async def _invalid_identifier_handler(request: Request, exc: DataError):
+    """A malformed id in the URL (e.g. /returns/abc) used to surface as HTTP 500; it is simply 'not found'."""
+    if isinstance(getattr(exc, "orig", None), psycopg_errors.InvalidTextRepresentation):
+        return JSONResponse(status_code=404, content={"detail": "Record not found (invalid identifier)"})
+    raise exc
+
+
 app.include_router(api_router)
 app.include_router(discovery_router)
 

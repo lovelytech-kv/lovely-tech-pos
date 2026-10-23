@@ -187,3 +187,13 @@ regardless of method and never the Day-End drawer (Requirements 11). Run `alembi
 
 Still open: Expenses still reduce the Day-End drawer for CASH expenses although Requirements 11 says they should not (needs owner decision); stock adjustment /
 damage on serialized items can desync units from movement-based stock; `SerializedUnit.purchase_lot_id` is not linked.
+
+## UI sweep findings fixed (2026-10-23)
+
+Real-browser run of POS split payment, discount approval, credit sale, Returns, Expenses approval and report exports.
+- Admin could not approve a discount or an expense from the screen (record version never sent -> 409): fixed; approval rows show action id, discount % and amount.
+- Cashier Other Income had no pending list for Admin: `GET /admin/pending-other-income` + Admin panel.
+- Returns accepted "invoice number" in the UI but the API returned HTTP 500: lookup now accepts the sale id or invoice no.
+- Any malformed id in a URL (7 routes found by fuzzing) returned HTTP 500: now a clean 404.
+- Verified in Chromium: split cash+card with change, payment mismatch blocked, discount approval round trip with the
+  cashier retry replaying the same sale, credit sale, return with charge, 8 report exports (xlsx+pdf) download non-empty files.

@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from decimal import Decimal
@@ -65,7 +66,13 @@ def request_discount_approval(payload: SaleIn, user: User = Depends(require_perm
 
 @router.get("/{sale_id}")
 def get_sale_detail(sale_id: str, user: User = Depends(require_permission("RETURN_CREATE")), db: Session = Depends(db_session)):
-    sale = db.scalar(select(Sale).where(Sale.id == sale_id, Sale.branch_id == user.branch_id, Sale.status == "COMPLETED"))
+    # The Returns screen accepts either the sale id or the printed invoice number (e.g. INV-000013).
+    key = sale_id.strip()
+    try:
+        match = Sale.id == uuid.UUID(key)
+    except ValueError:
+        match = Sale.invoice_no == key.upper()
+    sale = db.scalar(select(Sale).where(match, Sale.branch_id == user.branch_id, Sale.status == "COMPLETED"))
     if sale is None:
         raise HTTPException(404, "Sale not found")
     lines = db.execute(select(SaleLine, Item).join(Item, Item.id == SaleLine.item_id).where(SaleLine.sale_id == sale.id)).all()
