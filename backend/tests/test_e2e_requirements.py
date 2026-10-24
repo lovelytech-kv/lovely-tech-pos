@@ -56,7 +56,7 @@ def ctx():
     cat = client.post("/api/v1/items/categories", headers=admin, json={"name": f"E2E-{suffix}"}).json()
     ity = client.post("/api/v1/items/item-types", headers=admin,
                       json={"code": f"E2E{suffix}", "name": f"E2E-{suffix}", "is_serialized": False}).json()
-    return {"c": client, "A": admin, "C": cashier, "cat": cat["id"], "ity": ity["id"], "suffix": suffix}
+    return {"c": client, "A": admin, "C": cashier, "cat": cat["id"], "ity": ity["id"], "suffix": suffix, "admin_user": env["ADMIN_USERNAME"]}
 
 
 def _new_item(ctx, headers=None):

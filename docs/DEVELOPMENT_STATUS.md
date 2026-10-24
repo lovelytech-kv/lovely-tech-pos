@@ -200,3 +200,9 @@ Real-browser run of POS split payment, discount approval, credit sale, Returns, 
 - Any malformed id in a URL (7 routes found by fuzzing) returned HTTP 500: now a clean 404.
 - Verified in Chromium: split cash+card with change, payment mismatch blocked, discount approval round trip with the
   cashier retry replaying the same sale, credit sale, return with charge, 8 report exports (xlsx+pdf) download non-empty files.
+
+## Data import tool (2026-10-24)
+
+`scripts/import_data.py` + `docs/DATA_IMPORT.md` + `docs/import_templates/`: dry-run validation, items with preserved codes,
+opening stock with FIFO cost, IMEI units, customers; idempotent re-runs. Tested against the real API
+(`backend/tests/test_import_script.py`) and live on a running server. Auto item codes now skip numbers already taken by imported codes.
