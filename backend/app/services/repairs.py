@@ -209,6 +209,40 @@ class RepairService:
         self._audit(branch_id, actor_user_id, "REPAIR_PAYMENT_ADDED", repair, payment.payment_datetime, {"amount": str(payment.amount), "method": method})
         return payment
 
+    def import_historical(self, *, branch_id: uuid.UUID, actor_user_id: uuid.UUID, done_on: date, device_brand: str | None, model: str | None,
+                          description: str | None, final_amount: Decimal, parts_cost: Decimal, history_ref: str, cost_item_id: uuid.UUID | None,
+                          notes: str | None = None) -> tuple[Repair, bool]:
+        """Admin back-fill of a completed, paid, delivered repair from the old spreadsheets (dated in the past).
+
+        Idempotent on `history_ref` (stored as repair_invoice_ref). Parts cost has no stock item, so it is recorded as the
+        part's fifo_cost without touching stock; repair profit = final amount - that cost, like any other repair."""
+        existing = self.session.scalar(select(Repair).where(Repair.repair_invoice_ref == history_ref, Repair.branch_id == branch_id))
+        if existing is not None:
+            return existing, True
+        final_amount, parts_cost = self.money(final_amount), self.money(parts_cost)
+        if final_amount < ZERO or parts_cost < ZERO:
+            raise RepairValidationError("Amounts cannot be negative")
+        if parts_cost > ZERO and cost_item_id is None:
+            raise RepairValidationError("A cost item is required to record historical parts cost")
+        when = datetime(done_on.year, done_on.month, done_on.day, 12, 0, tzinfo=timezone.utc)
+        repair = Repair(
+            branch_id=branch_id, repair_no=NumberingService.next_number(self.session, "REP", str(branch_id)), status="DELIVERED",
+            device_brand=device_brand, model=model, date_in=when, hand_over_date=done_on, description_amount=description,
+            repair_invoice_ref=history_ref, advance_payment=ZERO, total_amount=final_amount, labour_amount=final_amount - parts_cost if final_amount >= parts_cost else final_amount,
+            reported_fault=description, final_amount=final_amount, notes=notes or "Imported from old spreadsheet records",
+        )
+        self.session.add(repair); self.session.flush()
+        if final_amount > ZERO:
+            self.session.add(RepairPayment(repair_id=repair.id, payment_method="CASH", amount=final_amount, payment_datetime=when,
+                                           reference=history_ref, proof_reference=history_ref, payment_type="RECEIPT",
+                                           proof_no=NumberingService.next_number(self.session, "REC", str(branch_id)), idempotency_key=f"{history_ref}:payment"))
+        if parts_cost > ZERO:
+            self.session.add(RepairPart(repair_id=repair.id, item_id=cost_item_id, quantity=Decimal("1"), charge_amount=ZERO, fifo_cost=parts_cost,
+                                        status="USED", stock_movement_id=None, notes="Historical parts cost (no stock item)"))
+        self._audit(branch_id, actor_user_id, "REPAIR_HISTORY_IMPORTED", repair, when, {"repair_no": repair.repair_no, "final_amount": str(final_amount), "parts_cost": str(parts_cost), "ref": history_ref})
+        self.session.flush()
+        return repair, False
+
     def outstanding(self, repair_id: uuid.UUID, branch_id: uuid.UUID) -> Decimal:
         repair = self.session.scalar(select(Repair).where(Repair.id == repair_id, Repair.branch_id == branch_id))
         if repair is None: raise RepairValidationError("Repair not found")

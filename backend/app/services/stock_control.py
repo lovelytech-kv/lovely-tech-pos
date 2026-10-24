@@ -33,12 +33,13 @@ class StockControlService:
             self.fifo.consume(branch_id=branch_id,item_id=item_id,quantity=-quantity_delta,source_type='STOCK_ADJUSTMENT',source_id=row.id,occurred_at=now,reason=reason)
         self.session.add(AuditLog(branch_id=branch_id,actor_user_id=user_id,action_type='STOCK_ADJUSTMENT',entity_type='STOCK_ADJUSTMENT',entity_id=row.id,timestamp=now,reason=reason,after_json={'quantity_delta':str(quantity_delta)},source_transaction_id=row.id))
         self.session.flush(); return row
-    def damage_loss(self, *, branch_id,item_id,quantity,reason,user_id,source_type=None,source_id=None):
+    def damage_loss(self, *, branch_id,item_id,quantity,reason,user_id,source_type=None,source_id=None,occurred_at=None):
         quantity=Decimal(quantity)
         if quantity<=0: raise StockControlError('Damage/loss quantity must be positive')
         if not reason.strip(): raise StockControlError('Damage/loss reason is required')
         row=DamageLossRecord(branch_id=branch_id,item_id=item_id,quantity=quantity,reason=reason,source_type=source_type,source_id=source_id,approved_by=user_id)
         self.session.add(row); self.session.flush()
-        result=self.fifo.consume(branch_id=branch_id,item_id=item_id,quantity=quantity,source_type='DAMAGE_LOSS',source_id=row.id,occurred_at=datetime.now(timezone.utc),reason=reason)
-        self.session.add(AuditLog(branch_id=branch_id,actor_user_id=user_id,action_type='DAMAGE_LOSS',entity_type='DAMAGE_LOSS',entity_id=row.id,timestamp=datetime.now(timezone.utc),reason=reason,after_json={'quantity':str(quantity),'fifo_cost':str(result.total_cost)}))
+        when=occurred_at or datetime.now(timezone.utc)
+        result=self.fifo.consume(branch_id=branch_id,item_id=item_id,quantity=quantity,source_type='DAMAGE_LOSS',source_id=row.id,occurred_at=when,reason=reason)
+        self.session.add(AuditLog(branch_id=branch_id,actor_user_id=user_id,action_type='DAMAGE_LOSS',entity_type='DAMAGE_LOSS',entity_id=row.id,timestamp=when,reason=reason,after_json={'quantity':str(quantity),'fifo_cost':str(result.total_cost)}))
         self.session.flush(); return row,result

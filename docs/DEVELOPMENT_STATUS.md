@@ -206,3 +206,11 @@ Real-browser run of POS split payment, discount approval, credit sale, Returns, 
 `scripts/import_data.py` + `docs/DATA_IMPORT.md` + `docs/import_templates/`: dry-run validation, items with preserved codes,
 opening stock with FIFO cost, IMEI units, customers; idempotent re-runs. Tested against the real API
 (`backend/tests/test_import_script.py`) and live on a running server. Auto item codes now skip numbers already taken by imported codes.
+
+## Old Excel history import (2026-10-24)
+
+`scripts/history_import.py` + `docs/HISTORY_IMPORT.md`, with Admin-only back-fill endpoints `/admin/history/repairs` and
+`/admin/history/damage-loss` (past-dated). Run on the owner's two real workbooks into a fresh database: 1,465 items, 8,674
+records; sales total, all 24 monthly sales totals, repair income, expenses and per-item stock balances match the sheets
+exactly; monthly gross profit within ~1% (FIFO vs the sheet's average cost). Tests: `test_history_import_endpoints.py`,
+`test_history_import_plan.py`.
