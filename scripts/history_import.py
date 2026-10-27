@@ -21,6 +21,7 @@ import argparse
 import csv
 import datetime as dt
 import getpass
+import hashlib
 import json
 import os
 import re
@@ -78,6 +79,14 @@ class Plan:
         self.issues: list[str] = []
         self.skipped: list[str] = []
         self.customers: dict[str, dict] = {}    # phone -> {name, phone}
+        self._seen = Counter()
+
+    def ref(self, prefix, *fields):
+        """Stable id of a sheet row from its CONTENT (not its row number): re-running with newer files, sorted or
+        with rows inserted, never imports the same row twice. Identical rows on the same day get 1, 2, 3 ..."""
+        base = f"{prefix}-{_h(prefix, *fields)}"
+        self._seen[base] += 1
+        return f"{base}-{self._seen[base]}"
 
     def item(self, key, **spec):
         self.items.setdefault(key, {"key": key, "price": None, "brand": None, "model": None, "warranty": None, **spec})
@@ -85,6 +94,10 @@ class Plan:
 
     def ev(self, kind, date, key=None, **kw):
         self.events.append({"kind": kind, "date": date, "item": key, **kw})
+
+
+def _h(*fields) -> str:
+    return hashlib.sha1("|".join(str(f) for f in fields).encode()).hexdigest()[:12]
 
 
 PRIORITY = {"purchase": 0, "sale": 1, "damage": 2, "repair": 3, "expense": 4}
@@ -125,7 +138,7 @@ def build_plan(inv_path: str | None, rep_path: str | None) -> Plan:
                 continue
             c = acode(r, "Purchases", n)
             if c:
-                p.ev("purchase", r["DATE"].date(), ("A", c), qty=D(r["QUANTITY"]), cost=D(r["UNIT PRICE"]), ref=f"INV-P{n}")
+                p.ev("purchase", r["DATE"].date(), ("A", c), qty=D(r["QUANTITY"]), cost=D(r["UNIT PRICE"]), ref=p.ref("INV-P", r["DATE"].date(), c, D(r["QUANTITY"]), D(r["UNIT PRICE"])))
         for n, r in table(wb["Sales"]):
             if not isdate(r["DATE"]):
                 continue
@@ -133,7 +146,7 @@ def build_plan(inv_path: str | None, rep_path: str | None) -> Plan:
             if c:
                 if abs(D(r["TOTAL PRICE"]) - D(r["QUANTITY"]) * D(r["SALE PRICE"])) > Decimal("0.5"):
                     p.issues.append(f"Inventory/Sales row {n}: TOTAL PRICE {r['TOTAL PRICE']} differs from price x qty; price x qty used")
-                p.ev("sale", r["DATE"].date(), ("A", c), qty=D(r["QUANTITY"]), price=D(r["SALE PRICE"]), ref=f"INV-S{n}")
+                p.ev("sale", r["DATE"].date(), ("A", c), qty=D(r["QUANTITY"]), price=D(r["SALE PRICE"]), ref=p.ref("INV-S", r["DATE"].date(), c, D(r["QUANTITY"]), D(r["SALE PRICE"])))
         for n, r in table(wb["Dmg or Rtn"]):
             if not isdate(r["DATE"]):
                 continue
@@ -141,7 +154,7 @@ def build_plan(inv_path: str | None, rep_path: str | None) -> Plan:
             if not c:
                 p.issues.append(f"Inventory/Dmg or Rtn row {n}: item '{r['DESCRIPTION']}' not found - skipped")
                 continue
-            p.ev("damage", r["DATE"].date(), ("A", c), qty=D(r["QUANTITY"]), reason=f"{N(r['REASON']) or 'DMG'} (old sheet)", ref=f"INV-D{n}")
+            p.ev("damage", r["DATE"].date(), ("A", c), qty=D(r["QUANTITY"]), reason=f"{N(r['REASON']) or 'DMG'} (old sheet)", ref=p.ref("INV-D", r["DATE"].date(), c, D(r["QUANTITY"]), N(r["REASON"])))
         # phones (no IMEI recorded in the sheet: tracked as plain stock items)
         for n, r in table(wb["Phone"]):
             if not isdate(r["PURCHASES DATE"]):
@@ -152,12 +165,13 @@ def build_plan(inv_path: str | None, rep_path: str | None) -> Plan:
                 next_code["phone"] += 1
             pdate = r["PURCHASES DATE"].date()
             sdate = r["SALE DATE"].date() if isdate(r["SALE DATE"]) else None
+            buy_ref = p.ref("INV-PH", pdate, key[1], D(r["PURCHASES PRICE"]))      # purchase side only: a later sale does not change it
             if r["SALE"] is True and sdate and sdate < pdate:
                 p.issues.append(f"Inventory/Phone row {n}: sold before purchased; purchase date moved to {sdate}")
                 pdate = sdate
-            p.ev("purchase", pdate, key, qty=D(1), cost=D(r["PURCHASES PRICE"]), ref=f"INV-PH{n}")
+            p.ev("purchase", pdate, key, qty=D(1), cost=D(r["PURCHASES PRICE"]), ref=buy_ref)
             if r["SALE"] is True and sdate:
-                p.ev("sale", sdate, key, qty=D(1), price=D(r["SALE PRICE"]), ref=f"INV-PHS{n}")
+                p.ev("sale", sdate, key, qty=D(1), price=D(r["SALE PRICE"]), ref=p.ref("INV-PHS", sdate, key[1], D(r["SALE PRICE"])))
         for n, r in table(wb["Online Order"]):  # customer directory only: the sales themselves are already in the Sales sheet
             tp = re.sub(r"\D", "", str(r.get("TP") or ""))
             if isdate(r["DATE"]) and r.get("NAME") and tp:
@@ -192,12 +206,12 @@ def build_plan(inv_path: str | None, rep_path: str | None) -> Plan:
             if isdate(r["DATE"]):
                 c = pcode(r, "Purchases", n)
                 if c:
-                    p.ev("purchase", r["DATE"].date(), ("P", c), qty=D(r["QUANTITY"]), cost=D(r["UNIT PRICE"]), ref=f"REP-P{n}")
+                    p.ev("purchase", r["DATE"].date(), ("P", c), qty=D(r["QUANTITY"]), cost=D(r["UNIT PRICE"]), ref=p.ref("REP-P", r["DATE"].date(), c, D(r["QUANTITY"]), D(r["UNIT PRICE"])))
         for n, r in table(wb["Sales"]):
             if isdate(r["DATE"]):
                 c = pcode(r, "Sales", n)
                 if c:
-                    p.ev("sale", r["DATE"].date(), ("P", c), qty=D(r["QUANTITY"]), price=D(r["SALE PRICE"]), ref=f"REP-S{n}")
+                    p.ev("sale", r["DATE"].date(), ("P", c), qty=D(r["QUANTITY"]), price=D(r["SALE PRICE"]), ref=p.ref("REP-S", r["DATE"].date(), c, D(r["QUANTITY"]), D(r["SALE PRICE"])))
         for n, r in table(wb["Dmg or Rtn"]):
             if isdate(r["DATE"]):
                 p.issues.append(f"Repair/Dmg or Rtn row {n}: not imported (sheet is expected to be empty)")
@@ -221,12 +235,13 @@ def build_plan(inv_path: str | None, rep_path: str | None) -> Plan:
                     next_code[kind] += 1
                 pdate = r["DATE"].date()
                 sdate = r["SALE DATE"].date() if isdate(r["SALE DATE"]) else None
+                buy_ref = p.ref(f"REP-{tag}", pdate, key, D(cost))
                 if r["SALE"] is True and sdate and sdate < pdate:
                     p.issues.append(f"Repair/{sheet} row {n}: sold before purchased; purchase date moved to {sdate}")
                     pdate = sdate
-                p.ev("purchase", pdate, key, qty=D(1), cost=D(cost), ref=f"REP-{tag}{n}")
+                p.ev("purchase", pdate, key, qty=D(1), cost=D(cost), ref=buy_ref)
                 if r["SALE"] is True and sdate:
-                    p.ev("sale", sdate, key, qty=D(1), price=D(r["SALE PRICE"]), ref=f"REP-{tag}S{n}")
+                    p.ev("sale", sdate, key, qty=D(1), price=D(r["SALE PRICE"]), ref=p.ref(f"REP-{tag}S", sdate, key, D(r["SALE PRICE"])))
         p.item(("X", "REPAIRCOST"), code="HIST-REPAIR-COST", description="HISTORICAL REPAIR PARTS COST (no stock)", category="SERVICE", type="Repair part")
         for n, r in table(wb["Other Repair"]):
             if not isdate(r["DATE"]):
@@ -235,10 +250,10 @@ def build_plan(inv_path: str | None, rep_path: str | None) -> Plan:
                 p.skipped.append(f"Repair/Other Repair row {n}: price and cost are both 0 - skipped")
                 continue
             p.ev("repair", r["DATE"].date(), None, brand=str(r["BRAND"]).strip() if r.get("BRAND") else None, model=N(r.get("MODLE")) or None,
-                 description=f"{str(r['DESCRIPTION']).strip()} [{N(r.get('CATEGORY'))}]", price=D(r["SALE PRICE"]), cost=D(r["COST"]), ref=f"HIST-OR-{n}")
+                 description=f"{str(r['DESCRIPTION']).strip()} [{N(r.get('CATEGORY'))}]", price=D(r["SALE PRICE"]), cost=D(r["COST"]), ref=p.ref("HIST-OR", r["DATE"].date(), N(r.get("BRAND")), N(r.get("MODLE")), N(r["DESCRIPTION"]), D(r["SALE PRICE"]), D(r["COST"])))
         for n, r in table(wb["Other Exp"]):
             if isdate(r["DATE"]) and r["AMOUNT"]:
-                p.ev("expense", r["DATE"].date(), None, amount=D(r["AMOUNT"]), description=str(r["DESCRIPTION"]).strip(), ref=f"HIST-EXP-{n}")
+                p.ev("expense", r["DATE"].date(), None, amount=D(r["AMOUNT"]), description=str(r["DESCRIPTION"]).strip(), ref=p.ref("HIST-EXP", r["DATE"].date(), N(r["DESCRIPTION"]), D(r["AMOUNT"])))
 
     # last sale price becomes the item's list price when the sheet has none
     last = {}
@@ -291,6 +306,38 @@ def summarise(p: Plan):
     print(f"{len(p.issues)} data note(s), {len(p.skipped)} skipped row(s)")
 
 
+def verify(api, events, until=None) -> int:
+    """Month by month: sales, repair income and expenses in the POS must equal the workbooks. Catches edited or
+    deleted old rows (an edited row looks like a new one) and any failed record. Returns the number of differing months."""
+    import calendar
+    want = defaultdict(lambda: {"sales": Decimal(0), "repair": Decimal(0), "exp": Decimal(0)})
+    for e in events:
+        m = e["date"].strftime("%Y-%m")
+        if e["kind"] == "sale":
+            want[m]["sales"] += (e["qty"] * e["price"]).quantize(CENT, rounding=ROUND_HALF_UP)
+        elif e["kind"] == "repair":
+            want[m]["repair"] += e["price"]
+        elif e["kind"] == "expense":
+            want[m]["exp"] += e["amount"]
+    bad = 0
+    for m in sorted(want):
+        y, mo = int(m[:4]), int(m[5:])
+        end = dt.date(y, mo, calendar.monthrange(y, mo)[1])
+        if until and until < end:
+            end = until
+        s, r = api.call("POST", "/reports/sales-summary", {"start": f"{m}-01", "end": end.isoformat()})
+        if s != 200:
+            print("  verify failed:", m, r)
+            return 1
+        got = {"sales": Decimal(str(r["sales_total"])), "repair": Decimal(str(r["repair_income"])), "exp": Decimal(str(r["expenses_total"]))}
+        diff = {k: got[k] - want[m][k] for k in got if abs(got[k] - want[m][k]) > Decimal("0.5")}
+        if diff:
+            bad += 1
+            print(f"  DIFFERENT {m}: " + ", ".join(f"{k} system {got[k]:,.2f} vs sheet {want[m][k]:,.2f}" for k in diff))
+    print(f"Verified {len(want)} month(s): {'ALL MATCH' if not bad else str(bad) + ' month(s) differ - see above'}")
+    return bad
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--api", required=True)
@@ -298,15 +345,25 @@ def main() -> int:
     ap.add_argument("--inventory")
     ap.add_argument("--repair")
     ap.add_argument("--commit", action="store_true")
+    ap.add_argument("--since", help="YYYY-MM-DD: only process records on/after this date (fast catch-up run; overlap with earlier runs is harmless)")
+    ap.add_argument("--until", help="YYYY-MM-DD: cut-over date: never import records after this day (the POS takes over from the next day)")
+    ap.add_argument("--verify-only", action="store_true", help="write nothing; compare the system's monthly sales / repair income / expenses with the workbooks")
     ap.add_argument("--report", default="history-import-report.csv")
     a = ap.parse_args()
     if not a.inventory and not a.repair:
         ap.error("give --inventory and/or --repair")
     plan = build_plan(a.inventory, a.repair)
+    since = dt.date.fromisoformat(a.since) if a.since else None
+    until = dt.date.fromisoformat(a.until) if a.until else None
+    all_events = [e for e in plan.events if not until or e["date"] <= until]   # what the system must contain after the import
+    if since or until:
+        before = len(plan.events)
+        plan.events = [e for e in plan.events if (not since or e["date"] >= since) and (not until or e["date"] <= until)]
+        print(f"Date filter: {before - len(plan.events)} record(s) outside {since or '...'} .. {until or '...'} left out")
     summarise(plan)
     for m in plan.issues[:40]:
         print("  note:", m)
-    if not a.commit:
+    if not a.commit and not a.verify_only:
         print("\nDry run only - nothing written. Re-run with --commit to import.")
         return 0
     pw = os.environ.get("IMPORT_ADMIN_PASSWORD") or getpass.getpass("Admin password: ")
@@ -318,6 +375,8 @@ def main() -> int:
     api.token = r["access_token"]
     pwq = "admin_password=" + urllib.parse.quote(pw, safe="")
     out, fails = [], 0
+    if a.verify_only:
+        return verify(api, all_events, until)
 
     def note(ref, result):
         nonlocal fails
@@ -351,21 +410,37 @@ def main() -> int:
         body = {"item_code": spec["code"], "description": spec["description"][:255], "category_id": cats[spec["category"]],
                 "item_type_id": types[spec["type"].upper()], "brand": (spec["brand"] or None), "model": spec["model"],
                 "master_sale_price": str(spec["price"]) if spec["price"] is not None else None}
-        s, r = api.call("POST", "/items", body)
-        if s == 200:
-            ids[key] = r["item_id"]
-            if spec["warranty"]:
-                wt, dur = spec["warranty"]
-                api.call("PUT", f"/items/{r['item_id']}/warranty-default", {"warranty_type": wt, "duration_value": dur})
-        elif s == 409:
-            s2, found = api.call("GET", "/items/admin-list?q=" + urllib.parse.quote(spec["code"]))
-            hit = next((x for x in (found or []) if x["item_code"] == spec["code"]), None)
-            if hit:
-                ids[key] = hit["item_id"]
-            else:
-                note(f"item {spec['code']}", "FAILED item exists but cannot be read")
+        generated = key[0] in ("PH", "D", "C")   # codes LVT6001/7001/8001.. are handed out by this script
+        hit = None
+        if generated:  # same description already in the database (earlier import): reuse it, whatever code it got
+            s2, found = api.call("GET", "/items/admin-list?q=" + urllib.parse.quote(spec["description"][:100]))
+            hit = next((x for x in (found or []) if N(x.get("description")) == N(spec["description"])), None)
+        if hit:
+            ids[key] = hit["item_id"]
         else:
-            note(f"item {spec['code']}", f"FAILED {s}: {r.get('detail')}")
+            for _ in range(200):
+                s, r = api.call("POST", "/items", body)
+                if s == 409 and generated and "code" in str(r.get("detail", "")).lower():
+                    m = re.match(r"^(LVT)(\d+)$", body["item_code"])
+                    body["item_code"] = f"LVT{int(m.group(2)) + 1}" if m else body["item_code"] + "X"
+                    continue
+                break
+            if s == 200:
+                ids[key] = r["item_id"]
+                if spec["warranty"]:
+                    wt, dur = spec["warranty"]
+                    api.call("PUT", f"/items/{r['item_id']}/warranty-default", {"warranty_type": wt, "duration_value": dur})
+            elif s == 409:
+                s2, found = api.call("GET", "/items/admin-list?q=" + urllib.parse.quote(spec["code"]))
+                hit = next((x for x in (found or []) if x["item_code"] == spec["code"]), None)
+                if hit:
+                    ids[key] = hit["item_id"]
+                    if N(hit.get("description")) != N(spec["description"]):
+                        note(f"item {spec['code']}", f"NOTE code already used by '{hit.get('description')}' (sheet says '{spec['description']}')")
+                else:
+                    note(f"item {spec['code']}", "FAILED item exists but cannot be read")
+            else:
+                note(f"item {spec['code']}", f"FAILED {s}: {r.get('detail')}")
         if i % 200 == 0:
             print(f"  items {i}/{len(plan.items)}")
     print(f"Items ready: {len(ids)}/{len(plan.items)}")
@@ -390,52 +465,26 @@ def main() -> int:
     total = len(plan.events)
     for day in sorted(day_events):
         evs = day_events[day]
-        # purchases
-        batches: list[dict] = []
+        # purchases: ONE purchase per sheet row, keyed by its content id, so a re-run with a newer workbook can never
+        # duplicate a row or clash with a different grouping (the cost is completed right away).
         for e in (x for x in evs if x["kind"] == "purchase"):
             if e["item"] not in ids:
                 note(e["ref"], "FAILED item missing")
                 continue
-            for b in batches:
-                if e["item"] not in b["lines"]:
-                    b["lines"][e["item"]] = {"qty": Decimal(0), "cost": e["cost"]}
-                    b["refs"].append(e["ref"])
-                    break
-                ln = b["lines"][e["item"]]
-                if ln["cost"] == e["cost"]:
-                    ln["qty"] += 0  # same item + same cost: merged below
-                    break
-            else:
-                batches.append({"lines": {e["item"]: {"qty": Decimal(0), "cost": e["cost"]}}, "refs": [e["ref"]]})
-                b = batches[-1]
-            # accumulate quantity on the batch/line that holds this (item, cost)
-            for b in batches:
-                ln = b["lines"].get(e["item"])
-                if ln and ln["cost"] == e["cost"]:
-                    ln["qty"] += e["qty"]
-                    break
-        for n, b in enumerate(batches, 1):
-            lines = [{"item_id": ids[k], "quantity": str(v["qty"]), "line_date": day.isoformat()} for k, v in b["lines"].items()]
-            s, r = api.call("POST", "/purchases", {"purchase_date": day.isoformat(), "reference_no": f"HIST-{day.isoformat()}-{n}", "notes": "Imported old purchase",
-                                                  "lines": lines, "idempotency_key": f"HIST-P-{day.isoformat()}-{n}-{len(lines)}"})
+            s, r = api.call("POST", "/purchases", {"purchase_date": day.isoformat(), "reference_no": e["ref"], "notes": "Imported old purchase",
+                                                  "lines": [{"item_id": ids[e["item"]], "quantity": str(e["qty"]), "line_date": day.isoformat()}],
+                                                  "idempotency_key": f"HIST-P-{e['ref']}"})
             if s != 200:
-                note(f"purchase {day} #{n}", f"FAILED {s}: {r.get('detail')}")
+                note(e["ref"], f"FAILED {s}: {r.get('detail')}")
                 continue
             s, pend = api.call("GET", "/purchases/pending-costs")
-            mine = {x["item_id"]: x for x in (pend or []) if x["purchase_id"] == r["purchase_id"]}
-            for k, v in b["lines"].items():
-                row = mine.get(ids[k])
-                if row is None:
-                    continue  # cost already completed by an earlier run
-                s, r2 = api.call("POST", "/purchases/complete-cost", {"purchase_id": row["purchase_id"], "purchase_line_id": row["purchase_line_id"],
-                                                                      "unit_cost": str(v["cost"]), "version": row["version"], "purchase_version": row["purchase_version"]})
-                if s != 200:
-                    note(f"cost {day} #{n}", f"FAILED {s}: {r2.get('detail')}")
-                    s, pend = api.call("GET", "/purchases/pending-costs")
-                    mine = {x["item_id"]: x for x in (pend or []) if x["purchase_id"] == r["purchase_id"]}
-                else:
-                    s, pend = api.call("GET", "/purchases/pending-costs")
-                    mine = {x["item_id"]: x for x in (pend or []) if x["purchase_id"] == r["purchase_id"]}
+            row = next((x for x in (pend or []) if x["purchase_id"] == r["purchase_id"]), None)
+            if row is None:
+                note(e["ref"], "OK (already imported)")
+                continue
+            s, r2 = api.call("POST", "/purchases/complete-cost", {"purchase_id": row["purchase_id"], "purchase_line_id": row["purchase_line_id"],
+                                                                  "unit_cost": str(e["cost"]), "version": row["version"], "purchase_version": row["purchase_version"]})
+            note(e["ref"], "OK" if s == 200 else f"FAILED cost {s}: {r2.get('detail')}")
         done += sum(1 for x in evs if x["kind"] == "purchase")
         # everything else
         for e in (x for x in evs if x["kind"] != "purchase"):
@@ -479,7 +528,9 @@ def main() -> int:
         for m in plan.skipped:
             w.writerow(["SKIPPED", m])
     print(f"\nFinished. {sum(1 for _, r in out if not r.startswith('FAILED'))} OK, {fails} failed. Report: {a.report}")
-    return 1 if fails else 0
+    print("\nChecking the system against the workbooks month by month ...")
+    mism = verify(api, all_events, until)
+    return 1 if (fails or mism) else 0
 
 
 if __name__ == "__main__":

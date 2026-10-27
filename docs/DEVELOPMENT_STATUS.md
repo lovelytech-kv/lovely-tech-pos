@@ -214,3 +214,7 @@ opening stock with FIFO cost, IMEI units, customers; idempotent re-runs. Tested 
 records; sales total, all 24 monthly sales totals, repair income, expenses and per-item stock balances match the sheets
 exactly; monthly gross profit within ~1% (FIFO vs the sheet's average cost). Tests: `test_history_import_endpoints.py`,
 `test_history_import_plan.py`.
+
+## History import: catch-up / cut-over (2026-10-27)
+Content-based row ids, one purchase per row, `--since`/`--until`/`--verify-only`, automatic month-by-month verification, item reuse
+by description. Tests: `backend/tests/test_history_import_catchup.py`. Plan in `docs/HISTORY_IMPORT.md`.
