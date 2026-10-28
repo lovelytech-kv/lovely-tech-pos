@@ -1,7 +1,7 @@
 from __future__ import annotations
 import hashlib, secrets
 from datetime import datetime, timedelta, timezone
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -31,7 +31,7 @@ def issue_session(db: Session, user: User) -> tuple[str, datetime]:
     db.add(UserSession(user_id=user.id, token_hash=token_hash(raw), created_at=now, expires_at=expires, last_seen_at=now))
     return raw, expires
 
-def current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer), db: Session = Depends(db_session)) -> User:
+def current_user(request: Request, credentials: HTTPAuthorizationCredentials = Depends(bearer), db: Session = Depends(db_session)) -> User:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     now = datetime.now(timezone.utc)
@@ -54,6 +54,9 @@ def current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer), db
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
     session.last_seen_at = now
     db.commit()
+    # After an Admin password reset the user may do nothing except change the password (or sign out).
+    if user.must_change_password and not request.url.path.endswith(("/auth/change-password", "/auth/logout", "/auth/me")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PASSWORD_CHANGE_REQUIRED: change your temporary password first")
     return user
 
 def require_permission(code: str):

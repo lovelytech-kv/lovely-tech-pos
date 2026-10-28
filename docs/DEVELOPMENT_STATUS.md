@@ -233,3 +233,9 @@ Database = the shop's two years of Excel history (1,464 items, 5,236 sales, 2,80
 - `POST /stock-control/adjust` and `/stock-control/damage` accept `serialized_unit_ids`. For IMEI-tracked items a decrease must name the exact units (status -> WRITTEN_OFF / DAMAGED) so IMEI units never drift from movement stock; a positive adjustment is rejected (add phones via Purchases with IMEI).
 - Stock Adjustment panel shows an IMEI tick-list for serialized items.
 - Test: `backend/tests/test_e2e_serialized_stock_control.py`.
+
+## Forced password change after Admin reset
+- Found in the browser sweep: after Admin reset a cashier's password the UI had no change-password screen and the backend did not enforce `must_change_password`.
+- Backend: while `must_change_password` is set every endpoint except `/auth/change-password`, `/auth/logout`, `/auth/me` returns 403 `PASSWORD_CHANGE_REQUIRED`; new password must differ from the temporary one.
+- Frontend: `ChangePassword` screen replaces the POS until the password is changed.
+- Browser-verified (Playwright): Targets create, user discount limit, password reset and the forced-change flow. Test: `test_e2e_forced_password_change.py`. Full suite: 308 passed.

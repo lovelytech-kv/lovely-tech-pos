@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { currentUser, logout, ensureApiBaseResolved, resetApiBaseResolution } from './api/client';
 import { Login } from './features/auth/Login';
+import { ChangePassword } from './features/auth/ChangePassword';
 import { POSHome } from './features/pos/POSHome';
 import { DiscoveryStatus } from './components/DiscoveryStatus';
 import { AdminManualServerPanel } from './components/AdminManualServerPanel';
@@ -235,7 +236,11 @@ function App() {
 
   // Normal authenticated flow
   return user ? (
-    <POSHome user={user} onLogout={() => setUser(null)} />
+    user.must_change_password ? (
+      <ChangePassword user={user} onDone={setUser} onLogout={() => { logout(); setUser(null); }} />
+    ) : (
+      <POSHome user={user} onLogout={() => setUser(null)} />
+    )
   ) : (
     <Login onLogin={setUser} />
   );
