@@ -218,3 +218,13 @@ exactly; monthly gross profit within ~1% (FIFO vs the sheet's average cost). Tes
 ## History import: catch-up / cut-over (2026-10-27)
 Content-based row ids, one purchase per row, `--since`/`--until`/`--verify-only`, automatic month-by-month verification, item reuse
 by description. Tests: `backend/tests/test_history_import_catchup.py`. Plan in `docs/HISTORY_IMPORT.md`.
+
+## Real-data rehearsal on the history-loaded database (2026-10-28)
+Database = the shop's two years of Excel history (1,464 items, 5,236 sales, 2,805 purchases, 518 repairs).
+- Browser sweep, Admin and Cashier, all screens: every screen loads in under 0.8 s, POS search 150 ms, 2-year reports 0.3-1.2 s,
+  2-year Excel/PDF export 0.2-0.5 s, no API failures or page errors.
+- UI flows on that data: credit settlement, warranty claim (Cashier) + Admin decision, discount approval, returns, expense approval.
+- **Restore rehearsal:** verified backup created through the API, `TRUNCATE sales CASCADE` (all sales lost), then
+  `POST /backup/restore/{id}?confirm=true` restored every table (sales 5,236, purchases, items, repairs, stock movements, audit log,
+  total Rs. 7,321,700 identical to before) and the month-by-month check against the workbooks still said ALL MATCH.
+- Cashier reprint rule (own sales only, settlement proofs Admin-only) in `test_e2e_documents_reprint.py`.
