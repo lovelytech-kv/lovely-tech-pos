@@ -228,3 +228,8 @@ Database = the shop's two years of Excel history (1,464 items, 5,236 sales, 2,80
   `POST /backup/restore/{id}?confirm=true` restored every table (sales 5,236, purchases, items, repairs, stock movements, audit log,
   total Rs. 7,321,700 identical to before) and the month-by-month check against the workbooks still said ALL MATCH.
 - Cashier reprint rule (own sales only, settlement proofs Admin-only) in `test_e2e_documents_reprint.py`.
+
+## Serialized stock control (IMEI phones)
+- `POST /stock-control/adjust` and `/stock-control/damage` accept `serialized_unit_ids`. For IMEI-tracked items a decrease must name the exact units (status -> WRITTEN_OFF / DAMAGED) so IMEI units never drift from movement stock; a positive adjustment is rejected (add phones via Purchases with IMEI).
+- Stock Adjustment panel shows an IMEI tick-list for serialized items.
+- Test: `backend/tests/test_e2e_serialized_stock_control.py`.

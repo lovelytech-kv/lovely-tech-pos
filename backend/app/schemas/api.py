@@ -301,11 +301,13 @@ class StockAdjustIn(BaseModel):
     item_id: UUID
     quantity_delta: Decimal
     reason: str = Field(min_length=1)
+    serialized_unit_ids: list[UUID] | None = None   # required for IMEI-tracked items when stock goes DOWN
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
 class DamageLossIn(BaseModel):
     item_id: UUID
     quantity: Decimal = Field(gt=0)
     reason: str = Field(min_length=1)
+    serialized_unit_ids: list[UUID] | None = None   # required for IMEI-tracked items: which phones are damaged/lost
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
 
 

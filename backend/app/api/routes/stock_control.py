@@ -18,6 +18,7 @@ def _adjust_request_hash(p: StockAdjustIn) -> str:
         "item_id": str(p.item_id),
         "quantity_delta": str(p.quantity_delta),
         "reason": p.reason,
+        "units": sorted(str(x) for x in (p.serialized_unit_ids or [])),
     }, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(raw).hexdigest()
 
@@ -26,6 +27,7 @@ def _damage_request_hash(p: DamageLossIn) -> str:
         "item_id": str(p.item_id),
         "quantity": str(p.quantity),
         "reason": p.reason,
+        "units": sorted(str(x) for x in (p.serialized_unit_ids or [])),
     }, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(raw).hexdigest()
 
@@ -63,7 +65,7 @@ def adjust(p:StockAdjustIn,admin_password:str|None=None,user:User=Depends(requir
     if replay is not None:
         return replay
     try:
-        r=StockControlService(db).adjust(branch_id=user.branch_id,item_id=p.item_id,quantity_delta=p.quantity_delta,reason=p.reason,user_id=user.id)
+        r=StockControlService(db).adjust(branch_id=user.branch_id,item_id=p.item_id,quantity_delta=p.quantity_delta,reason=p.reason,user_id=user.id,serialized_unit_ids=p.serialized_unit_ids)
         response={'adjustment_id':str(r.id)}
         _reserve(db, key=p.idempotency_key, user_id=user.id, request_hash=request_hash, response=response)
         db.commit()
@@ -81,7 +83,7 @@ def damage(p:DamageLossIn,admin_password:str|None=None,user:User=Depends(require
     if replay is not None:
         return replay
     try:
-        r=StockControlService(db).damage_loss(branch_id=user.branch_id,item_id=p.item_id,quantity=p.quantity,reason=p.reason,user_id=user.id)
+        r=StockControlService(db).damage_loss(branch_id=user.branch_id,item_id=p.item_id,quantity=p.quantity,reason=p.reason,user_id=user.id,serialized_unit_ids=p.serialized_unit_ids)
         response={'damage_loss_id':str(r[0].id),'fifo_cost':str(r[1].total_cost)}
         _reserve(db, key=p.idempotency_key, user_id=user.id, request_hash=request_hash, response=response)
         db.commit()
