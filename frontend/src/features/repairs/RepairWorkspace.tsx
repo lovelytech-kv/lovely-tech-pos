@@ -96,7 +96,7 @@ export function RepairWorkspace({ isAdmin, onError }: Props) {
   async function loadRows(keepSelection = true) {
     try {
       setLoading(true);
-      const result = await api<RepairRow[]>('/operations/repairs');
+      const result = await api<RepairRow[]>('/repairs');
       setRows(result);
       if (keepSelection && selectedId) {
         const selected = result.find((row) => row.repair_id === selectedId);
@@ -114,7 +114,7 @@ export function RepairWorkspace({ isAdmin, onError }: Props) {
   async function loadDetail(repairId: string, updateSelection = true) {
     try {
       const result = await api<RepairDetail>(
-        `/operations/repairs/${encodeURIComponent(repairId)}`,
+        `/repairs/${encodeURIComponent(repairId)}`,
       );
       setDetail(result);
       if (updateSelection) setSelectedId(repairId);
@@ -146,7 +146,7 @@ export function RepairWorkspace({ isAdmin, onError }: Props) {
 
   async function changeStatus(nextStatus: string) {
     if (!detail) return;
-    await action(`/operations/repairs/${detail.repair_id}/status`, {
+    await action(`/repairs/${detail.repair_id}/status`, {
       status: nextStatus,
       version: detail.version,
     });
@@ -155,7 +155,7 @@ export function RepairWorkspace({ isAdmin, onError }: Props) {
   async function deliver() {
     if (!detail) return;
     await action(
-      `/operations/repairs/${detail.repair_id}/deliver`,
+      `/repairs/${detail.repair_id}/deliver`,
       {},
       `?version=${encodeURIComponent(detail.version)}`,
     );
@@ -165,7 +165,7 @@ export function RepairWorkspace({ isAdmin, onError }: Props) {
     if (!detail) return;
     const reason = window.prompt('Cancellation reason')?.trim();
     if (!reason) return;
-    await action(`/operations/repairs/${detail.repair_id}/cancel`, {
+    await action(`/repairs/${detail.repair_id}/cancel`, {
       version: detail.version,
       reason,
     });
@@ -334,7 +334,7 @@ function RepairDetailPanel({
       return;
     }
 
-    await onAction(`/operations/repairs/${detail.repair_id}/part`, {
+    await onAction(`/repairs/${detail.repair_id}/part`, {
       item_id: partItemId,
       quantity: partQuantity,
       charge_amount: partCharge,
@@ -352,7 +352,7 @@ function RepairDetailPanel({
       return;
     }
 
-    await onAction(`/operations/repairs/${detail.repair_id}/payment`, {
+    await onAction(`/repairs/${detail.repair_id}/payment`, {
       method: paymentMethod,
       amount: paymentAmount,
       reference: paymentReference.trim() || null,
@@ -371,7 +371,7 @@ function RepairDetailPanel({
       return;
     }
 
-    await onAction(`/operations/repairs/${detail.repair_id}/finalize`, {
+    await onAction(`/repairs/${detail.repair_id}/finalize`, {
       version: detail.version,
       final_amount: finalAmount,
       labour_amount: labourAmount || '0',
@@ -385,7 +385,7 @@ function RepairDetailPanel({
     try {
       setWarranty(
         await api<any>(
-          `/operations/repairs/${encodeURIComponent(detail.repair_id)}/warranty`,
+          `/repairs/${encodeURIComponent(detail.repair_id)}/warranty`,
         ),
       );
     } catch (error) {
@@ -527,7 +527,7 @@ function RepairDetailPanel({
                   <button
                     onClick={() =>
                       void onAction(
-                        `/operations/repairs/${detail.repair_id}/part/${part.id}/remove`,
+                        `/repairs/${detail.repair_id}/part/${part.id}/remove`,
                         { condition: 'GOOD', reason: 'Part removed and returned in good condition' },
                       )
                     }
@@ -538,7 +538,7 @@ function RepairDetailPanel({
                     className="danger-button"
                     onClick={() =>
                       void onAction(
-                        `/operations/repairs/${detail.repair_id}/part/${part.id}/remove`,
+                        `/repairs/${detail.repair_id}/part/${part.id}/remove`,
                         { condition: 'DAMAGED', reason: 'Part damaged during repair' },
                       )
                     }
@@ -553,7 +553,7 @@ function RepairDetailPanel({
                   <button
                     onClick={() =>
                       void onAction(
-                        `/operations/repairs/${detail.repair_id}/part/${part.id}/damage-review`,
+                        `/repairs/${detail.repair_id}/part/${part.id}/damage-review`,
                         { approve: true, reject_reason: null },
                       )
                     }
@@ -563,7 +563,7 @@ function RepairDetailPanel({
                   <button
                     onClick={() =>
                       void onAction(
-                        `/operations/repairs/${detail.repair_id}/part/${part.id}/damage-review`,
+                        `/repairs/${detail.repair_id}/part/${part.id}/damage-review`,
                         { approve: false, reject_reason: 'Damage review rejected; part remains used' },
                       )
                     }

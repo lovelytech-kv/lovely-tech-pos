@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.fifo.engine import FifoEngine
-from app.models.master import Item, WarrantyDefault
+from app.models.master import Item, ItemType, WarrantyDefault
 from app.models.sales import Payment, Sale, SaleLine
 from app.models.security import AuditLog, DocumentEvent, IdempotencyKey
 from app.models.warranty import ProductWarranty
@@ -318,6 +318,9 @@ class SaleService:
             final_total = self._money(gross - discount)
 
             serialized = None
+            item_type = self.session.get(ItemType, item.item_type_id)
+            if item_type is not None and item_type.is_serialized and not input_line.serialized_unit_id:
+                raise SaleValidationError(f"IMEI / serial number is required to sell {item.item_code}")
             if input_line.serialized_unit_id:
                 serialized = self.session.scalar(
                     select(SerializedUnit)

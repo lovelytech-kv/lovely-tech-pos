@@ -117,11 +117,7 @@ class DayFinanceService:
         refund_cash=self.session.scalar(select(func.coalesce(func.sum(ReturnPayment.amount),0)).join(Return, Return.id==ReturnPayment.return_id).where(Return.branch_id==day.branch_id,func.date(ReturnPayment.payment_datetime)==day.business_date,ReturnPayment.payment_method=='CASH',Return.status=='COMPLETED')) or 0
         reloads=self.session.scalar(select(func.coalesce(func.sum(ReloadEntry.amount),0)).where(ReloadEntry.day_session_id==day.id)) or 0
         other=self.session.scalar(select(func.coalesce(func.sum(OtherCashIn.amount),0)).where(OtherCashIn.day_session_id==day.id)) or 0
-        from app.models.sales import Expense
-        from app.models.inventory import Purchase, PurchaseLine
-        cash_expenses=self.session.scalar(select(func.coalesce(func.sum(Expense.amount),0)).where(Expense.branch_id==day.branch_id,Expense.expense_date==day.business_date,Expense.status=='APPROVED',Expense.payment_method=='CASH')) or 0
-        cash_purchases=self.session.scalar(select(func.coalesce(func.sum(PurchaseLine.quantity*PurchaseLine.unit_cost),0)).join(Purchase,Purchase.id==PurchaseLine.purchase_id).where(Purchase.branch_id==day.branch_id,Purchase.purchase_date==day.business_date,PurchaseLine.unit_cost.is_not(None),Purchase.payment_method=='CASH')) or 0
-        return self.money(day.opening_cash+Decimal(cash_sales)+Decimal(repair_cash)+Decimal(settlement_cash)-Decimal(refund_cash)+Decimal(reloads)+Decimal(other)-Decimal(cash_expenses)-Decimal(cash_purchases))
+        return self.money(day.opening_cash+Decimal(cash_sales)+Decimal(repair_cash)+Decimal(settlement_cash)-Decimal(refund_cash)+Decimal(reloads)+Decimal(other))
     def end_day(self, *, day_session_id,user_id,version: int | None = None,actual_cash,denominations=None,reason,note=None)->DayEndResult:
         day=self.session.scalar(select(DaySession).where(DaySession.id==day_session_id).with_for_update())
         if not day or day.status not in {'OPEN','SHIFT_ENDED'}: raise DayFinanceError('Day is not open')

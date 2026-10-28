@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { money } from '../../services/money';
 
-type Item = { item_id: string; item_code: string; description: string; stock: string | number; sale_price?: string | number | null };
+type Item = { item_id: string; item_code: string; description: string; stock: string | number; sale_price?: string | number | null; is_serialized?: boolean };
+type Line = Item & { quantity: string; serials?: string };
+
+// One IMEI/serial per line (commas/spaces also accepted); duplicates inside the entry are caught client-side.
+export const parseSerials = (text?: string): string[] => (text || '').split(/[\s,;]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
 type Supplier = { supplier_id: string; name: string; contact_no?: string | null; address?: string | null };
 type Pending = {
   version: number | null;
@@ -22,7 +26,6 @@ type History = Pending & {
   item_code: string;
   item_description: string;
   status: string;
-  payment_method?: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -30,13 +33,12 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (message: string) => void }) {
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Item[]>([]);
-  const [selected, setSelected] = useState<Array<Item & { quantity: string }>>([]);
+  const [selected, setSelected] = useState<Line[]>([]);
   const [quantity, setQuantity] = useState('1');
   const [date, setDate] = useState(today());
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
   const [supplierId, setSupplierId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [pending, setPending] = useState<Pending[]>([]);
   const [history, setHistory] = useState<History[]>([]);
@@ -52,7 +54,8 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
   const [adminPassword, setAdminPassword] = useState('');
   const [savingCorrection, setSavingCorrection] = useState(false);
 
-  const selectedQty = useMemo(() => selected.reduce((sum, row) => sum + Number(row.quantity || 0), 0), [selected]);
+  const qtyOf = (row: Line) => row.is_serialized ? parseSerials(row.serials).length : Number(row.quantity || 0);
+  const selectedQty = useMemo(() => selected.reduce((sum, row) => sum + qtyOf(row), 0), [selected]);
 
   async function search() {
     try { setItems(await api<Item[]>(`/inventory/items/search?q=${encodeURIComponent(query)}`)); }
@@ -80,15 +83,21 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
 
   function add(item: Item) {
     setSelected(prev => prev.some(x => x.item_id === item.item_id)
-      ? prev.map(x => x.item_id === item.item_id ? { ...x, quantity } : x)
-      : [...prev, { ...item, quantity }]);
+      ? prev.map(x => x.item_id === item.item_id && !item.is_serialized ? { ...x, quantity } : x)
+      : [...prev, { ...item, quantity: item.is_serialized ? '0' : quantity, serials: '' }]);
+  }
+
+  function setSerials(itemId: string, text: string) {
+    setSelected(prev => prev.map(x => x.item_id === itemId ? { ...x, serials: text, quantity: String(parseSerials(text).length) } : x));
   }
 
   function remove(itemId: string) { setSelected(prev => prev.filter(x => x.item_id !== itemId)); }
 
   async function save() {
     if (!selected.length) { onError?.('Add at least one item.'); return; }
-    if (selected.some(x => !Number.isFinite(Number(x.quantity)) || Number(x.quantity) <= 0)) { onError?.('Every purchase quantity must be greater than zero.'); return; }
+    if (selected.some(x => !Number.isFinite(Number(x.quantity)) || Number(x.quantity) <= 0)) { onError?.('Every purchase quantity must be greater than zero. Phones need their IMEI/serial numbers entered.'); return; }
+    const all = selected.flatMap(x => x.is_serialized ? parseSerials(x.serials) : []);
+    if (new Set(all).size !== all.length) { onError?.('The same IMEI/serial is entered more than once.'); return; }
     setBusy(true);
     try {
       await api('/purchases', {
@@ -98,12 +107,11 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
           reference_no: reference.trim() || null,
           notes: notes.trim() || null,
           supplier_id: isAdmin ? (supplierId || null) : null,
-          payment_method: paymentMethod,
-          lines: selected.map(x => ({ item_id: x.item_id, quantity: x.quantity, line_date: date })),
+          lines: selected.map(x => ({ item_id: x.item_id, quantity: x.is_serialized ? String(parseSerials(x.serials).length) : x.quantity, line_date: date, ...(x.is_serialized ? { serial_numbers: parseSerials(x.serials) } : {}) })),
           idempotency_key: purchaseKey,
         }),
       });
-      setSelected([]); setReference(''); setNotes(''); setSupplierId(''); setPaymentMethod('CASH'); setQuantity('1'); setPurchaseKey(crypto.randomUUID());
+      setSelected([]); setReference(''); setNotes(''); setSupplierId(''); setQuantity('1'); setPurchaseKey(crypto.randomUUID());
       await loadAdminData();
     } catch (e) { onError?.((e as Error).message); }
     finally { setBusy(false); }
@@ -158,12 +166,15 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
         <label>Date<input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
         <label>Reference<input value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier invoice / GRN" /></label>
         <label>Quantity<input type="number" min="0.001" step="0.001" value={quantity} onChange={e => setQuantity(e.target.value)} /></label>
-        <label>Payment Method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option value="CASH">Cash</option><option value="CARD">Card</option><option value="ONLINE">Online</option></select></label>
+
         {isAdmin && <label>Supplier<select value={supplierId} onChange={e => setSupplierId(e.target.value)}><option value="">No supplier</option>{suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}</select></label>}
       </div>
       <label className="wide-field">Notes<textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional purchase note" /></label>
       {selected.length > 0 && <div className="status-strip"><div><span>Lines</span><b>{selected.length}</b></div><div><span>Total quantity</span><b>{selectedQty}</b></div><div><span>Cost visibility</span><b className="status-good">Admin only</b></div></div>}
-      {selected.map(item => <div className="stock-row" key={item.item_id}><span><b>{item.item_code}</b> · {item.description} · Qty {item.quantity}</span><button className="danger-button" onClick={() => remove(item.item_id)}>Remove</button></div>)}
+      {selected.map(item => <div className="stock-row" key={item.item_id} style={item.is_serialized ? { flexDirection: 'column', alignItems: 'stretch', gap: 8 } : undefined}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span><b>{item.item_code}</b> · {item.description} · Qty {qtyOf(item)}{item.is_serialized ? ' · IMEI/serial tracked' : ''}</span><button className="danger-button" onClick={() => remove(item.item_id)}>Remove</button></div>
+        {item.is_serialized && <label className="wide-field">IMEI / Serial numbers (one per line — scan each phone) · {qtyOf(item)} entered<textarea aria-label={`IMEI list for ${item.item_code}`} value={item.serials || ''} onChange={e => setSerials(item.item_id, e.target.value)} placeholder="Scan or type one IMEI per line" /></label>}
+      </div>)}
       <div className="form-actions"><button disabled={busy || !selected.length} onClick={save}>{busy ? 'Saving…' : 'Save Purchase'}</button><span className="muted">No buy cost is entered in this workspace.</span></div>
     </div>
 
@@ -177,7 +188,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
         <div className="section-head"><div><h2>Admin · Purchase History</h2><p className="muted">Review recorded supplier, quantity and FIFO cost, then make audited corrections.</p></div><button disabled={!historyLoaded} onClick={() => { setHistoryLoaded(false); loadHistory(); }}>Reload</button></div>
         <div className="form-grid compact"><label>From<input type="date" value={historyStart} onChange={e => setHistoryStart(e.target.value)} /></label><label>To<input type="date" value={historyEnd} onChange={e => setHistoryEnd(e.target.value)} /></label><button onClick={loadHistory}>Load History</button></div>
         {!historyLoaded ? <p className="muted">Select a date range and load history.</p> : !history.length ? <p className="muted">No purchase history in this date range.</p> : history.map(row => <div className="purchase-history-row" key={row.purchase_line_id}>
-          <div className="purchase-history-main"><b>{row.item_code} · {row.item_description}</b><span>{row.purchase_date} · Line {row.line_date} · Qty {row.quantity} · {row.reference_no || 'No reference'}</span><small>Supplier: {row.supplier_name || 'No supplier'} · Payment: {row.payment_method || 'CASH'} · Unit cost: {row.unit_cost == null ? 'Pending' : `Rs. ${money(row.unit_cost)}`} · Versions: line {row.version ?? '—'}, purchase {row.purchase_version ?? '—'}</small></div>
+          <div className="purchase-history-main"><b>{row.item_code} · {row.item_description}</b><span>{row.purchase_date} · Line {row.line_date} · Qty {row.quantity} · {row.reference_no || 'No reference'}</span><small>Supplier: {row.supplier_name || 'No supplier'} · Unit cost: {row.unit_cost == null ? 'Pending' : `Rs. ${money(row.unit_cost)}`} · Versions: line {row.version ?? '—'}, purchase {row.purchase_version ?? '—'}</small></div>
           <div className="button-row"><button onClick={() => openCorrection(row, 'cost')} disabled={row.unit_cost == null}>Cost</button><button onClick={() => openCorrection(row, 'quantity')}>Qty</button><button onClick={() => openCorrection(row, 'date')}>Date</button><button onClick={() => openCorrection(row, 'reference')}>Reference</button><button onClick={() => openCorrection(row, 'supplier')}>Supplier</button></div>
         </div>)}
       </div>

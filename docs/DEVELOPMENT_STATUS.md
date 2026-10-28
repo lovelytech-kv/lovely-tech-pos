@@ -139,3 +139,103 @@ Frontend acceptance hardening added serialized sale selection, customer creation
 - Added purchase history using the dedicated history endpoint with date filtering.
 - Added audited Admin correction UI for cost, quantity, date, reference, and supplier assignment, including re-authentication and optimistic-lock versions.
 - Preserved cashier cost privacy and idempotent purchase submission.
+
+## Verification & bug-fix batch — 2026-10-20 (first run on real PostgreSQL + real browser)
+Verified by actually executing (previously "UNVERIFIED"):
+- Backend pytest against PostgreSQL 16: **263 passed**. Fresh `alembic upgrade head` + `bootstrap_security.py` + live uvicorn + `scripts/smoke_api.py`: **ALL PASS**.
+- Frontend: `tsc -b` PASS, `vite build` PASS, `vitest` 87/87 PASS. Real Chromium (Playwright) drove login, every tab as Cashier and Admin, Day Start and Repair intake + advance payment against the live server.
+
+Defects found and fixed (each has a regression test):
+- **Frontend called `/operations/...` endpoints that the server never served** (Day Start/Shift/Day End, Reload, Cash-in, Reopen, all Repair screens, approval review, credit settlements → HTTP 404). Guarded by `test_frontend_api_paths.py`.
+- **Adding a repair part crashed (HTTP 500)**: `repair_parts.stock_movement_id` referenced a random UUID instead of the FIFO movement.
+- **Shift End did not require a verified backup** (only Day End did) — now enforced (Requirements 15).
+- **mDNS advertisement ran its blocking sync API on the event-loop thread**: LAN discovery never registered and startup stalled ~25 s. Now runs in a worker thread (startup ~3 s).
+- `/api/v1/health` (probed by the client's online indicator) did not exist; alias added.
+- Vite dev server had no `/api` proxy although `.env.example` assumed one.
+- Earlier in this batch: item codes now `LVT0001` style, `ITEM_EDIT` granted to Cashier by bootstrap, `POST /returns` and exchange crashes, repair-payment kwargs, IPv6 discovery URLs, missing `openpyxl`/`reportlab` dependencies.
+
+Still NOT verified (needs the real shop machines): Windows/Tauri packaging, two-client LAN concurrency, thermal/A5 printers, USB scanner, real Google Drive upload.
+
+Resolved (2026-10-21): the open design question above is closed by the automatic close backup below.
+
+## Automatic backup at Shift End / Day End — 2026-10-21
+- No backup button: pressing Shift End or Day End makes the server take a backup automatically (`pg_dump` → encrypt → decrypt-verify → Google Drive upload when configured). The close is performed **only after a backup is VERIFIED**; until then the endpoint answers `202 {backup_status: RUNNING, attempt, max_attempts}` and the client (Cash / Day screen) shows progress and asks again every 3 s.
+- **Automatic retries**: a failed attempt is retried with exponential back-off (2 s, 4 s, … capped at `BACKUP_CLOSE_RETRY_MAX_DELAY_SECONDS`) up to `BACKUP_CLOSE_MAX_ATTEMPTS` (default 10). If every attempt fails the close is refused with `503 BACKUP_FAILED`, **nothing is changed**, the failure is audited (`BACKUP_AUTO_CLOSE_FAILED`), and the next press starts a fresh retry cycle. Failed attempts are stored as `FAILED` points and are never restorable.
+- Google Drive upload is retried (`BACKUP_UPLOAD_ATTEMPTS`). If Drive stays unreachable the backup falls back to the separate `BACKUP_ALTERNATE_TARGET` (USB/external/network folder) where the copy is verified too; the point stays `PENDING_SYNC` and a background task (`BACKUP_SYNC_RETRY_INTERVAL_SECONDS`) uploads queued backups once the network returns. With no alternate target configured the verified local backup is accepted (as before).
+- A verified backup younger than `BACKUP_CLOSE_REUSE_SECONDS` (default 60 s, minimum 30 s) satisfies a close, so fixing a validation error and pressing Day End again does not dump the database twice.
+- The cashier only sees progress/“failed” text; the technical reason (with DB password and secret redacted) is Admin-only (audit log / backup points).
+- Verified live: real `pg_dump` via the UI (202 → backup → 200 SHIFT_ENDED); a `pg_dump` that failed twice then worked completed Shift End automatically on attempt 3; with `pg_dump` missing the close was refused (503) and the day stayed OPEN.
+
+## Serialized (IMEI) phones — verified 2026-10-23
+
+Found during the UI sweep: nothing could ever create a `SerializedUnit`, so phones with an IMEI could not be
+purchased into stock or sold with an identity.
+
+- Purchase: each serialized line needs exactly one IMEI per whole unit (trimmed + upper-cased); duplicates inside the
+  entry or already in the system are rejected, atomically. IMEI-tracked purchase quantity cannot be corrected afterwards.
+- Sale: a serialized item cannot be sold without an in-stock `serialized_unit_id`; the same phone cannot be sold twice.
+  Good returns put the phone back to IN_STOCK. Warranty lookup by IMEI works.
+- UI: Purchases has an IMEI box per phone line; POS gives every phone its own cart line, requires its IMEI before
+  checkout and lists only IN_STOCK units. Fixed the money helper `moneyTimesQty` (divisor was 100x too large).
+- Tests: `backend/tests/test_e2e_serialized.py`, `frontend/src/services/money.test.ts`, plus a real-Chromium run
+  (buy 2 IMEIs as cashier, sell both through the POS, units end SOLD, no API errors).
+- Run the backend suite on a FRESH database each time (day sessions persist between runs) and with the default
+  `REQUIRE_VERIFIED_BACKUP_FOR_CLOSE=true`: 283 passed.
+
+Purchase payment method removed (Requirements 08): not asked, not accepted by the API, not stored (migration 0032). Purchases now reduce Cash In Hands
+regardless of method and never the Day-End drawer (Requirements 11). Run `alembic upgrade head` on the shop DB.
+
+Expenses no longer reduce the Day-End drawer (owner confirmed, Requirements 11); Cash In Hands counts every approved expense
+regardless of payment method.
+
+Still open: stock adjustment /
+damage on serialized items can desync units from movement-based stock; `SerializedUnit.purchase_lot_id` is not linked.
+
+## UI sweep findings fixed (2026-10-23)
+
+Real-browser run of POS split payment, discount approval, credit sale, Returns, Expenses approval and report exports.
+- Admin could not approve a discount or an expense from the screen (record version never sent -> 409): fixed; approval rows show action id, discount % and amount.
+- Cashier Other Income had no pending list for Admin: `GET /admin/pending-other-income` + Admin panel.
+- Returns accepted "invoice number" in the UI but the API returned HTTP 500: lookup now accepts the sale id or invoice no.
+- Any malformed id in a URL (7 routes found by fuzzing) returned HTTP 500: now a clean 404.
+- Verified in Chromium: split cash+card with change, payment mismatch blocked, discount approval round trip with the
+  cashier retry replaying the same sale, credit sale, return with charge, 8 report exports (xlsx+pdf) download non-empty files.
+
+## Data import tool (2026-10-24)
+
+`scripts/import_data.py` + `docs/DATA_IMPORT.md` + `docs/import_templates/`: dry-run validation, items with preserved codes,
+opening stock with FIFO cost, IMEI units, customers; idempotent re-runs. Tested against the real API
+(`backend/tests/test_import_script.py`) and live on a running server. Auto item codes now skip numbers already taken by imported codes.
+
+## Old Excel history import (2026-10-24)
+
+`scripts/history_import.py` + `docs/HISTORY_IMPORT.md`, with Admin-only back-fill endpoints `/admin/history/repairs` and
+`/admin/history/damage-loss` (past-dated). Run on the owner's two real workbooks into a fresh database: 1,465 items, 8,674
+records; sales total, all 24 monthly sales totals, repair income, expenses and per-item stock balances match the sheets
+exactly; monthly gross profit within ~1% (FIFO vs the sheet's average cost). Tests: `test_history_import_endpoints.py`,
+`test_history_import_plan.py`.
+
+## History import: catch-up / cut-over (2026-10-27)
+Content-based row ids, one purchase per row, `--since`/`--until`/`--verify-only`, automatic month-by-month verification, item reuse
+by description. Tests: `backend/tests/test_history_import_catchup.py`. Plan in `docs/HISTORY_IMPORT.md`.
+
+## Real-data rehearsal on the history-loaded database (2026-10-28)
+Database = the shop's two years of Excel history (1,464 items, 5,236 sales, 2,805 purchases, 518 repairs).
+- Browser sweep, Admin and Cashier, all screens: every screen loads in under 0.8 s, POS search 150 ms, 2-year reports 0.3-1.2 s,
+  2-year Excel/PDF export 0.2-0.5 s, no API failures or page errors.
+- UI flows on that data: credit settlement, warranty claim (Cashier) + Admin decision, discount approval, returns, expense approval.
+- **Restore rehearsal:** verified backup created through the API, `TRUNCATE sales CASCADE` (all sales lost), then
+  `POST /backup/restore/{id}?confirm=true` restored every table (sales 5,236, purchases, items, repairs, stock movements, audit log,
+  total Rs. 7,321,700 identical to before) and the month-by-month check against the workbooks still said ALL MATCH.
+- Cashier reprint rule (own sales only, settlement proofs Admin-only) in `test_e2e_documents_reprint.py`.
+
+## Serialized stock control (IMEI phones)
+- `POST /stock-control/adjust` and `/stock-control/damage` accept `serialized_unit_ids`. For IMEI-tracked items a decrease must name the exact units (status -> WRITTEN_OFF / DAMAGED) so IMEI units never drift from movement stock; a positive adjustment is rejected (add phones via Purchases with IMEI).
+- Stock Adjustment panel shows an IMEI tick-list for serialized items.
+- Test: `backend/tests/test_e2e_serialized_stock_control.py`.
+
+## Forced password change after Admin reset
+- Found in the browser sweep: after Admin reset a cashier's password the UI had no change-password screen and the backend did not enforce `must_change_password`.
+- Backend: while `must_change_password` is set every endpoint except `/auth/change-password`, `/auth/logout`, `/auth/me` returns 403 `PASSWORD_CHANGE_REQUIRED`; new password must differ from the temporary one.
+- Frontend: `ChangePassword` screen replaces the POS until the password is changed.
+- Browser-verified (Playwright): Targets create, user discount limit, password reset and the forced-change flow. Test: `test_e2e_forced_password_change.py`. Full suite: 308 passed.

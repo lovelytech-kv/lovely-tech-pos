@@ -14,7 +14,7 @@ def sales_summary(payload: DateRangeIn, user: User = Depends(require_permission(
         raise HTTPException(400, "End date cannot be before start date")
     s = ReportService(db).sales_summary(branch_id=user.branch_id, start=payload.start, end=payload.end)
     is_admin = user.role.code.upper() == "ADMIN"
-    return ReportOut(start=payload.start, end=payload.end, sales_count=s.sales_count, sales_total=s.sales_total, cash_total=s.cash_total, card_total=s.card_total, online_total=s.online_total, cost_total=s.cost_total if is_admin else None, gross_profit=s.gross_profit if is_admin else None, expenses_total=s.expenses_total if is_admin else None, other_income_total=s.other_income_total if is_admin else None, net_profit=s.net_profit if is_admin else None, refunds_total=s.refunds_total if is_admin else None, return_charge_total=s.return_charge_total if is_admin else None)
+    return ReportOut(start=payload.start, end=payload.end, sales_count=s.sales_count, sales_total=s.sales_total, cash_total=s.cash_total, card_total=s.card_total, online_total=s.online_total, cost_total=s.cost_total if is_admin else None, gross_profit=s.gross_profit if is_admin else None, expenses_total=s.expenses_total if is_admin else None, other_income_total=s.other_income_total if is_admin else None, net_profit=s.net_profit if is_admin else None, refunds_total=s.refunds_total if is_admin else None, return_charge_total=s.return_charge_total if is_admin else None, repair_income=s.repair_income, repair_profit=s.repair_profit if is_admin else None, damage_loss_total=s.damage_loss_total if is_admin else None)
 
 @router.post('/target-progress')
 def target_progress(payload: DateRangeIn, user: User = Depends(require_permission('REPORT_VIEW')), db: Session = Depends(db_session)):

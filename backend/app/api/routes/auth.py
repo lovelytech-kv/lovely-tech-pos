@@ -74,6 +74,8 @@ def recover_admin(payload: AdminRecoveryIn, db: Session = Depends(db_session)):
 def change_password(payload: PasswordChangeIn, user=Depends(current_user), db: Session=Depends(db_session)):
     if not verify_password(user.password_hash, payload.current_password):
         raise HTTPException(401, 'Current password is incorrect')
+    if payload.new_password == payload.current_password:
+        raise HTTPException(400, 'New password must be different from the current password')
     user.password_hash = hash_password(payload.new_password)
     user.must_change_password = False
     now = datetime.now(timezone.utc)

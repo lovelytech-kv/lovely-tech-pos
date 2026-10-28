@@ -31,6 +31,7 @@ PERMISSIONS = [
     ('STOCK_VIEW','View Stock','View stock information'),
     ('STOCK_ADJUST','Adjust Stock','Admin stock adjustment'),
     ('PURCHASE_ENTRY','Purchase Entry','Enter purchase quantity'),
+    ('ITEM_EDIT','Item Master Edit','Create and edit item master records and barcodes'),
     ('PURCHASE_COST','Purchase Cost','Enter/edit buy cost'),
     ('TARGET_MANAGE','Manage Targets','Create/update daily and monthly targets'),
     ('ADMIN_PANEL','Admin Panel','Manage users, roles and settings'),
@@ -77,7 +78,7 @@ try:
     for code,p in perms.items():
         if (admin.id,p.id) not in existing: db.add(RolePermission(role_id=admin.id,permission_id=p.id))
     db.execute(__import__('sqlalchemy').delete(RolePermission).where(RolePermission.role_id==cashier.id, RolePermission.permission_id.in_([perms['CREDIT_SETTLE'].id] if 'CREDIT_SETTLE' in perms else [])))
-    cashier_codes={'SALE_CREATE','RETURN_CREATE','REPAIR_CREATE','REPAIR_UPDATE','REPAIR_PAYMENT','WARRANTY_CREATE','DAY_MANAGE','REPORT_VIEW','STOCK_VIEW','PURCHASE_ENTRY','APPROVAL_REQUEST','EXPENSE_ENTRY','OTHER_INCOME_ENTRY'}
+    cashier_codes={'SALE_CREATE','RETURN_CREATE','REPAIR_CREATE','REPAIR_UPDATE','REPAIR_PAYMENT','WARRANTY_CREATE','DAY_MANAGE','REPORT_VIEW','STOCK_VIEW','PURCHASE_ENTRY','ITEM_EDIT','APPROVAL_REQUEST','EXPENSE_ENTRY','OTHER_INCOME_ENTRY','DOCUMENT_REPRINT'}
     for code in cashier_codes:
         p=perms[code]
         if (cashier.id,p.id) not in existing: db.add(RolePermission(role_id=cashier.id,permission_id=p.id))

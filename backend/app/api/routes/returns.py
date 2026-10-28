@@ -12,14 +12,16 @@ router = APIRouter(prefix="/returns", tags=["returns"])
 @router.post("")
 def create_return(payload: ReturnIn, user: User = Depends(require_permission("RETURN_CREATE")), db: Session = Depends(db_session)):
     try:
-        result = ReturnService(db).complete(ReturnRequest(
-            branch_id=user.branch_id, cashier_id=user.id, original_sale_id=payload.original_sale_id,
-            lines=tuple(ReturnLineInput(**x.model_dump()) for x in payload.lines), return_charge=payload.return_charge,
-            reason=payload.reason, return_datetime=payload.return_datetime,
-            admin_override=bool(payload.admin_override and user.role.code.upper() == "ADMIN"),
+        result = ReturnService(db).complete(
+            ReturnRequest(
+                branch_id=user.branch_id, cashier_id=user.id, original_sale_id=payload.original_sale_id,
+                lines=tuple(ReturnLineInput(**x.model_dump()) for x in payload.lines), return_charge=payload.return_charge,
+                reason=payload.reason, return_datetime=payload.return_datetime,
+                admin_override=bool(payload.admin_override and user.role.code.upper() == "ADMIN"),
+                idempotency_key=payload.idempotency_key,
+            ),
             version=payload.version,
-            idempotency_key=payload.idempotency_key,
-        ))
+        )
         db.commit()
         return {"return_id": str(result.return_id), "return_no": result.return_no, "refund_total": result.refund_total, "return_charge": result.return_charge, "version": result.version}
     except ReturnValidationError as exc:

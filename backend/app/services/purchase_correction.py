@@ -7,6 +7,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.models.inventory import PurchaseLine, PurchaseLot, FifoAllocation, StockMovement
+from app.models.master import Item, ItemType
 from app.models.security import AuditLog
 from app.models.sales import Sale, SaleLine, RepairPart
 from app.fifo.replay import FifoReplayService, FifoReplayError
@@ -127,6 +128,9 @@ class PurchaseCorrectionService:
         lot = self.session.scalar(select(PurchaseLot).where(PurchaseLot.purchase_line_id == purchase_line.id).with_for_update())
         if line is None or lot is None:
             raise PurchaseCorrectionError("Purchase line/lot not found")
+        item_type = self.session.scalar(select(ItemType).join(Item, Item.item_type_id == ItemType.id).where(Item.id == line.item_id))
+        if item_type is not None and item_type.is_serialized:
+            raise PurchaseCorrectionError("Quantity of a serialized (IMEI) purchase line cannot be changed; each unit is tracked by its IMEI/serial")
         old = Decimal(line.quantity); new = Decimal(new_quantity)
         if old == new:
             raise PurchaseCorrectionError("Purchase quantity is already the requested value")

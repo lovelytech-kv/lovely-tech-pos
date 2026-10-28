@@ -50,7 +50,9 @@ function getDiscoveryEndpoint(baseUrl: string): string {
 }
 
 export function buildBaseUrl(address: string, port: number): string {
-  return `http://${address}:${port}/api/v1`;
+  // IPv6 literals must be bracketed in a URL authority (http://[fe80::1]:8000).
+  const host = address.includes(':') && !address.startsWith('[') ? `[${address}]` : address;
+  return `http://${host}:${port}/api/v1`;
 }
 
 export function identityMatches(txt: Record<string, string>, info: DiscoveryInfo): boolean {
@@ -132,7 +134,9 @@ export async function resolveServer(): Promise<ResolvedServer> {
   let verified: ResolvedServer | null = null;
 
   for (const server of candidates) {
-    for (const address of server.addresses) {
+    // Try IPv4 first: it is the common LAN case and avoids slow IPv6 link-local timeouts.
+    const addresses = [...server.addresses].sort((a, b) => Number(a.includes(':')) - Number(b.includes(':')));
+    for (const address of addresses) {
       const baseUrl = buildBaseUrl(address, server.port);
       try {
         const info = await fetchDiscoveryInfo(baseUrl, DISCOVERY_HTTP_TIMEOUT_MS);

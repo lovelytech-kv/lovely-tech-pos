@@ -61,7 +61,16 @@ def create_item(payload: ItemCreateIn, user: User = Depends(require_permission("
         raise HTTPException(400, "Category or item type not found")
     if payload.item_code and user.role.code.upper() != 'ADMIN':
         raise HTTPException(403, 'Preserving an imported item code is Admin-only')
-    code = payload.item_code.strip() if payload.item_code else NumberingService.next_number(db, "ITEM", str(user.branch_id))
+    if payload.item_code:
+        code = payload.item_code.strip()
+    else:
+        # Imported items may already own codes such as LVT0042: skip any number that is taken.
+        for _ in range(10000):
+            code = NumberingService.next_number(db, "ITEM", str(user.branch_id), label="LVT", sep="", width=4)
+            if not db.scalar(select(Item.id).where(Item.item_code == code)):
+                break
+        else:
+            raise HTTPException(500, "Could not allocate a free item code")
     if db.scalar(select(Item.id).where(Item.item_code==code)):
         raise HTTPException(409, 'Item code already exists')
     item = Item(item_code=code, description=payload.description.strip(), brand=payload.brand, model=payload.model,

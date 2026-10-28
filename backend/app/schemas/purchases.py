@@ -1,6 +1,5 @@
 from datetime import date
 from decimal import Decimal
-from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -9,11 +8,12 @@ class PurchaseLineCreateIn(BaseModel):
     quantity: Decimal = Field(gt=0)
     line_date: date | None = None
     notes: str | None = None
+    # Required for serialized (IMEI/serial tracked) items: exactly one entry per unit purchased.
+    serial_numbers: list[str] | None = None
 
 class PurchaseCreateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     purchase_date: date
-    payment_method: Literal["CASH", "CARD", "ONLINE"] = "CASH"
     lines: list[PurchaseLineCreateIn] = Field(min_length=1)
     reference_no: str | None = Field(default=None, max_length=100)
     supplier_id: UUID | None = None
@@ -42,5 +42,4 @@ class PurchaseHistoryLineOut(BaseModel):
     item_description: str
     quantity: Decimal
     unit_cost: Decimal | None
-    payment_method: str
     status: str

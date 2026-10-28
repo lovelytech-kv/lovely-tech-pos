@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 
 const DENOMS = [5000, 2000, 1000, 500, 100, 50, 20] as const;
@@ -17,6 +17,9 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
   const [reloadProvider, setReloadProvider] = useState('Dialog');
   const [cashIn, setCashIn] = useState('');
   const [busy, setBusy] = useState(false);
+  const [backupMsg, setBackupMsg] = useState('');
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [cashCountStarted, setCashCountStarted] = useState(false);
   const [correctionCash, setCorrectionCash] = useState('');
   const [correctionReason, setCorrectionReason] = useState('');
@@ -27,7 +30,7 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
 
   async function load() {
     try {
-      const [day, back] = await Promise.all([api('/operations/day/status'), api('/backup/status')]);
+      const [day, back] = await Promise.all([api('/day/status'), api('/backup/status')]);
       setStatus(day); setBackup(back);
     } catch (e) { onError?.((e as Error).message); }
   }
@@ -46,32 +49,49 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     if (Math.abs(Number(openingCash) - openingCounted) > 0.0001) return onError?.('Opening cash must equal the denomination total.');
     try {
       setBusy(true);
-      await api('/operations/day/start', { method: 'POST', body: JSON.stringify({ business_date: today(), opening_cash: openingCash, denominations: Object.fromEntries(DENOMS.map(d => [String(d), Number(openingDenoms[String(d)] || 0)])) }) });
+      await api('/day/start', { method: 'POST', body: JSON.stringify({ business_date: today(), opening_cash: openingCash, denominations: Object.fromEntries(DENOMS.map(d => [String(d), Number(openingDenoms[String(d)] || 0)])) }) });
       await load();
     } catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
+  // Shift End / Day End take an automatic backup first (with automatic retries on the server).
+  // The server answers 202 {backup_status:'RUNNING'} until the backup is verified; we simply ask again,
+  // and the close completes only after the backup passes. A failure comes back as an error (HTTP 503).
+  async function closeAfterBackup(path: string, body: unknown, what: string) {
+    try {
+      for (;;) {
+        const r: any = await api(path, { method: 'POST', body: JSON.stringify(body) });
+        if (r?.backup_status !== 'RUNNING') return r;
+        if (!alive.current) return null;
+        setBackupMsg(`Backing up before ${what}… attempt ${r.attempt || 1} of ${r.max_attempts || '?'}${r.step ? ` (${r.step})` : ''}. ${what} will complete automatically once the backup is verified.`);
+        await new Promise(res => setTimeout(res, 3000));
+      }
+    } finally {
+      if (alive.current) setBackupMsg('');
+    }
+  }
+
   async function shiftEnd() {
     if (!status?.day_session_id || busy) return;
-    try { setBusy(true); await api('/operations/day/shift-end', { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
+    try { setBusy(true); await closeAfterBackup('/day/shift-end', { start: status.business_date, end: status.business_date }, 'Shift End'); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function continueBusiness() {
     if (!isAdmin || !status?.business_date || busy) return;
-    try { setBusy(true); await api('/operations/day/continue', { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
+    try { setBusy(true); await api('/day/continue', { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function addReload() {
     if (!status?.day_session_id || !reload || busy) return;
-    try { setBusy(true); await api('/operations/day/reload', { method: 'POST', body: JSON.stringify({ day_session_id: status.day_session_id, provider: reloadProvider, amount: reload }) }); setReload(''); await load(); }
+    try { setBusy(true); await api('/day/reload', { method: 'POST', body: JSON.stringify({ day_session_id: status.day_session_id, provider: reloadProvider, amount: reload }) }); setReload(''); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function addCashIn() {
     if (!cashIn || busy) return;
-    try { setBusy(true); await api('/operations/day/cash-in', { method: 'POST', body: JSON.stringify({ amount: cashIn, note: 'POS cash-in' }) }); setCashIn(''); await load(); }
+    try { setBusy(true); await api('/day/cash-in', { method: 'POST', body: JSON.stringify({ amount: cashIn, note: 'POS cash-in' }) }); setCashIn(''); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
@@ -81,7 +101,8 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     if (!cashCountStarted) return onError?.('Enter the physical cash denominations before Day End. Zero cash is allowed if intentionally counted.');
     try {
       setBusy(true);
-      await api(`/operations/day/${status.day_session_id}/end`, { method: 'POST', body: JSON.stringify({ actual_cash: String(counted), denominations: Object.fromEntries(DENOMS.map(d => [String(d), Number(counts[String(d)] || 0)])), reason: reason.trim(), note: note.trim() || null, version: status.version }) });
+      const done = await closeAfterBackup(`/day/${status.day_session_id}/end`, { actual_cash: String(counted), denominations: Object.fromEntries(DENOMS.map(d => [String(d), Number(counts[String(d)] || 0)])), reason: reason.trim(), note: note.trim() || null, version: status.version }, 'Day End');
+      if (!done) return;
       setCounts({}); setCashCountStarted(false); setReason(''); setNote(''); await load();
     } catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
@@ -94,14 +115,14 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     if (status.version == null) return onError?.('Day version is missing; refresh before correcting opening cash.');
     const password = window.prompt('Admin password (re-authentication required)') || '';
     if (!password) return;
-    try { setBusy(true); await api(`/operations/day/opening-correction?admin_password=${encodeURIComponent(password)}`, { method:'POST', body:JSON.stringify({day_session_id:status.day_session_id,opening_cash:correctionCash,denominations:Object.fromEntries(DENOMS.map(d=>[String(d),Number(correctionDenoms[String(d)]||0)])),reason:correctionReason.trim(),version:status.version}) }); setCorrectionCash(''); setCorrectionReason(''); setCorrectionDenoms({}); await load(); } catch(e){ onError?.((e as Error).message); } finally { setBusy(false); }
+    try { setBusy(true); await api(`/day/opening-correction?admin_password=${encodeURIComponent(password)}`, { method:'POST', body:JSON.stringify({day_session_id:status.day_session_id,opening_cash:correctionCash,denominations:Object.fromEntries(DENOMS.map(d=>[String(d),Number(correctionDenoms[String(d)]||0)])),reason:correctionReason.trim(),version:status.version}) }); setCorrectionCash(''); setCorrectionReason(''); setCorrectionDenoms({}); await load(); } catch(e){ onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function reopen() {
     if (!isAdmin || !status?.business_date || busy) return;
     const password = window.prompt('Admin password (re-authentication required)') || '';
     if (!password) return;
-    try { setBusy(true); await api(`/operations/day/reopen?admin_password=${encodeURIComponent(password)}`, { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
+    try { setBusy(true); await api(`/day/reopen?admin_password=${encodeURIComponent(password)}`, { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
@@ -111,6 +132,8 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
   return <section className="glass panel day-end-card">
     <div className="section-head"><div><h2>Cash / Day Start · Shift End · Day End</h2><p className="muted">One workflow for the physical cash drawer and business-day lifecycle.</p></div><button onClick={load}>Refresh</button></div>
     <div className="day-card"><span>Business Date</span><b>{status?.business_date || today()}</b><span>Status</span><b>{status?.status || 'NOT_STARTED'}</b><span>Expected Cash</span><b>Rs. {Number(status?.expected_cash || 0).toFixed(2)}</b><span>Live Difference</span><b>Rs. {(counted-Number(status?.expected_cash||0)).toFixed(2)}</b><span>Backup</span><b>{backup?.status || '—'}{backup?.last_backup_time ? ` · ${new Date(backup.last_backup_time).toLocaleString()}` : ''}</b></div>
+
+    {backupMsg && <div className="glass panel" role="status" aria-live="polite"><b>⏳ {backupMsg}</b></div>}
 
     {!status?.day_session_id && <div className="glass panel"><h3>Day Start</h3><div className="form-grid compact"><label>Opening Cash<input type="number" min="0" step="0.01" value={opening} onChange={e => setOpening(e.target.value)} placeholder={openingCounted.toFixed(2)} /></label></div><div className="denomination-grid">{DENOMS.map(d => <label key={`open-${d}`}><span>Rs. {d}</span><input inputMode="numeric" type="number" min="0" step="1" value={openingDenoms[String(d)] || ''} onChange={e => setDenom('open', d, e.target.value)} placeholder="0" /><small>× Rs. {d * Number(openingDenoms[String(d)] || 0)}</small></label>)}</div><div className="cash-total-box"><span>Denomination Total</span><strong>Rs. {openingCounted.toFixed(2)}</strong></div><button disabled={busy} onClick={startDay}>{busy ? 'Starting…' : 'Start Day'}</button></div>}
 
