@@ -26,7 +26,7 @@ class SettlementService:
         # Credit is represented by unpaid sale total; settled amounts reduce it.
         from app.models.sales import Payment
         gross=self.session.scalar(select(func.coalesce(func.sum(Sale.grand_total),0)).where(Sale.branch_id==branch_id,Sale.customer_id==customer_id,Sale.status=='COMPLETED')) or 0
-        paid=self.session.scalar(select(func.coalesce(func.sum(Payment.amount),0)).join(Sale,Sale.id==Payment.sale_id).where(Sale.branch_id==branch_id,Sale.customer_id==customer_id)) or 0
+        paid=self.session.scalar(select(func.coalesce(func.sum(Payment.amount),0)).join(Sale,Sale.id==Payment.sale_id).where(Sale.branch_id==branch_id,Sale.customer_id==customer_id,Sale.status=='COMPLETED')) or 0
         settled=self.session.scalar(select(func.coalesce(func.sum(CreditSettlement.amount),0)).where(CreditSettlement.branch_id==branch_id,CreditSettlement.customer_id==customer_id)) or 0
         outstanding=Decimal(gross)-Decimal(paid)-Decimal(settled)
         if amount>outstanding: raise SettlementError('Settlement exceeds customer outstanding')

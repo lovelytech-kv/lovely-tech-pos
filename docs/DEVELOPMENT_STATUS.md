@@ -239,3 +239,11 @@ Database = the shop's two years of Excel history (1,464 items, 5,236 sales, 2,80
 - Backend: while `must_change_password` is set every endpoint except `/auth/change-password`, `/auth/logout`, `/auth/me` returns 403 `PASSWORD_CHANGE_REQUIRED`; new password must differ from the temporary one.
 - Frontend: `ChangePassword` screen replaces the POS until the password is changed.
 - Browser-verified (Playwright): Targets create, user discount limit, password reset and the forced-change flow. Test: `test_e2e_forced_password_change.py`. Full suite: 308 passed.
+
+## Requirements audit (clause by clause) – fixes
+Found by writing end-to-end probes for clauses that had no test (`test_e2e_requirements_audit.py`, `..._audit2.py`, `test_e2e_sale_void.py`):
+- **Purchase cost correction did not update the stored sale cost/profit** (autoflush is off, so the re-sum read stale allocations). Fixed (`purchase_correction.py`).
+- **A later purchase reconciling earlier negative-stock sales did not refresh those sales' cost** -> profit reports used cost 0. Fixed in `FifoEngine._reconcile_negative_stock`.
+- **Sale void was missing** (Req 06/16: invoice number never reused after void, critical void needs Admin re-auth, audited). Added `POST /sales/{id}/void` (Admin, re-auth, reason, version): stock back to the exact FIFO lots, IMEI unit IN_STOCK, warranty VOIDED, sale excluded from sales/profit/drawer/credit totals, audited. Blocked after Day End, or once a return/settlement/warranty claim exists. Admin screen "Void Sale".
+- Lost-bill search by customer/item/date, calendar-month/year comparison in reports, Day End reason checked before the close backup starts.
+- Verified OK (tests): lockout, exports xlsx/pdf, target visibility, backdating, credit/settlement not revenue, barcodes, sequential codes, warranty snapshot/override, manual invoice ref, audit log immutable, 7-day return rule.

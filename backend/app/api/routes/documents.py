@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission
 from app.models.master import User
-from app.models.sales import Sale, SaleLine, Repair, RepairPayment, CreditSettlement
+from app.models.sales import Sale, SaleLine, Repair, RepairPayment, CreditSettlement, Customer
 from app.models.inventory import SerializedUnit
 from app.models.master import Item
 from app.models.warranty import ProductWarranty
 from app.models.security import DocumentEvent
 from app.schemas.api import DocumentSearchOut
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 router=APIRouter(prefix='/documents',tags=['documents'])
 
@@ -24,8 +24,14 @@ def search(q:str,user:User=Depends(require_permission('DOCUMENT_REPRINT')),db:Se
     repair_payments=db.scalars(select(RepairPayment).join(Repair,Repair.id==RepairPayment.repair_id).where(Repair.branch_id==user.branch_id,or_(RepairPayment.proof_no.ilike(f'%{q}%'),RepairPayment.reference.ilike(f'%{q}%'))).order_by(RepairPayment.payment_datetime.desc()).limit(20)).all()
     settlements=[] if not admin else db.scalars(select(CreditSettlement).where(CreditSettlement.branch_id==user.branch_id,or_(CreditSettlement.proof_no.ilike(f'%{q}%'),CreditSettlement.reference.ilike(f'%{q}%'))).order_by(CreditSettlement.settlement_datetime.desc()).limit(20)).all()
     serial_sales=db.scalars(select(Sale).join(SaleLine,SaleLine.sale_id==Sale.id).join(ProductWarranty,ProductWarranty.sale_line_id==SaleLine.id).join(SerializedUnit,SerializedUnit.id==ProductWarranty.serialized_unit_id).where(Sale.branch_id==user.branch_id,*own,SerializedUnit.serial_number.ilike(f'%{q}%')).order_by(Sale.sale_datetime.desc()).limit(20)).all()
+    # Lost-bill recovery (Requirements 10): also find sales by customer, item and date.
+    like=f'%{q}%'
+    conds=[Customer.name.ilike(like),Customer.contact_no.ilike(like),Item.description.ilike(like),Item.item_code.ilike(like)]
+    try: conds.append(func.date(Sale.sale_datetime)==date.fromisoformat(q))
+    except ValueError: pass
+    other_sales=db.scalars(select(Sale).outerjoin(Customer,Customer.id==Sale.customer_id).join(SaleLine,SaleLine.sale_id==Sale.id).join(Item,Item.id==SaleLine.item_id).where(Sale.branch_id==user.branch_id,*own,or_(*conds)).distinct().order_by(Sale.sale_datetime.desc()).limit(20)).all()
     seen={str(x.id) for x in sales}
-    sales += [x for x in serial_sales if str(x.id) not in seen]
+    sales += [x for x in serial_sales+other_sales if str(x.id) not in seen and not seen.add(str(x.id))]
     return [DocumentSearchOut(document_type='SALE',document_id=x.id,document_no=x.invoice_no,document_datetime=x.sale_datetime,status=x.status) for x in sales]+[DocumentSearchOut(document_type='REPAIR',document_id=x.id,document_no=x.repair_no,document_datetime=x.date_in,status=x.status) for x in repairs]+[DocumentSearchOut(document_type='REPAIR_PAYMENT',document_id=x.id,document_no=x.proof_no or str(x.id),document_datetime=x.payment_datetime,status=x.payment_type) for x in repair_payments]+[DocumentSearchOut(document_type='SETTLEMENT',document_id=x.id,document_no=x.proof_no or str(x.id),document_datetime=x.settlement_datetime,status='COMPLETED') for x in settlements]
 
 @router.post('/{document_type}/{document_id}/reprint')

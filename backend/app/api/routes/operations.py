@@ -133,6 +133,7 @@ def day_end(day_session_id:str,payload:DayEndIn,user:User=Depends(require_permis
     day = db.get(__import__('app.models.finance', fromlist=['DaySession']).DaySession, day_session_id)
     if not day or day.branch_id != user.branch_id:
         raise HTTPException(404, 'Day session not found')
+    if not str(payload.reason or '').strip(): raise HTTPException(400,'Day End reason is required')   # before the (slow) close backup
     gate = _close_backup_gate(db, user, "Day End")
     if gate is not None: return gate
     if payload.version is None: raise HTTPException(409,'Day version is required; reload the record')
