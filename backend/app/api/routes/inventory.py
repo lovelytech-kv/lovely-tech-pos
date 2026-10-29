@@ -15,14 +15,14 @@ def search_items(q:str=Query(default="",max_length=120),limit:int=20,user:User=D
     stmt=select(Item).where(Item.is_active.is_(True))
     serialized_types={t.id for t in db.scalars(select(ItemType).where(ItemType.is_serialized.is_(True)))}
     if q:
-        stmt=stmt.outerjoin(ItemBarcode,ItemBarcode.item_id==Item.id).where((Item.item_code.ilike(f"%{q}%")) | (Item.description.ilike(f"%{q}%")) | (Item.brand.ilike(f"%{q}%")) | (Item.model.ilike(f"%{q}%")) | (ItemBarcode.barcode==q))
+        stmt=stmt.outerjoin(ItemBarcode,ItemBarcode.item_id==Item.id).where((Item.item_code.ilike(f"%{q}%")) | (Item.description.ilike(f"%{q}%")) | (Item.brand.ilike(f"%{q}%")) | (Item.model.ilike(f"%{q}%")) | (Item.compatible_models.ilike(f"%{q}%")) | (ItemBarcode.barcode==q))
     stock_expr = func.coalesce(select(func.sum(StockMovement.quantity_delta)).where(StockMovement.branch_id==user.branch_id, StockMovement.item_id==Item.id).scalar_subquery(), 0)
     rows=db.scalars(stmt.order_by((stock_expr <= 0), Item.description).limit(min(limit,50))).all()
     result=[]
     for item in rows:
         stock=Decimal(db.scalar(select(func.coalesce(func.sum(StockMovement.quantity_delta),0)).where(StockMovement.branch_id==user.branch_id,StockMovement.item_id==item.id)) or 0)
         warranty = db.scalar(select(WarrantyDefault).where(WarrantyDefault.item_id==item.id, WarrantyDefault.is_active.is_(True)).order_by(WarrantyDefault.created_at.desc()))
-        result.append({"item_id":str(item.id),"item_code":item.item_code,"description":item.description,"brand":item.brand,"model":item.model,"sale_price":item.master_sale_price,"stock":stock,"is_serialized":item.item_type_id in serialized_types,
+        result.append({"item_id":str(item.id),"item_code":item.item_code,"description":item.description,"brand":item.brand,"model":item.model,"compatible_models":item.compatible_models,"sale_price":item.master_sale_price,"stock":stock,"is_serialized":item.item_type_id in serialized_types,
                        "warranty_default": ({"warranty_type": warranty.warranty_type, "duration_value": warranty.duration_value, "custom_rule": warranty.custom_rule} if warranty else None)})
     return result
 

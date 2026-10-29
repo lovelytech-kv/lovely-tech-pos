@@ -136,7 +136,10 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
 
   async function decision(claim: Claim, path: string, body: Record<string, unknown>) {
     try {
-      await api(`/warranty/claims/${encodeURIComponent(claim.claim_id)}/${path}`, {
+      const writeOff = path === 'damage' || (path === 'supplier-outcome' && String(body.outcome || '').includes('DAMAGE'));
+      const pw = writeOff ? (window.prompt('Admin password (re-authentication required)') || '') : '';
+      const target = writeOff ? path + '?admin_password=' + encodeURIComponent(pw) : path;
+      await api(`/warranty/claims/${encodeURIComponent(claim.claim_id)}/${target}`, {
         method: 'POST',
         body: JSON.stringify({ version: claim.version, ...body }),
       });

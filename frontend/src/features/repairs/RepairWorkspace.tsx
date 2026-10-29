@@ -553,7 +553,7 @@ function RepairDetailPanel({
                   <button
                     onClick={() =>
                       void onAction(
-                        `/repairs/${detail.repair_id}/part/${part.id}/damage-review`,
+                        `/repairs/${detail.repair_id}/part/${part.id}/damage-review?admin_password=${encodeURIComponent(window.prompt('Admin password (re-authentication required)') || '')}`,
                         { approve: true, reject_reason: null },
                       )
                     }

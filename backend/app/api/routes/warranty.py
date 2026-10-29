@@ -54,7 +54,10 @@ def manual_registration(payload: ManualWarrantyRegistrationIn, user: User=Depend
         db.rollback(); raise HTTPException(400,str(exc))
 
 @router.post('/claims/{claim_id}/supplier-outcome')
-def supplier_outcome(claim_id:str,payload:WarrantySupplierOutcomeIn,user:User=Depends(require_permission('WARRANTY_DECIDE')),db:Session=Depends(db_session)):
+def supplier_outcome(claim_id:str,payload:WarrantySupplierOutcomeIn,admin_password:str|None=None,user:User=Depends(require_permission('WARRANTY_DECIDE')),db:Session=Depends(db_session)):
+    if 'DAMAGE' in str(payload.outcome).upper():       # shop-held rejected item is written off to Damage/Loss
+        from app.security.reauth import require_admin_reauth
+        require_admin_reauth(user=user,password=admin_password,db=db,action='damage/loss approval')
     if payload.version is None: raise HTTPException(409,'Warranty claim version is required; reload the claim')
     c=run(db, lambda: WarrantyService(db).record_supplier_outcome(claim_id,user.branch_id,user.id,version=payload.version,outcome=payload.outcome,quantity=payload.quantity,notes=payload.notes))
     return {'claim_id':str(c.id),'status':c.admin_decision,'replacement_outcome':c.replacement_outcome}
@@ -71,7 +74,9 @@ def supplier_decision(claim_id:str,payload:WarrantyDecisionIn,user:User=Depends(
     return {"claim_id":str(c.id),"status":c.admin_decision}
 
 @router.post("/claims/{claim_id}/damage")
-def damage_decision(claim_id:str,payload:WarrantyDecisionIn,user:User=Depends(require_permission("WARRANTY_DECIDE")),db:Session=Depends(db_session)):
+def damage_decision(claim_id:str,payload:WarrantyDecisionIn,admin_password:str|None=None,user:User=Depends(require_permission("WARRANTY_DECIDE")),db:Session=Depends(db_session)):
+    from app.security.reauth import require_admin_reauth
+    require_admin_reauth(user=user,password=admin_password,db=db,action='damage/loss approval')
     if payload.version is None: raise HTTPException(409,'Warranty claim version is required; reload the claim')
     c=run(db, lambda: WarrantyService(db).decide_damage(claim_id,user.branch_id,user.id,version=payload.version,reason=payload.notes or "Warranty damage/loss"))
     return {"claim_id":str(c.id),"status":c.admin_decision}

@@ -190,7 +190,8 @@ def repair_part_remove(repair_id:str, part_id:str, payload:RepairPartRemoveIn, u
     return {'part_id':str(part.id),'status':part.status}
 
 @router.post('/repairs/{repair_id}/part/{part_id}/damage-review', dependencies=[Depends(require_permission('WARRANTY_DECIDE'))])
-def repair_part_damage_review(repair_id:str, part_id:str, payload:ApprovalReviewIn, user:User=Depends(require_permission('WARRANTY_DECIDE')), db:Session=Depends(db_session)):
+def repair_part_damage_review(repair_id:str, part_id:str, payload:ApprovalReviewIn, admin_password:str|None=None, user:User=Depends(require_permission('WARRANTY_DECIDE')), db:Session=Depends(db_session)):
+    if payload.approve: require_admin_reauth(user=user,password=admin_password,db=db,action='damage/loss approval')
     result=commit_or_400(db,lambda:RepairService(db).review_damaged_part(part_id,user.branch_id,user.id,approve_loss=payload.approve,reason=payload.reject_reason or ('Approved damage/loss' if payload.approve else 'Damage review rejected'),version=payload.version))
     return result
 

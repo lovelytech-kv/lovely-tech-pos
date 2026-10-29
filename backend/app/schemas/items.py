@@ -10,6 +10,7 @@ class ItemCreateIn(BaseModel):
     item_type_id: UUID
     brand: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=100)
+    compatible_models: str | None = Field(default=None, max_length=1000)   # other models this part fits, comma separated
     master_sale_price: Decimal | None = Field(default=None, ge=0)
     barcode: str | None = Field(default=None, max_length=100)
 
@@ -20,6 +21,7 @@ class ItemUpdateIn(BaseModel):
     item_type_id: UUID
     brand: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=100)
+    compatible_models: str | None = Field(default=None, max_length=1000)   # other models this part fits, comma separated
     master_sale_price: Decimal | None = Field(default=None, ge=0)
     version: int = Field(ge=1)
 

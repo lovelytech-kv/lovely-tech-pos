@@ -147,3 +147,14 @@ def test_day_end_needs_reason_and_reopen_is_admin_reauth_only(ctx):
     bad = c.post(f"{API}/day/{sid}/end", headers=ctx["C"], json={"version": ver, "actual_cash": "0", "denominations": {}, "reason": ""})
     assert bad.status_code in (400, 422)
     assert c.post(f"{API}/day/reopen", headers=ctx["C"], json={"start": date.today().isoformat(), "end": date.today().isoformat()}).status_code in (400, 401, 403)
+
+
+def test_repair_part_compatible_models_are_searchable(ctx):
+    c = ctx["c"]
+    tag = uuid.uuid4().hex[:6].upper()
+    r = c.post(f"{API}/items", headers=ctx["C"], json={"description": f"Display {tag}", "category_id": ctx["cat"], "item_type_id": ctx["ity"],
+                                                       "model": f"A15-{tag}", "compatible_models": f"A16-{tag}, M14-{tag}"})
+    assert r.status_code == 200 and r.json()["compatible_models"] == f"A16-{tag}, M14-{tag}", r.text
+    for q in (f"A15-{tag}", f"M14-{tag}"):
+        assert [x["item_id"] for x in c.get(f"{API}/inventory/items/search", params={"q": q}, headers=ctx["C"]).json()] == [r.json()["item_id"]], q
+    assert c.get(f"{API}/items/admin-list", params={"q": f"A16-{tag}"}, headers=ctx["A"]).json()[0]["item_id"] == r.json()["item_id"]
