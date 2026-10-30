@@ -158,3 +158,39 @@ def test_repair_part_compatible_models_are_searchable(ctx):
     for q in (f"A15-{tag}", f"M14-{tag}"):
         assert [x["item_id"] for x in c.get(f"{API}/inventory/items/search", params={"q": q}, headers=ctx["C"]).json()] == [r.json()["item_id"]], q
     assert c.get(f"{API}/items/admin-list", params={"q": f"A16-{tag}"}, headers=ctx["A"]).json()[0]["item_id"] == r.json()["item_id"]
+
+
+def test_cancelled_repair_advance_needs_explicit_audited_reversal_and_drawer_follows(ctx):
+    c = ctx["c"]
+    _ensure_day(ctx)
+    expected = lambda: D(str(c.get(f"{API}/day/status", headers=ctx["C"]).json()["expected_cash"]))
+    rep = c.post(f"{API}/repairs", headers=ctx["C"], json={"device_brand": "Samsung", "model": "A15", "customer_name": "Rev Cust", "contact_no": "0771234567",
+                                                          "reported_fault": "Screen", "estimated_amount": "5000"}).json()
+    rid = rep["repair_id"]
+    e0 = expected()
+    pay = c.post(f"{API}/repairs/{rid}/payment", headers=ctx["C"], json={"method": "CASH", "amount": "1500", "idempotency_key": uuid.uuid4().hex})
+    assert pay.status_code == 200, pay.text
+    assert expected() - e0 == D("1500")
+    # a client cannot fake a payment type
+    assert c.post(f"{API}/repairs/{rid}/payment", headers=ctx["C"], json={"method": "CASH", "amount": "5", "payment_type": "REVERSAL", "idempotency_key": uuid.uuid4().hex}).status_code == 422
+    ver = c.get(f"{API}/repairs/{rid}", headers=ctx["C"]).json()["version"]
+    assert c.post(f"{API}/repairs/{rid}/cancel", headers=ctx["C"], json={"reason": "customer left", "version": ver}).status_code == 200
+    assert expected() - e0 == D("1500")                       # cancelling alone never deletes or refunds money
+    pid = c.get(f"{API}/repairs/{rid}", headers=ctx["C"]).json()["payments"][0]["id"]
+    url = f"{API}/repairs/{rid}/payments/{pid}/reverse"
+    assert c.post(url, params={"reason": "refund advance", "admin_password": PASSWORD_ADMIN}, headers=ctx["C"]).status_code == 403
+    assert c.post(url, params={"reason": "refund advance", "admin_password": "wrong"}, headers=ctx["A"]).status_code in (400, 401, 403)
+    assert c.post(url, params={"reason": "  ", "admin_password": PASSWORD_ADMIN}, headers=ctx["A"]).status_code == 400
+    ok = c.post(url, params={"reason": "refund advance", "admin_password": PASSWORD_ADMIN}, headers=ctx["A"])
+    assert ok.status_code == 200 and D(str(ok.json()["amount"])) == D("-1500"), ok.text
+    assert expected() == e0                                    # drawer pays the refund out
+    assert c.post(url, params={"reason": "again", "admin_password": PASSWORD_ADMIN}, headers=ctx["A"]).status_code == 400
+    types = [p["payment_type"] for p in c.get(f"{API}/repairs/{rid}", headers=ctx["C"]).json()["payments"]]
+    assert sorted(types) == ["RECEIPT", "REVERSAL"]            # history kept, nothing deleted
+    assert any(a["action_type"] == "REPAIR_PAYMENT_REVERSED" for a in c.get(f"{API}/admin/audit", headers=ctx["A"]).json())
+
+
+def test_cashier_backup_status_shows_only_status_and_time(ctx):
+    r = ctx["c"].get(f"{API}/backup/status", headers=ctx["C"]).json()
+    assert set(r) == {"status", "last_backup_time"}
+    assert "filename" in ctx["c"].get(f"{API}/backup/status", headers=ctx["A"]).json()

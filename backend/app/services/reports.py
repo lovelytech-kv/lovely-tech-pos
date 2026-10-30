@@ -78,6 +78,9 @@ class ReportService:
         total=Decimal('0')
         for m in rows:
             total += sum((self._d(a.allocated_quantity)*self._d(a.allocated_unit_cost) for a in self.session.scalars(select(FifoAllocation).where(FifoAllocation.stock_movement_id==m.id)).all() if a.allocated_unit_cost is not None),Decimal('0'))
+        restocks=self.session.scalars(select(StockMovement).where(StockMovement.branch_id==branch_id,StockMovement.source_type=='DAMAGE_RESTOCK',func.date(StockMovement.occurred_at).between(start,end))).all()
+        for m in restocks:   # an audited restock gives the booked loss back
+            total -= sum((self._d(a.allocated_quantity)*self._d(a.allocated_unit_cost) for a in self.session.scalars(select(FifoAllocation).where(FifoAllocation.stock_movement_id==m.id)).all() if a.allocated_unit_cost is not None),Decimal('0'))
         return self._d(total)
 
     def sales_summary(self, *, branch_id, start:date, end:date)->SalesSummary:
@@ -103,7 +106,7 @@ class ReportService:
         from app.models.sales import Repair, RepairPayment, CreditSettlement, Return, ReturnPayment, Expense, OtherIncome
         from app.models.inventory import Purchase, PurchaseLine
         sales_cash=self._d(self.session.scalar(select(func.coalesce(func.sum(Payment.amount),0)).join(Sale,Sale.id==Payment.sale_id).where(Sale.branch_id==branch_id,func.date(Payment.payment_datetime).between(start,end),Sale.status=='COMPLETED')))
-        repair_cash=self._d(self.session.scalar(select(func.coalesce(func.sum(RepairPayment.amount),0)).join(Repair,Repair.id==RepairPayment.repair_id).where(Repair.branch_id==branch_id,func.date(RepairPayment.payment_datetime).between(start,end),RepairPayment.payment_type=='RECEIPT')))
+        repair_cash=self._d(self.session.scalar(select(func.coalesce(func.sum(RepairPayment.amount),0)).join(Repair,Repair.id==RepairPayment.repair_id).where(Repair.branch_id==branch_id,func.date(RepairPayment.payment_datetime).between(start,end),RepairPayment.payment_type.in_(('RECEIPT','REVERSAL')))))
         settlements=self._d(self.session.scalar(select(func.coalesce(func.sum(CreditSettlement.amount),0)).where(CreditSettlement.branch_id==branch_id,func.date(CreditSettlement.settlement_datetime).between(start,end))))
         other_income=self._d(self.session.scalar(select(func.coalesce(func.sum(OtherIncome.amount),0)).where(OtherIncome.branch_id==branch_id,OtherIncome.income_date.between(start,end),OtherIncome.status=='APPROVED')))
         other_cash=self._d(self.session.scalar(select(func.coalesce(func.sum(OtherCashIn.amount),0)).where(OtherCashIn.branch_id==branch_id,func.date(OtherCashIn.transaction_datetime).between(start,end))))

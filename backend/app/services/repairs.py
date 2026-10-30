@@ -135,7 +135,7 @@ class RepairService:
             "repair_invoice_ref": repair.repair_invoice_ref, "description_amount": repair.description_amount,
             "outstanding": self.outstanding(repair.id, branch_id),
             "parts": [{"id": str(x.id), "item_id": str(x.item_id), "quantity": x.quantity, "charge_amount": x.charge_amount, "fifo_cost": x.fifo_cost, "status": x.status, "notes": x.notes} for x in parts],
-            "payments": [{"id": str(x.id), "method": x.payment_method, "amount": x.amount, "payment_datetime": x.payment_datetime, "reference": x.reference, "proof_no": x.proof_no, "payment_type": x.payment_type} for x in payments],
+            "payments": [{"id": str(x.id), "method": x.payment_method, "amount": x.amount, "payment_datetime": x.payment_datetime, "reference": x.reference, "proof_no": x.proof_no, "payment_type": x.payment_type, "reversal_of_id": str(x.reversal_of_id) if x.reversal_of_id else None} for x in payments],
         }
 
     def add_part(self, repair_id: uuid.UUID, branch_id: uuid.UUID, actor_user_id: uuid.UUID, inp: RepairPartInput) -> RepairPart:
@@ -209,6 +209,26 @@ class RepairService:
         self._audit(branch_id, actor_user_id, "REPAIR_PAYMENT_ADDED", repair, payment.payment_datetime, {"amount": str(payment.amount), "method": method})
         return payment
 
+    def reverse_payment(self, repair_id: uuid.UUID, payment_id: uuid.UUID, branch_id: uuid.UUID, actor_user_id: uuid.UUID, *, reason: str) -> RepairPayment:
+        """Explicit, audited refund/reversal of a repair payment (Requirements 09): history is never deleted.
+
+        The reversal is a new negative payment dated now (a cash outflow today), linked to the original."""
+        if not (reason or "").strip(): raise RepairValidationError("Reversal reason is required")
+        repair = self.session.scalar(select(Repair).where(Repair.id == repair_id, Repair.branch_id == branch_id).with_for_update())
+        if repair is None: raise RepairValidationError("Repair not found")
+        original = self.session.scalar(select(RepairPayment).where(RepairPayment.id == payment_id, RepairPayment.repair_id == repair.id).with_for_update())
+        if original is None or original.payment_type != "RECEIPT": raise RepairValidationError("Only a received payment can be reversed")
+        if self.session.scalar(select(RepairPayment.id).where(RepairPayment.reversal_of_id == original.id)) is not None:
+            raise RepairValidationError("This payment was already reversed")
+        now = datetime.now(timezone.utc)
+        rev = RepairPayment(repair_id=repair.id, payment_method=original.payment_method, amount=-self.money(original.amount), payment_datetime=now,
+                            reference=f"Reversal of {original.proof_no or original.id}", payment_type="REVERSAL", reversal_of_id=original.id)
+        self.session.add(rev); self.session.flush()
+        repair.version += 1
+        self._audit(branch_id, actor_user_id, "REPAIR_PAYMENT_REVERSED", repair, now,
+                    {"reason": reason.strip(), "reversal_of": str(original.id), "amount": str(original.amount), "method": original.payment_method})
+        return rev
+
     def import_historical(self, *, branch_id: uuid.UUID, actor_user_id: uuid.UUID, done_on: date, device_brand: str | None, model: str | None,
                           description: str | None, final_amount: Decimal, parts_cost: Decimal, history_ref: str, cost_item_id: uuid.UUID | None,
                           notes: str | None = None) -> tuple[Repair, bool]:
@@ -248,7 +268,7 @@ class RepairService:
         if repair is None: raise RepairValidationError("Repair not found")
         paid = self.session.scalar(select(func.coalesce(func.sum(RepairPayment.amount), 0)).where(RepairPayment.repair_id == repair_id, RepairPayment.payment_type == "RECEIPT")) or 0
         reversed_amount = self.session.scalar(select(func.coalesce(func.sum(RepairPayment.amount), 0)).where(RepairPayment.repair_id == repair_id, RepairPayment.payment_type == "REVERSAL")) or 0
-        return self.money(Decimal(repair.total_amount) - Decimal(paid) + Decimal(reversed_amount))
+        return self.money(Decimal(repair.total_amount) - Decimal(paid) - Decimal(reversed_amount))   # reversals are negative amounts
 
     def finalize_amounts(self, repair_id: uuid.UUID, branch_id: uuid.UUID, actor_user_id: uuid.UUID, *, version: int | None = None, final_amount: Decimal, labour_amount: Decimal, repair_invoice_ref: str | None = None, description_amount: str | None = None, hand_over_date: date | None = None) -> Repair:
         if final_amount < ZERO or labour_amount < ZERO: raise RepairValidationError("Amounts cannot be negative")

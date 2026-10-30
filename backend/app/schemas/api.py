@@ -100,7 +100,7 @@ class RepairStatusIn(BaseModel):
 
 class RepairPaymentIn(BaseModel):
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
-    method: Literal["CASH","CARD","ONLINE"]; amount: Decimal = Field(gt=0); reference: str | None = None; proof_reference: str | None = None; payment_type: str = "RECEIPT"
+    method: Literal["CASH","CARD","ONLINE"]; amount: Decimal = Field(gt=0); reference: str | None = None; proof_reference: str | None = None; payment_type: Literal["RECEIPT"] = "RECEIPT"
 
 class RepairFinalizeIn(BaseModel):
     version: int | None = None

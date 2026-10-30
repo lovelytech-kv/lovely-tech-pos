@@ -67,6 +67,13 @@ def repair_detail(repair_id:str,user:User=Depends(require_permission('REPAIR_CRE
 def repair_payment(repair_id:str,payload:RepairPaymentIn,user:User=Depends(require_permission('REPAIR_PAYMENT')),db:Session=Depends(db_session)):
     p=commit_or_400(db,lambda:RepairService(db).add_payment(repair_id,user.branch_id,user.id,RepairPaymentInput(method=payload.method,amount=payload.amount,reference=payload.reference or payload.proof_reference,payment_type=payload.payment_type),idempotency_key=payload.idempotency_key)); return {'payment_id':str(p.id),'amount':p.amount,'method':p.payment_method,'proof_no':p.proof_no}
 
+@router.post('/repairs/{repair_id}/payments/{payment_id}/reverse')
+def repair_payment_reverse(repair_id:str,payment_id:str,reason:str,admin_password:str|None=None,user:User=Depends(require_permission('ADMIN_PANEL')),db:Session=Depends(db_session)):
+    """Admin-only, re-authenticated refund/reversal of a repair payment (e.g. advance of a cancelled repair)."""
+    require_admin_reauth(user=user,password=admin_password,db=db,action='payment correction')
+    r=commit_or_400(db,lambda:RepairService(db).reverse_payment(repair_id,payment_id,user.branch_id,user.id,reason=reason))
+    return {'reversal_id':str(r.id),'amount':r.amount,'payment_type':r.payment_type,'reversal_of_id':str(r.reversal_of_id)}
+
 @router.post('/repairs/{repair_id}/finalize', dependencies=[Depends(require_permission('REPAIR_UPDATE'))])
 def repair_finalize(repair_id:str,payload:RepairFinalizeIn,user:User=Depends(require_permission('REPAIR_UPDATE')),db:Session=Depends(db_session)):
     if payload.version is None: raise HTTPException(409,'Repair version is required; reload the record')

@@ -92,3 +92,19 @@ def damage(p:DamageLossIn,admin_password:str|None=None,user:User=Depends(require
         db.rollback(); raise HTTPException(400, str(e))
     except HTTPException:
         db.rollback(); raise
+
+@router.get('/damage-loss',dependencies=[Depends(require_permission('STOCK_ADJUST'))])
+def damage_list(limit:int=100,user:User=Depends(require_permission('STOCK_ADJUST')),db:Session=Depends(db_session)):
+    from app.models.inventory import DamageLossRecord
+    from app.models.master import Item
+    rows=db.execute(select(DamageLossRecord,Item.item_code,Item.description).join(Item,Item.id==DamageLossRecord.item_id).where(DamageLossRecord.branch_id==user.branch_id).order_by(DamageLossRecord.created_at.desc()).limit(min(max(limit,1),500))).all()
+    return [{'damage_loss_id':str(r.id),'item_code':c,'description':d,'quantity':r.quantity,'reason':r.reason,'source_type':r.source_type,'review_status':r.review_status,'created_at':r.created_at} for r,c,d in rows]
+
+@router.post('/damage-loss/{damage_id}/restock',dependencies=[Depends(require_permission('STOCK_ADJUST'))])
+def damage_restock(damage_id:str,reason:str,admin_password:str|None=None,user:User=Depends(require_permission('STOCK_ADJUST')),db:Session=Depends(db_session)):
+    require_admin_reauth(user=user,password=admin_password,db=db,action='damage restock')
+    try:
+        rec=StockControlService(db).restock_damage(damage_id=uuid.UUID(damage_id),branch_id=user.branch_id,user_id=user.id,reason=reason)
+        db.commit(); return {'damage_loss_id':str(rec.id),'review_status':rec.review_status}
+    except (StockControlError, ValueError) as e:
+        db.rollback(); raise HTTPException(400, str(e))

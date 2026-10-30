@@ -250,3 +250,4 @@ Found by writing end-to-end probes for clauses that had no test (`test_e2e_requi
 - Item **compatible models** (Req 04: repair parts compatible across models): migration `0033_item_compatible_models`, Item Master field, searchable in POS/admin item search. Run `alembic upgrade head` on the shop DB.
 - Damage/loss **approvals now need Admin re-authentication** (Req 02): repair-part damage review (approve), warranty "Damage/Loss" decision and a shop-held rejected supplier outcome. Admin screens prompt for the password.
 - Note: `test_history_import_catchup.py` expects an empty database (fixed 2018 dates); run the suite on a fresh DB.
+- Requirements traceability table: docs/REQUIREMENTS_TRACEABILITY.md. Added Admin damage restock (service/route/panel/report) and Admin repair-payment reversal button.

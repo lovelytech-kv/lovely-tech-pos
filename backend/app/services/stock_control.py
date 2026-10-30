@@ -65,3 +65,31 @@ class StockControlService:
         result=self.fifo.consume(branch_id=branch_id,item_id=item_id,quantity=quantity,source_type='DAMAGE_LOSS',source_id=row.id,occurred_at=when,reason=reason)
         self.session.add(AuditLog(branch_id=branch_id,actor_user_id=user_id,action_type='DAMAGE_LOSS',entity_type='DAMAGE_LOSS',entity_id=row.id,timestamp=when,reason=reason,after_json={'quantity':str(quantity),'fifo_cost':str(result.total_cost)}))
         self.session.flush(); return row,result
+    def restock_damage(self, *, damage_id, branch_id, user_id, reason):
+        """Requirements 07: if a damaged/lost item is resellable, Admin reverses the damage through an audited restock.
+        History is kept: the damage record becomes RESTOCKED and a positive DAMAGE_RESTOCK movement is added at the cost
+        the damage was booked at (or the latest lot cost when no cost was booked, e.g. a damaged return)."""
+        if not (reason or '').strip(): raise StockControlError('Restock reason is required')
+        rec=self.session.scalar(select(DamageLossRecord).where(DamageLossRecord.id==damage_id,DamageLossRecord.branch_id==branch_id).with_for_update())
+        if rec is None: raise StockControlError('Damage/loss record not found')
+        if rec.review_status!='APPROVED': raise StockControlError(f'Only an approved damage/loss record can be restocked (status {rec.review_status})')
+        item=self.session.get(Item,rec.item_id)
+        if item is not None and self._is_serialized(item):
+            raise StockControlError('IMEI-tracked phones cannot be restocked from a damage record: enter the phone again in Purchases with its IMEI')
+        qty=Decimal(rec.quantity); now=datetime.now(timezone.utc)
+        unit_cost=None
+        loss_mv=self.session.scalar(select(StockMovement).where(StockMovement.source_type=='DAMAGE_LOSS',StockMovement.source_id==rec.id))
+        if loss_mv is not None:
+            allocs=[a for a in self.session.scalars(select(FifoAllocation).where(FifoAllocation.stock_movement_id==loss_mv.id)).all() if a.allocated_unit_cost is not None]
+            booked=sum((Decimal(a.allocated_quantity)*Decimal(a.allocated_unit_cost) for a in allocs),Decimal('0'))
+            if allocs and qty>0: unit_cost=(booked/qty)
+        if unit_cost is None:
+            latest=self.session.scalar(select(PurchaseLot).where(PurchaseLot.branch_id==branch_id,PurchaseLot.item_id==rec.item_id).order_by(PurchaseLot.lot_date.desc(),PurchaseLot.created_at.desc()).limit(1))
+            if latest is None: raise StockControlError('No purchase-lot cost reference exists for this item')
+            unit_cost=Decimal(latest.unit_cost)
+        mv=StockMovement(branch_id=branch_id,item_id=rec.item_id,source_type='DAMAGE_RESTOCK',source_id=rec.id,quantity_delta=qty,occurred_at=now,reason=reason.strip())
+        self.session.add(mv); self.session.flush()
+        self.session.add(FifoAllocation(stock_movement_id=mv.id,purchase_lot_id=None,allocated_quantity=qty,allocated_unit_cost=unit_cost.quantize(Decimal('0.0001')),allocation_status='ADJUSTMENT_POOL',created_at=now))
+        rec.review_status='RESTOCKED'; rec.version+=1
+        self.session.add(AuditLog(branch_id=branch_id,actor_user_id=user_id,action_type='DAMAGE_RESTOCK',entity_type='DAMAGE_LOSS',entity_id=rec.id,timestamp=now,reason=reason.strip(),before_json={'review_status':'APPROVED'},after_json={'review_status':'RESTOCKED','quantity':str(qty),'unit_cost':str(unit_cost)}))
+        self.session.flush(); return rec
