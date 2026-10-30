@@ -27,6 +27,7 @@ def _damage_request_hash(p: DamageLossIn) -> str:
         "item_id": str(p.item_id),
         "quantity": str(p.quantity),
         "reason": p.reason,
+        "loss_type": p.loss_type,
         "units": sorted(str(x) for x in (p.serialized_unit_ids or [])),
     }, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(raw).hexdigest()
@@ -83,7 +84,7 @@ def damage(p:DamageLossIn,admin_password:str|None=None,user:User=Depends(require
     if replay is not None:
         return replay
     try:
-        r=StockControlService(db).damage_loss(branch_id=user.branch_id,item_id=p.item_id,quantity=p.quantity,reason=p.reason,user_id=user.id,serialized_unit_ids=p.serialized_unit_ids)
+        r=StockControlService(db).damage_loss(branch_id=user.branch_id,item_id=p.item_id,quantity=p.quantity,reason=p.reason,user_id=user.id,serialized_unit_ids=p.serialized_unit_ids,loss_type=p.loss_type)
         response={'damage_loss_id':str(r[0].id),'fifo_cost':str(r[1].total_cost)}
         _reserve(db, key=p.idempotency_key, user_id=user.id, request_hash=request_hash, response=response)
         db.commit()
@@ -92,3 +93,35 @@ def damage(p:DamageLossIn,admin_password:str|None=None,user:User=Depends(require
         db.rollback(); raise HTTPException(400, str(e))
     except HTTPException:
         db.rollback(); raise
+
+@router.get('/damage-loss',dependencies=[Depends(require_permission('STOCK_ADJUST'))])
+def damage_list(limit:int=100,user:User=Depends(require_permission('STOCK_ADJUST')),db:Session=Depends(db_session)):
+    from app.models.inventory import DamageLossRecord
+    from app.models.master import Item
+    rows=db.execute(select(DamageLossRecord,Item.item_code,Item.description).join(Item,Item.id==DamageLossRecord.item_id).where(DamageLossRecord.branch_id==user.branch_id).order_by(DamageLossRecord.created_at.desc()).limit(min(max(limit,1),500))).all()
+    return [{'damage_loss_id':str(r.id),'item_code':c,'description':d,'quantity':r.quantity,'reason':r.reason,'loss_type':r.loss_type,'source_type':r.source_type,'review_status':r.review_status,'created_at':r.created_at} for r,c,d in rows]
+
+@router.post('/damage-loss/{damage_id}/restock',dependencies=[Depends(require_permission('STOCK_ADJUST'))])
+def damage_restock(damage_id:str,reason:str,admin_password:str|None=None,user:User=Depends(require_permission('STOCK_ADJUST')),db:Session=Depends(db_session)):
+    require_admin_reauth(user=user,password=admin_password,db=db,action='damage restock')
+    try:
+        rec=StockControlService(db).restock_damage(damage_id=uuid.UUID(damage_id),branch_id=user.branch_id,user_id=user.id,reason=reason)
+        db.commit(); return {'damage_loss_id':str(rec.id),'review_status':rec.review_status}
+    except (StockControlError, ValueError) as e:
+        db.rollback(); raise HTTPException(400, str(e))
+
+@router.post('/damage-loss/{damage_id}/finalize',dependencies=[Depends(require_permission('STOCK_ADJUST'))])
+def damage_finalize(damage_id:str,admin_password:str|None=None,user:User=Depends(require_permission('STOCK_ADJUST')),db:Session=Depends(db_session)):
+    """Admin confirms a damage the cashier marked (e.g. a damaged exchange/return): PENDING -> APPROVED."""
+    require_admin_reauth(user=user,password=admin_password,db=db,action='damage/loss approval')
+    from app.models.inventory import DamageLossRecord
+    from app.models.security import AuditLog
+    try:
+        rec=db.scalar(select(DamageLossRecord).where(DamageLossRecord.id==uuid.UUID(damage_id),DamageLossRecord.branch_id==user.branch_id).with_for_update())
+        if rec is None: raise HTTPException(404,'Damage/loss record not found')
+        if rec.review_status!='PENDING': raise HTTPException(400,f'Only a pending record can be finalized (status {rec.review_status})')
+        rec.review_status='APPROVED'; rec.approved_by=user.id; rec.version+=1
+        db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='DAMAGE_FINALIZED',entity_type='DAMAGE_LOSS',entity_id=rec.id,timestamp=datetime.now(timezone.utc),reason='Admin finalized cashier-marked damage',before_json={'review_status':'PENDING'},after_json={'review_status':'APPROVED'}))
+        db.commit(); return {'damage_loss_id':str(rec.id),'review_status':rec.review_status}
+    except ValueError as e:
+        db.rollback(); raise HTTPException(400,str(e))

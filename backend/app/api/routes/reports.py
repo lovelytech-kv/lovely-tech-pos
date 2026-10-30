@@ -48,8 +48,16 @@ def cash_in_hands(payload: DateRangeIn, user: User = Depends(require_permission(
 def report_comparison(payload: DateRangeIn, user: User = Depends(require_permission('REPORT_VIEW')), db: Session = Depends(db_session)):
     if payload.end < payload.start: raise HTTPException(400, 'End date cannot be before start date')
     from datetime import timedelta
+    import calendar
+    from datetime import date as _date
     span=(payload.end-payload.start).days+1
     prev_end=payload.start-timedelta(days=1); prev_start=prev_end-timedelta(days=span-1)
+    s0,e0=payload.start,payload.end
+    if s0.day==1 and e0==_date(e0.year,e0.month,calendar.monthrange(e0.year,e0.month)[1]):
+        if s0.month==e0.month and s0.year==e0.year:      # a calendar month -> previous calendar month
+            prev_end=s0-timedelta(days=1); prev_start=prev_end.replace(day=1)
+        elif s0.month==1 and e0.month==12 and s0.year==e0.year:   # a calendar year -> previous year
+            prev_start=_date(s0.year-1,1,1); prev_end=_date(s0.year-1,12,31)
     current=ReportService(db).sales_summary(branch_id=user.branch_id,start=payload.start,end=payload.end)
     previous=ReportService(db).sales_summary(branch_id=user.branch_id,start=prev_start,end=prev_end)
     return {'current':{'start':payload.start,'end':payload.end,'sales_total':current.sales_total,'gross_profit':current.gross_profit,'sales_count':current.sales_count,'net_profit':current.net_profit},'previous':{'start':prev_start,'end':prev_end,'sales_total':previous.sales_total,'gross_profit':previous.gross_profit,'sales_count':previous.sales_count,'net_profit':previous.net_profit}}

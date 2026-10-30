@@ -167,3 +167,25 @@ def test_purchase_accepts_line_date_like_the_ui_sends(ctx, phone):
         "lines": [{"item_id": phone["item_id"], "quantity": "1", "line_date": date.today().isoformat(), "serial_numbers": [_imei()]}],
         "idempotency_key": uuid.uuid4().hex})
     assert r.status_code == 200, r.text
+
+
+def test_void_of_a_phone_sale_makes_the_imei_sellable_and_voids_its_warranty(ctx, phone):
+    c = ctx["c"]
+    _ensure_day(ctx)
+    imei = _imei()
+    assert _buy(ctx, phone, [imei]).status_code == 200
+    unit = _units(ctx, phone, q=imei)[0]
+    sale = c.post("/api/v1/sales", headers=ctx["A"], json={
+        "lines": [{"item_id": phone["item_id"], "quantity": "1", "unit_price": "80000", "serialized_unit_id": unit["serialized_unit_id"],
+                   "warranty_type": "MONTHS", "warranty_duration_value": 12}],
+        "payments": [{"method": "CASH", "amount": "80000"}], "idempotency_key": uuid.uuid4().hex}).json()
+    assert _units(ctx, phone, q=imei)[0]["status"] == "SOLD"
+    version = c.get(f"/api/v1/sales/{sale['sale_id']}", headers=ctx["A"]).json()["version"]
+    from tests.test_e2e_requirements import PASSWORD_ADMIN
+    v = c.post(f"/api/v1/sales/{sale['sale_id']}/void", params={"reason": "wrong phone", "version": version, "admin_password": PASSWORD_ADMIN}, headers=ctx["A"])
+    assert v.status_code == 200, v.text
+    assert _units(ctx, phone, q=imei)[0]["status"] == "IN_STOCK"
+    again = c.post("/api/v1/sales", headers=ctx["A"], json={
+        "lines": [{"item_id": phone["item_id"], "quantity": "1", "unit_price": "80000", "serialized_unit_id": unit["serialized_unit_id"]}],
+        "payments": [{"method": "CASH", "amount": "80000"}], "idempotency_key": uuid.uuid4().hex})
+    assert again.status_code == 200, again.text

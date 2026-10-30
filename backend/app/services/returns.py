@@ -332,7 +332,7 @@ class ReturnService:
                     source_type="RETURN",
                     source_id=ret.id,
                     approved_by=request.cashier_id,
-                    review_status="APPROVED",
+                    review_status="PENDING",   # cashier marks the damage; Admin finalizes (Requirements 07)
                 ))
             if line.serialized_unit_id:
                 unit = self.session.scalar(select(SerializedUnit).where(SerializedUnit.id == line.serialized_unit_id).with_for_update())

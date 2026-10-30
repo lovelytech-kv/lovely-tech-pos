@@ -65,6 +65,7 @@ class Item(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     description: Mapped[str] = mapped_column(String(255), nullable=False)
     brand: Mapped[str | None] = mapped_column(String(100))
     model: Mapped[str | None] = mapped_column(String(100))
+    compatible_models: Mapped[str | None] = mapped_column(Text)
     category_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False)
     item_type_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("item_types.id", ondelete="RESTRICT"), nullable=False)
     master_sale_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))

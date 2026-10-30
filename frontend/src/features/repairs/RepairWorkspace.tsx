@@ -49,6 +49,7 @@ type RepairPayment = {
   reference?: string | null;
   proof_no?: string | null;
   payment_type: string;
+  reversal_of_id?: string | null;
 };
 
 type Props = {
@@ -553,7 +554,7 @@ function RepairDetailPanel({
                   <button
                     onClick={() =>
                       void onAction(
-                        `/repairs/${detail.repair_id}/part/${part.id}/damage-review`,
+                        `/repairs/${detail.repair_id}/part/${part.id}/damage-review?admin_password=${encodeURIComponent(window.prompt('Admin password (re-authentication required)') || '')}`,
                         { approve: true, reject_reason: null },
                       )
                     }
@@ -641,6 +642,27 @@ function RepairDetailPanel({
                 }}
               >
                 Reprint Proof
+              </button>
+            )}
+            {isAdmin && payment.payment_type === 'RECEIPT' && !detail.payments.some((x) => x.reversal_of_id === payment.id) && (
+              <button
+                className="danger-button"
+                onClick={async () => {
+                  const reason = window.prompt('Reason for reversing / refunding this payment (required)')?.trim();
+                  if (!reason) return;
+                  const adminPassword = window.prompt('Admin password (re-authentication required)') || '';
+                  try {
+                    await api(
+                      `/repairs/${detail.repair_id}/payments/${payment.id}/reverse?reason=${encodeURIComponent(reason)}&admin_password=${encodeURIComponent(adminPassword)}`,
+                      { method: 'POST' },
+                    );
+                    await onReload();
+                  } catch (error) {
+                    onError((error as Error).message);
+                  }
+                }}
+              >
+                Reverse / Refund
               </button>
             )}
           </div>

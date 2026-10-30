@@ -78,10 +78,29 @@ def get_sale_detail(sale_id: str, user: User = Depends(require_permission("RETUR
     lines = db.execute(select(SaleLine, Item).join(Item, Item.id == SaleLine.item_id).where(SaleLine.sale_id == sale.id)).all()
     return {
         "sale_id": str(sale.id), "invoice_no": sale.invoice_no, "sale_datetime": sale.sale_datetime,
-        "grand_total": sale.grand_total,
+        "grand_total": sale.grand_total, "version": sale.version,
         "lines": [{"sale_line_id": str(line.id), "item_id": str(line.item_id), "item_code": item.item_code,
                    "description": item.description, "quantity": line.quantity, "unit_price": line.unit_price,
                    "discount": line.discount, "final_total": line.final_total,
                    "serialized_unit_id": str(line.serialized_unit_id) if line.serialized_unit_id else None}
                   for line, item in lines]
     }
+
+
+@router.post("/{sale_id}/void")
+def void_sale(sale_id: uuid.UUID, reason: str, version: int | None = None, admin_password: str | None = None,
+              user: User = Depends(require_permission("ADMIN_PANEL")), db: Session = Depends(db_session)):
+    """Admin-only, re-authenticated. The invoice number is kept on the VOIDED record and never reused."""
+    from app.security.reauth import require_admin_reauth
+    from app.services.sale_void import SaleVoidError, SaleVoidService
+    require_admin_reauth(user=user, password=admin_password, db=db, action="sale void")
+    sale = db.scalar(select(Sale).where(Sale.id == sale_id, Sale.branch_id == user.branch_id).with_for_update())
+    if sale is None:
+        raise HTTPException(404, "Sale not found")
+    try:
+        SaleVoidService(db).void(sale=sale, reason=reason, actor_user_id=user.id, version=version)
+        db.commit()
+    except SaleVoidError as exc:
+        db.rollback()
+        raise HTTPException(409 if "version" in str(exc) else 400, str(exc))
+    return {"sale_id": str(sale.id), "invoice_no": sale.invoice_no, "status": sale.status, "version": sale.version}

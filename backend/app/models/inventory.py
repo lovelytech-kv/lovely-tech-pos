@@ -80,6 +80,7 @@ class DamageLossRecord(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     source_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     approved_by: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
     review_status: Mapped[str] = mapped_column(String(30), nullable=False, default="APPROVED")
+    loss_type: Mapped[str] = mapped_column(String(30), nullable=False, default="DAMAGE", server_default="DAMAGE")   # DAMAGE | LOSS | INTERNAL_USE
     __table_args__ = (Index("ix_damage_loss_review_status", "branch_id", "review_status", "created_at"),)
 
 class WarrantyHolding(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):

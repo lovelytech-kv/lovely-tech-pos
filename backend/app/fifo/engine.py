@@ -246,5 +246,10 @@ class FifoEngine:
         lot.remaining_quantity = available
         lot.is_closed = available == ZERO
         self.session.flush()
+        if reconciled > ZERO:
+            # The earlier sales / repair parts now have a real cost: refresh their stored cost so
+            # profit reports follow the exact FIFO result (autoflush is off, so flush happened above).
+            from app.services.purchase_correction import recalculate_dependent_costs
+            recalculate_dependent_costs(self.session, lot.id, lot.unit_cost)
         return reconciled
 

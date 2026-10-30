@@ -27,12 +27,14 @@ def create(payload:BackupCreateIn,user:User=Depends(require_permission('BACKUP_M
 @router.get('/status')
 def backup_status(user:User=Depends(current_user),db:Session=Depends(db_session)):
     latest=db.scalar(select(BackupPoint).where(BackupPoint.branch_id==user.branch_id,BackupPoint.state=='VERIFIED').order_by(BackupPoint.verified_at.desc()).limit(1))
-    return {
+    out = {
         'status': 'VERIFIED' if latest else 'NO_VERIFIED_BACKUP',
         'last_backup_time': latest.verified_at if latest else None,
-        'sync_state': latest.sync_state if latest else None,
-        'filename': latest.filename if latest else None,
     }
+    if user.role.code.upper() == 'ADMIN':     # Requirements 15: Cashier sees Backup Status + Last Backup Time only
+        out['sync_state'] = latest.sync_state if latest else None
+        out['filename'] = latest.filename if latest else None
+    return out
 
 @router.get('/points',response_model=list[BackupOut])
 def points(user:User=Depends(require_permission('BACKUP_MANAGE')),db:Session=Depends(db_session)):

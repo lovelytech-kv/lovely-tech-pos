@@ -20,7 +20,7 @@ def admin_list_items(q: str = "", active_only: bool = False, user: User = Depend
     if term:
         like = f"%{term}%"
         from sqlalchemy import or_
-        stmt = stmt.where(or_(Item.item_code.ilike(like), Item.description.ilike(like), Item.brand.ilike(like), Item.model.ilike(like)))
+        stmt = stmt.where(or_(Item.item_code.ilike(like), Item.description.ilike(like), Item.brand.ilike(like), Item.model.ilike(like), Item.compatible_models.ilike(like)))
     rows = db.scalars(stmt.order_by(Item.item_code).limit(200)).all()
     out=[]
     for item in rows:
@@ -45,7 +45,7 @@ def _out(item, barcodes):
     # purchase cost or profit through this endpoint.
     default = getattr(item, "_warranty_default", None)
     return {"item_id": str(item.id), "item_code": item.item_code, "description": item.description,
-            "brand": item.brand, "model": item.model, "category_id": str(item.category_id),
+            "brand": item.brand, "model": item.model, "compatible_models": item.compatible_models, "category_id": str(item.category_id),
             "item_type_id": str(item.item_type_id), "master_sale_price": item.master_sale_price,
             "version": item.version, "is_active": item.is_active,
             "barcodes": [b.barcode for b in barcodes],
@@ -73,7 +73,7 @@ def create_item(payload: ItemCreateIn, user: User = Depends(require_permission("
             raise HTTPException(500, "Could not allocate a free item code")
     if db.scalar(select(Item.id).where(Item.item_code==code)):
         raise HTTPException(409, 'Item code already exists')
-    item = Item(item_code=code, description=payload.description.strip(), brand=payload.brand, model=payload.model,
+    item = Item(item_code=code, description=payload.description.strip(), brand=payload.brand, model=payload.model, compatible_models=(payload.compatible_models or None),
                 category_id=payload.category_id, item_type_id=payload.item_type_id,
                 master_sale_price=payload.master_sale_price)
     db.add(item); db.flush()
@@ -93,7 +93,7 @@ def update_item(item_id: str, payload: ItemUpdateIn, user: User = Depends(requir
     before = {"description": item.description, "brand": item.brand, "model": item.model,
               "category_id": str(item.category_id), "item_type_id": str(item.item_type_id),
               "master_sale_price": str(item.master_sale_price) if item.master_sale_price is not None else None}
-    item.description = payload.description.strip(); item.brand = payload.brand; item.model = payload.model
+    item.description = payload.description.strip(); item.brand = payload.brand; item.model = payload.model; item.compatible_models = (payload.compatible_models or None)
     item.category_id = payload.category_id; item.item_type_id = payload.item_type_id
     item.master_sale_price = payload.master_sale_price; item.version += 1
     db.add(AuditLog(branch_id=user.branch_id, actor_user_id=user.id, action_type="ITEM_EDITED",
