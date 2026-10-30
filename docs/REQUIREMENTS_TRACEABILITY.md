@@ -1,6 +1,6 @@
 # Requirements v2.0 – clause-by-clause traceability
 
-Status: **T** = covered by an automated test (real PostgreSQL / browser) · **C** = implemented in code, found by code review, no dedicated test · **P** = partly · **H** = needs shop hardware / Windows (cannot be verified in the cloud). Backend suite 332 passed, frontend 92 passed.
+Status: **T** = covered by an automated test (real PostgreSQL / browser) · **C** = implemented in code, found by code review, no dedicated test · **P** = partly · **H** = needs shop hardware / Windows (cannot be verified in the cloud). Backend suite 334 passed, frontend 92 passed.
 
 | § | Clause | Status | Where / evidence |
 |---|---|---|---|
@@ -25,7 +25,7 @@ Status: **T** = covered by an automated test (real PostgreSQL / browser) · **C*
 | 05 | Admin-only stock adjustment with reason; positive uses latest lot cost | T | test_e2e_serialized_stock_control |
 | 05 | Purchase cost/qty/date correction recalculates FIFO + audit | T | test_e2e_requirements_audit |
 | 05 | Returned stock keeps cost lineage | T | test_return_refund_payment |
-| 05 | Internal-use movement | P | no separate type: record it as Damage/Loss or Adjustment with reason "internal use" (traceable, in audit) |
+| 05 | Internal-use movement | T | damage/loss records have a type DAMAGE / LOSS / INTERNAL_USE (migration 0034); Admin panel "Damage / Loss Records" can record all three; counted as a loss in profit |
 | 06 | Sale flow, invoice numbers never reused after void | T | test_e2e_sale_void |
 | 06 | Cash/Card/Online, split payment | T | test_sales_service |
 | 06 | Discount limit per user, excess needs Admin approval | T | test_e2e_discount_approval + browser |
@@ -36,7 +36,7 @@ Status: **T** = covered by an automated test (real PostgreSQL / browser) · **C*
 | 07 | Exchange = one return + separate new sale, drawer example (+700) | T | test_e2e_requirements |
 | 07 | Good return restocks; damaged return -> Damage/Loss | T | test_return_refund_payment |
 | 07 | Admin reverses damage through audited restock | T | **new** test_e2e_damage_restock (+ Admin panel "Damage / Loss Records") |
-| 07 | "Cashier marks exchange damage, Admin finalizes" | P | damage is effective at once (booked APPROVED); Admin can reverse by restock. No separate pending state |
+| 07 | "Cashier marks exchange damage, Admin finalizes" | T | cashier-marked return/exchange damage is PENDING; Admin Finalize (re-auth, audited) or Restock; test_e2e_damage_restock |
 | 08 | Cashier purchase without cost; stock up immediately; no payment method | T | test_e2e_purchase_no_payment_method, test_purchase_contract |
 | 08 | Admin pending cost, item-by-item, immutable lots, controlled correction | T | test_locked_completion, audit tests |
 | 09 | REP-000001 IDs, statuses, form fields | T | test_e2e_repair_day_warranty |
@@ -71,5 +71,7 @@ Status: **T** = covered by an automated test (real PostgreSQL / browser) · **C*
 ## Changes made during this audit
 Sale void (Admin), stale cost after correction, lost-bill search, month comparison, compatible models, damage/loss approval re-auth, repair payment reversal (+drawer follows), cashier backup status, **damage restock**, forced password change after reset, IMEI-safe stock adjust/damage.
 
+Note: a damaged item whose purchase cost is still pending cannot be restocked until Admin completes that cost (otherwise the restock would have no cost lineage).
+
 ## Still open
-Hardware/Windows/LAN/Drive (H rows) and the two **P** rows above. Everything else on the list is implemented; "C" rows are worth a quick look during the pilot.
+Hardware/Windows/LAN/Drive (H rows). No P rows remain. Everything else on the list is implemented; "C" rows are worth a quick look during the pilot.

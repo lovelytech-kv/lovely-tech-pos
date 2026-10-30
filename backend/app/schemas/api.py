@@ -307,6 +307,7 @@ class DamageLossIn(BaseModel):
     item_id: UUID
     quantity: Decimal = Field(gt=0)
     reason: str = Field(min_length=1)
+    loss_type: Literal["DAMAGE","LOSS","INTERNAL_USE"] = "DAMAGE"
     serialized_unit_ids: list[UUID] | None = None   # required for IMEI-tracked items: which phones are damaged/lost
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
 
