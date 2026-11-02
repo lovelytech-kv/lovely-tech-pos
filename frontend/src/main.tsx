@@ -23,6 +23,7 @@ import {
   requiresAdminSetup,
   isTransientSetupState,
 } from './services/machine-config';
+import { ThemeProvider } from './theme/ThemeProvider';
 import './styles.css';
 
 // Shows the real error instead of a blank white screen, so problems can be reported and fixed quickly.
@@ -249,7 +250,9 @@ function App() {
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

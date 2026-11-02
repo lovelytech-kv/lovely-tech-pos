@@ -1,5 +1,8 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { checkServerHealth } from '../api/client';
+import { ThemeToggle } from '../theme/ThemeToggle';
+import { NAV_ITEMS, getNavForRole } from '../config/navigation';
+import { loadPermissions, getDefaultPermissions, type Permission } from '../config/permissions';
 
 type User = { display_name: string; role: string; branch_id: string };
 
@@ -11,30 +14,19 @@ type Props = {
   children: ReactNode;
 };
 
-const primary = [
-  ['Dashboard', 'Overview'], ['Sales', 'POS'], ['Items', 'Inventory'], ['Customers', 'Customers'],
-  ['Repairs', 'Repairs'], ['Warranty', 'Warranty'], ['Stock', 'Stock'], ['Purchases', 'Purchases'],
-  ['Cash/Day', 'Cash / Day'], ['Reports', 'Reports'],
-] as const;
-const more = [['Returns', 'Returns'], ['Expenses', 'Expenses'], ['Documents', 'Documents'], ['Settings', 'Settings']] as const;
-
-const glyph: Record<string, string> = { Dashboard:'⌂', Sales:'▣', Items:'▤', Customers:'♙', Repairs:'⚒', Warranty:'✓', Stock:'▦', Purchases:'⇩', 'Cash/Day':'◉', Reports:'▥', Returns:'↩', Expenses:'¤', Documents:'▧', Settings:'⚙', Admin:'◆', Backup:'↥' };
-
 export function DashboardLayout({ user, activeKey, onNavigate, onLogout, children }: Props) {
-  const [serverState, setServerState] = useState<'checking'|'online'|'offline'>('checking');
+  const [serverState, setServerState] = useState<'checking' | 'online' | 'offline'>('checking');
   const searchRef = useRef<HTMLInputElement>(null);
   const isAdmin = user.role.toUpperCase() === 'ADMIN';
-  useEffect(() => {
-    const theme = (localStorage.getItem('ltpos_theme') || 'light') as 'light'|'dark'|'system';
-    const accent = localStorage.getItem('ltpos_accent') || '#df3b32';
-    const density = localStorage.getItem('ltpos_density') || 'comfortable';
-    const resolved = theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
-    document.documentElement.dataset.theme = resolved;
-    document.documentElement.dataset.density = density;
-    document.documentElement.style.setProperty('--accent', accent);
-    const n = parseInt(accent.replace('#',''), 16);
-    document.documentElement.style.setProperty('--accent-rgb', `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`);
-  }, []);
+
+  const role = isAdmin ? 'ADMIN' : 'CASHIER';
+  const permissions: Permission[] = loadPermissions()[role] ?? getDefaultPermissions(role);
+  const navItems = getNavForRole(role, permissions);
+  const primaryItems = navItems.filter((item) => item.group === 'primary');
+  const moreItems = navItems.filter((item) => item.group === 'more');
+  const adminItems = navItems.filter((item) => item.group === 'admin');
+
+  // Server health check (unchanged).
   useEffect(() => {
     let alive = true;
     const check = async () => {
@@ -53,7 +45,11 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
     window.addEventListener('keydown', focusSearch);
     return () => { alive = false; window.clearInterval(timer); window.removeEventListener('keydown', focusSearch); };
   }, []);
-  const activeLabel = [...primary, ...more, ...(isAdmin ? [['Admin','Admin'],['Backup','Backup']] as const : [])].find(([, key]) => key === activeKey)?.[0] ?? 'Lovely Tech POS';
+
+  // Preserved from original: match by label and return key. Keeps existing page-title behavior.
+  const activeLabelSource = isAdmin ? NAV_ITEMS : NAV_ITEMS.filter((item) => !item.adminOnly);
+  const activeLabel = activeLabelSource.find((item) => item.label === activeKey)?.key ?? 'Lovely Tech POS';
+
   return (
     <main className="v0-shell">
       <aside className="v0-sidebar glass-card">
@@ -64,12 +60,40 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
         <div className="v0-sidebar-scroll">
           <div className="v0-sidebar-label">Workspace</div>
           <nav className="v0-nav" aria-label="Main navigation">
-            {primary.map(([key, label]) => <button key={key} className={activeKey === key ? 'active' : ''} onClick={() => onNavigate(key)}><span className="nav-icon">{glyph[key]}</span><span>{label}</span>{key === 'Sales' && <b className="nav-badge">POS</b>}</button>)}
+            {primaryItems.map((item) => (
+              <button
+                key={item.key}
+                className={activeKey === item.key ? 'active' : ''}
+                onClick={() => onNavigate(item.key)}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span>{item.label}</span>
+                {item.key === 'Sales' && <b className="nav-badge">POS</b>}
+              </button>
+            ))}
           </nav>
           <div className="v0-sidebar-label more-label">More</div>
           <nav className="v0-nav v0-nav-secondary">
-            {more.map(([key, label]) => <button key={key} className={activeKey === key ? 'active' : ''} onClick={() => onNavigate(key)}><span className="nav-icon">{glyph[key]}</span><span>{label}</span></button>)}
-            {isAdmin && <><button className={activeKey === 'Admin' ? 'active' : ''} onClick={() => onNavigate('Admin')}><span className="nav-icon">{glyph.Admin}</span><span>Admin</span></button><button className={activeKey === 'Backup' ? 'active' : ''} onClick={() => onNavigate('Backup')}><span className="nav-icon">{glyph.Backup}</span><span>Backup</span></button></>}
+            {moreItems.map((item) => (
+              <button
+                key={item.key}
+                className={activeKey === item.key ? 'active' : ''}
+                onClick={() => onNavigate(item.key)}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            ))}
+            {adminItems.map((item) => (
+              <button
+                key={item.key}
+                className={activeKey === item.key ? 'active' : ''}
+                onClick={() => onNavigate(item.key)}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            ))}
           </nav>
         </div>
         <div className="v0-sidebar-footer">
@@ -84,6 +108,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
           <div className="v0-header-actions">
             <label className="global-search"><span>⌕</span><input ref={searchRef} aria-label="Quick search" placeholder="Search products, customers, invoices..." onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLInputElement).blur(); }} /><kbd>Ctrl K</kbd></label>
             <span className={`header-status header-${serverState}`} aria-live="polite"><i className="online-dot" /> {serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Checking…'}</span>
+            <ThemeToggle />
             <button className="icon-button" aria-label="Notifications">♢</button>
             <button className="header-avatar" aria-label="Account" onClick={onLogout}>{user.display_name.slice(0,1).toUpperCase()}</button>
           </div>

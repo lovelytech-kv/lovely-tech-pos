@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { AdminManualServerPanel } from '../../components/AdminManualServerPanel';
+import { PermissionMatrix } from './PermissionMatrix';
 
 type Theme = 'light' | 'dark' | 'system';
 const accents = [
@@ -45,6 +46,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
       <div className="glass-panel settings-card"><div className="settings-card-title"><div><h3>Accent colour</h3><p className="muted">Choose the highlight colour used across the POS.</p></div><span className="settings-symbol">✦</span></div><div className="accent-grid">{accents.map(a => <button key={a.value} className={`accent-choice ${accent === a.value ? 'selected' : ''}`} style={{ '--swatch': a.value } as CSSProperties} onClick={() => setAccent(a.value)}><span className="accent-swatch" /><span>{a.name}</span>{accent === a.value && <b>✓</b>}</button>)}</div></div>
       <div className="glass-panel settings-card"><div className="settings-card-title"><div><h3>Workspace density</h3><p className="muted">Use compact spacing when the POS screen needs more information.</p></div><span className="settings-symbol">▦</span></div><label className="toggle-row"><span><b>{compact ? 'Compact' : 'Comfortable'}</b><small>Card and control spacing</small></span><input type="checkbox" checked={compact} onChange={e => setCompact(e.target.checked)} /><i /></label></div>
       <div className="glass-panel settings-card settings-about"><div className="settings-card-title"><div><h3>Lovely Tech POS</h3><p className="muted">UI preferences only. Business rules, permissions and financial calculations remain server-controlled.</p></div><span className="brand-mark">LT</span></div><div className="settings-facts"><span><small>Role</small><b>{isAdmin ? 'Administrator' : 'Cashier'}</b></span><span><small>Theme</small><b>{theme}</b></span><span><small>Accent</small><b>{accents.find(a => a.value === accent)?.name || 'Custom'}</b></span></div></div>
+      <PermissionMatrix />
     </div>
   </section>;
 }

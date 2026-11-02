@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer components {
   /* Glass card with visible backdrop blur */
@@ -338,3 +336,194 @@ html,body,#root{height:100%;max-height:100%}
 .status-good{color:#2e7d52;font-weight:700;font-size:12px}
 [data-theme="dark"] .manual-error{color:#ff9a9a}
 [data-theme="dark"] .status-good{color:#7fdcb0}
+
+/* ============================================================
+   PHASE 1 ADDITIONS — Theme, Performance, Accessibility
+   Added: Performance mode, touch targets, focus styles
+   ============================================================ */
+
+/* ─── PERFORMANCE MODE ─────────────────────────────────────
+   Disables blur, animations, transitions for older laptops.
+   Toggle with: document.documentElement.dataset.performance = "on" | "off"
+   ───────────────────────────────────────────────────────── */
+
+:root[data-performance="on"] .glass-card,
+:root[data-performance="on"] .glass-panel,
+:root[data-performance="on"] .glass,
+:root[data-performance="on"] .discovery-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:root[data-performance="on"] .glass-card {
+  background: #ffffff;
+  border-color: #e7e7e9;
+  box-shadow: 0 2px 8px rgba(20, 20, 30, 0.06);
+}
+:root[data-performance="on"][data-theme="dark"] .glass-card {
+  background: #15171b;
+  border-color: #292c33;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+:root[data-performance="on"] .glass-panel {
+  background: #fafafa;
+}
+:root[data-performance="on"][data-theme="dark"] .glass-panel {
+  background: #1b1d22;
+}
+
+/* Kill all animations in performance mode */
+:root[data-performance="on"] .rise-in,
+:root[data-performance="on"] .metric-animated,
+:root[data-performance="on"] .delay-1,
+:root[data-performance="on"] .delay-2 {
+  animation: none !important;
+  transition: none !important;
+}
+:root[data-performance="on"] .metric-animated:hover {
+  transform: none !important;
+}
+
+/* ─── TOUCH TARGETS (44x44 min) ───────────────────────────
+   Modern POS standard for touchscreens.
+   Only applies on touch devices (pointer: coarse).
+   ───────────────────────────────────────────────────────── */
+
+@media (pointer: coarse) {
+  .v0-nav button,
+  .btn-primary,
+  .btn-secondary,
+  .quick-actions button,
+  .payment-grid button,
+  .button-row button,
+  button[role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .icon-button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  .header-avatar {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  .v0-nav button {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
+/* ─── KEYBOARD FOCUS VISIBILITY ───────────────────────────
+   Clear focus ring for keyboard navigation.
+   Only shows on keyboard focus (not on mouse click).
+   ───────────────────────────────────────────────────────── */
+
+button:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Remove default focus outline only when focus-visible is supported */
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ─── SMOOTH THEME TRANSITIONS ────────────────────────────
+   Smooth color changes when switching theme.
+   Skipped in performance mode.
+   ───────────────────────────────────────────────────────── */
+
+:root:not([data-performance="on"]) body,
+:root:not([data-performance="on"]) .v0-shell,
+:root:not([data-performance="on"]) .glass-card,
+:root:not([data-performance="on"]) .glass-panel,
+:root:not([data-performance="on"]) .surface-card {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* ─── HOME DASHBOARD — DATE/TIME PROMINENCE ───────────────
+   Utility class for the home dashboard date-time display.
+   ───────────────────────────────────────────────────────── */
+
+.date-time-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--muted);
+}
+.date-time-display .date {
+  color: var(--muted);
+}
+.date-time-display .time {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.date-time-display .separator {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+/* ─── STATUS COLOR HELPERS (never color alone) ────────────
+   Add text/icon + color. Requirement: "Never rely on color alone."
+   ───────────────────────────────────────────────────────── */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.status-badge::before {
+  content: "●";
+  font-size: 8px;
+}
+.status-badge.status-success {
+  background: rgba(34, 197, 94, 0.1);
+  color: #15803d;
+}
+.status-badge.status-warning {
+  background: rgba(234, 179, 8, 0.12);
+  color: #a16207;
+}
+.status-badge.status-danger {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+.status-badge.status-info {
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+}
+[data-theme="dark"] .status-badge.status-success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+[data-theme="dark"] .status-badge.status-warning {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+}
+[data-theme="dark"] .status-badge.status-danger {
+  background: rgba(220, 38, 38, 0.18);
+  color: #f87171;
+}
+[data-theme="dark"] .status-badge.status-info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
