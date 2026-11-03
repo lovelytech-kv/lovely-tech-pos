@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { money } from '../../services/money';
+import { intInputProps } from '../../utils/numberInput';
+import { useModal } from '../../ui/modals';
 
 type Props = { isAdmin: boolean; onError: (message: string) => void };
 
@@ -52,6 +54,7 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
   const [manualCustomer, setManualCustomer] = useState('');
   const [manualNotes, setManualNotes] = useState('');
   const [outcomeQuantity, setOutcomeQuantity] = useState<Record<string, string>>({});
+  const modal = useModal();
 
   async function loadClaims() {
     try {
@@ -135,9 +138,20 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
   }
 
   async function decision(claim: Claim, path: string, body: Record<string, unknown>) {
+    const writeOff = path === 'damage' || (path === 'supplier-outcome' && String(body.outcome || '').includes('DAMAGE'));
+    let pw = '';
+    if (writeOff) {
+      const result = await modal.prompt({
+        title: 'Admin re-authentication',
+        message: 'Enter admin password to approve damage/loss write-off',
+        placeholder: 'Password',
+        confirmText: 'Approve',
+      });
+      if (result == null) return;
+      pw = result;
+      if (!pw.trim()) { onError('Admin password is required for damage/loss write-off.'); return; }
+    }
     try {
-      const writeOff = path === 'damage' || (path === 'supplier-outcome' && String(body.outcome || '').includes('DAMAGE'));
-      const pw = writeOff ? (window.prompt('Admin password (re-authentication required)') || '') : '';
       const target = writeOff ? path + '?admin_password=' + encodeURIComponent(pw) : path;
       await api(`/warranty/claims/${encodeURIComponent(claim.claim_id)}/${target}`, {
         method: 'POST',
@@ -227,7 +241,7 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
               <option value="CHECKING ONLY">CHECKING ONLY</option>
               <option value="CUSTOM">CUSTOM</option>
             </select>
-            {(warrantyType === 'DAYS' || warrantyType === 'MONTHS') && <input type="number" min="1" value={duration} onChange={(event) => setDuration(event.target.value)} placeholder="Duration" />}
+            {(warrantyType === 'DAYS' || warrantyType === 'MONTHS') && <input {...intInputProps(duration, setDuration, 1)} placeholder="Duration" />}
             {warrantyType === 'CUSTOM' && <input value={customRule} onChange={(event) => setCustomRule(event.target.value)} placeholder="Custom rule, e.g. 45 DAYS" />}
             <button onClick={() => void calculate()}>Calculate</button>
           </div>
@@ -251,7 +265,7 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
             <option value="">Select item</option>
             {items.map((item) => <option key={item.item_id} value={item.item_id}>{item.item_code} · {item.description}</option>)}
           </select>
-          <input type="number" min="0.001" step="0.001" value={claimQuantity} onChange={(event) => setClaimQuantity(event.target.value)} placeholder="Quantity" />
+          <input {...intInputProps(claimQuantity, setClaimQuantity, 1)} placeholder="Quantity" />
           <input value={warrantyId} onChange={(event) => setWarrantyId(event.target.value)} placeholder="Product warranty ID (optional)" />
           <input value={claimNotes} onChange={(event) => setClaimNotes(event.target.value)} placeholder="Reported issue / claim notes" />
           <button disabled={!itemId} onClick={() => void createClaim()}>Create Warranty Claim</button>
@@ -276,11 +290,7 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
               {isAdmin && claim.admin_decision === 'SUPPLIER_WARRANTY_CLAIM' && !claim.replacement_outcome && (
                 <div className="button-row">
                   <input
-                    type="number"
-                    min="0.001"
-                    step="0.001"
-                    value={outcomeQuantity[claim.claim_id] ?? String(claim.quantity)}
-                    onChange={(event) => setOutcomeQuantity((current) => ({ ...current, [claim.claim_id]: event.target.value }))}
+                    {...intInputProps(outcomeQuantity[claim.claim_id] ?? String(claim.quantity), (v) => setOutcomeQuantity((current) => ({ ...current, [claim.claim_id]: v })), 1)}
                     aria-label={`Supplier outcome quantity for ${claim.claim_no}`}
                   />
                   <button onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'REPLACEMENT', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Replacement received from supplier' })}>Replacement Received</button>

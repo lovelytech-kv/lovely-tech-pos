@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { money } from '../../services/money';
+import { moneyInputProps, intInputProps } from '../../utils/numberInput';
 
 type Item = { item_id: string; item_code: string; description: string; stock: string | number; sale_price?: string | number | null; is_serialized?: boolean };
 type Line = Item & { quantity: string; serials?: string };
@@ -165,7 +166,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
       <div className="form-grid compact">
         <label>Date<input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
         <label>Reference<input value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier invoice / GRN" /></label>
-        <label>Quantity<input type="number" min="0.001" step="0.001" value={quantity} onChange={e => setQuantity(e.target.value)} /></label>
+        <label>Quantity<input {...intInputProps(quantity, setQuantity, 1)} /></label>
 
         {isAdmin && <label>Supplier<select value={supplierId} onChange={e => setSupplierId(e.target.value)}><option value="">No supplier</option>{suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}</select></label>}
       </div>
@@ -181,7 +182,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
     {isAdmin && <>
       <div className="glass panel">
         <div className="section-head"><div><h2>Admin · Pending Buy Cost</h2><p className="muted">Complete unresolved unit costs using optimistic-lock versions.</p></div><button onClick={loadAdminData}>Refresh</button></div>
-        {!pending.length ? <p className="muted">No pending purchase costs.</p> : pending.map(row => <div className="pending-cost-row" key={row.purchase_line_id}><div><b>{row.reference_no || 'Purchase'}</b><span>{row.purchase_date} · Qty {row.quantity} · Line v{row.version ?? '—'} / Purchase v{row.purchase_version ?? '—'}</span></div><input className="cost-input" type="number" min="0" step="0.01" value={costs[row.purchase_line_id] || ''} onChange={e => setCosts(prev => ({ ...prev, [row.purchase_line_id]: e.target.value }))} placeholder="Buy cost"/><button onClick={() => completeCost(row)}>Complete Cost</button></div>)}
+        {!pending.length ? <p className="muted">No pending purchase costs.</p> : pending.map(row => <div className="pending-cost-row" key={row.purchase_line_id}><div><b>{row.reference_no || 'Purchase'}</b><span>{row.purchase_date} · Qty {row.quantity} · Line v{row.version ?? '—'} / Purchase v{row.purchase_version ?? '—'}</span></div><input {...moneyInputProps(costs[row.purchase_line_id] || '', (v) => setCosts(prev => ({ ...prev, [row.purchase_line_id]: v })))} className="cost-input" placeholder="Buy cost"/><button onClick={() => completeCost(row)}>Complete Cost</button></div>)}
       </div>
 
       <div className="glass panel">
@@ -194,7 +195,17 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
       </div>
 
       {correction && <div className="glass panel correction-panel"><div className="section-head"><div><span className="eyebrow">ADMIN RE-AUTH</span><h3>Correct {correction.field}</h3><p className="muted">{correction.row.item_code} · audited correction with version check.</p></div><button className="icon-button" onClick={() => setCorrection(null)}>×</button></div>
-        {correction.field === 'supplier' ? <select value={correctionValue} onChange={e => setCorrectionValue(e.target.value)}><option value="">Clear supplier</option>{suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}</select> : <input type={correction.field === 'date' ? 'date' : correction.field === 'quantity' || correction.field === 'cost' ? 'number' : 'text'} min={correction.field === 'quantity' ? '0.001' : correction.field === 'cost' ? '0' : undefined} step={correction.field === 'quantity' ? '0.001' : correction.field === 'cost' ? '0.01' : undefined} value={correctionValue} onChange={e => setCorrectionValue(e.target.value)} />}
+        {correction.field === 'supplier' ? (
+          <select value={correctionValue} onChange={e => setCorrectionValue(e.target.value)}><option value="">Clear supplier</option>{suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}</select>
+        ) : correction.field === 'date' ? (
+          <input type="date" value={correctionValue} onChange={e => setCorrectionValue(e.target.value)} />
+        ) : correction.field === 'quantity' ? (
+          <input {...intInputProps(correctionValue, setCorrectionValue, 1)} />
+        ) : correction.field === 'cost' ? (
+          <input {...moneyInputProps(correctionValue, setCorrectionValue)} />
+        ) : (
+          <input type="text" value={correctionValue} onChange={e => setCorrectionValue(e.target.value)} />
+        )}
         <label className="wide-field">Reason<textarea value={correctionReason} onChange={e => setCorrectionReason(e.target.value)} placeholder="Why is this correction required?" /></label>
         <label className="wide-field">Admin password<input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="Re-authentication" /></label>
         <div className="form-actions"><button disabled={savingCorrection} onClick={applyCorrection}>{savingCorrection ? 'Applying…' : 'Apply Audited Correction'}</button><button className="icon-button" onClick={() => setCorrection(null)}>Cancel</button></div>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
+import { moneyInputProps, intInputProps } from '../../utils/numberInput';
+import { useModal } from '../../ui/modals';
 
 const DENOMS = [5000, 2000, 1000, 500, 100, 50, 20] as const;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -24,6 +26,7 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
   const [correctionCash, setCorrectionCash] = useState('');
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionDenoms, setCorrectionDenoms] = useState<Record<string,string>>({});
+  const modal = useModal();
 
   const counted = useMemo(() => DENOMS.reduce((sum, d) => sum + d * Number(counts[String(d)] || 0), 0), [counts]);
   const openingCounted = useMemo(() => DENOMS.reduce((sum, d) => sum + d * Number(openingDenoms[String(d)] || 0), 0), [openingDenoms]);
@@ -54,9 +57,6 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     } catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
-  // Shift End / Day End take an automatic backup first (with automatic retries on the server).
-  // The server answers 202 {backup_status:'RUNNING'} until the backup is verified; we simply ask again,
-  // and the close completes only after the backup passes. A failure comes back as an error (HTTP 503).
   async function closeAfterBackup(path: string, body: unknown, what: string) {
     try {
       for (;;) {
@@ -113,14 +113,24 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     if (!correctionCash || Number(correctionCash)<0 || Math.abs(denomTotal-Number(correctionCash))>0.0001) return onError?.('Opening cash must equal the denomination total.');
     if (!correctionReason.trim()) return onError?.('Opening correction reason is required.');
     if (status.version == null) return onError?.('Day version is missing; refresh before correcting opening cash.');
-    const password = window.prompt('Admin password (re-authentication required)') || '';
+    const password = await modal.prompt({
+      title: 'Admin re-authentication',
+      message: 'Enter admin password to correct opening cash',
+      placeholder: 'Password',
+      confirmText: 'Correct',
+    });
     if (!password) return;
     try { setBusy(true); await api(`/day/opening-correction?admin_password=${encodeURIComponent(password)}`, { method:'POST', body:JSON.stringify({day_session_id:status.day_session_id,opening_cash:correctionCash,denominations:Object.fromEntries(DENOMS.map(d=>[String(d),Number(correctionDenoms[String(d)]||0)])),reason:correctionReason.trim(),version:status.version}) }); setCorrectionCash(''); setCorrectionReason(''); setCorrectionDenoms({}); await load(); } catch(e){ onError?.((e as Error).message); } finally { setBusy(false); }
   }
 
   async function reopen() {
     if (!isAdmin || !status?.business_date || busy) return;
-    const password = window.prompt('Admin password (re-authentication required)') || '';
+    const password = await modal.prompt({
+      title: 'Admin re-authentication',
+      message: 'Enter admin password to reopen the closed business day',
+      placeholder: 'Password',
+      confirmText: 'Reopen',
+    });
     if (!password) return;
     try { setBusy(true); await api(`/day/reopen?admin_password=${encodeURIComponent(password)}`, { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }
     catch (e) { onError?.((e as Error).message); } finally { setBusy(false); }
@@ -135,12 +145,12 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
 
     {backupMsg && <div className="glass panel" role="status" aria-live="polite"><b>⏳ {backupMsg}</b></div>}
 
-    {!status?.day_session_id && <div className="glass panel"><h3>Day Start</h3><div className="form-grid compact"><label>Opening Cash<input type="number" min="0" step="0.01" value={opening} onChange={e => setOpening(e.target.value)} placeholder={openingCounted.toFixed(2)} /></label></div><div className="denomination-grid">{DENOMS.map(d => <label key={`open-${d}`}><span>Rs. {d}</span><input inputMode="numeric" type="number" min="0" step="1" value={openingDenoms[String(d)] || ''} onChange={e => setDenom('open', d, e.target.value)} placeholder="0" /><small>× Rs. {d * Number(openingDenoms[String(d)] || 0)}</small></label>)}</div><div className="cash-total-box"><span>Denomination Total</span><strong>Rs. {openingCounted.toFixed(2)}</strong></div><button disabled={busy} onClick={startDay}>{busy ? 'Starting…' : 'Start Day'}</button></div>}
+    {!status?.day_session_id && <div className="glass panel"><h3>Day Start</h3><div className="form-grid compact"><label>Opening Cash<input {...moneyInputProps(opening, setOpening)} placeholder={openingCounted.toFixed(2)} /></label></div><div className="denomination-grid">{DENOMS.map(d => <label key={`open-${d}`}><span>Rs. {d}</span><input {...intInputProps(openingDenoms[String(d)] || '', (v) => setDenom('open', d, v), 0)} placeholder="0" /><small>× Rs. {d * Number(openingDenoms[String(d)] || 0)}</small></label>)}</div><div className="cash-total-box"><span>Denomination Total</span><strong>Rs. {openingCounted.toFixed(2)}</strong></div><button disabled={busy} onClick={startDay}>{busy ? 'Starting…' : 'Start Day'}</button></div>}
 
     {open && <>
-      {isAdmin && <div className="glass panel"><h3>Admin · Opening Cash Correction</h3><p className="muted">Use only when the recorded Day Start opening cash is wrong. Every correction is re-authenticated and audited.</p><div className="form-grid compact"><input type="number" min="0" step="0.01" placeholder="Correct opening cash" value={correctionCash} onChange={e=>setCorrectionCash(e.target.value)}/><input placeholder="Correction reason" value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)}/></div><div className="denomination-grid">{DENOMS.map(d=><label key={`correct-${d}`}><span>Rs. {d}</span><input inputMode="numeric" type="number" min="0" step="1" value={correctionDenoms[String(d)]||''} onChange={e=>setCorrectionDenoms(prev=>({...prev,[String(d)]:e.target.value}))}/></label>)}</div><div className="cash-total-box"><span>Corrected denomination total</span><strong>Rs. {DENOMS.reduce((sum,d)=>sum+d*Number(correctionDenoms[String(d)]||0),0).toFixed(2)}</strong></div><button disabled={busy||!correctionCash||!correctionReason.trim()} onClick={correctOpening}>Correct Opening Cash</button></div>}
-      <div className="glass panel"><h3>During Business</h3><div className="form-grid compact"><select value={reloadProvider} onChange={e => setReloadProvider(e.target.value)}><option>Dialog</option><option>Airtel</option><option>Mobitel</option><option>Hutch</option></select><input type="number" min="0.01" step="0.01" placeholder="Day-End Reload" value={reload} onChange={e => setReload(e.target.value)} /><button disabled={busy || !reload} onClick={addReload}>Add Reload</button><input type="number" min="0.01" step="0.01" placeholder="Other Cash In" value={cashIn} onChange={e => setCashIn(e.target.value)} /><button disabled={busy || !cashIn} onClick={addCashIn}>Add Cash In</button></div><p className="muted">Reload is recorded once for Day End. Other Cash In is a separate cash transaction.</p></div>
-      <div className="glass panel"><h3>Physical Cash Count</h3><div className="denomination-grid">{DENOMS.map(d => <label key={d}><span>Rs. {d}</span><input inputMode="numeric" type="number" min="0" step="1" value={counts[String(d)] || ''} onChange={e => setDenom('actual', d, e.target.value)} placeholder="0" /><small>× Rs. {d * Number(counts[String(d)] || 0)}</small></label>)}</div><div className="cash-total-box"><span>Actual Cash</span><strong>Rs. {counted.toFixed(2)}</strong></div><label className="wide-field">Mandatory Day End Reason<textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Explain any difference or closing note" /></label><label className="wide-field">Optional Note<textarea value={note} onChange={e => setNote(e.target.value)} /></label><div className="form-actions"><button disabled={busy || !cashCountStarted || !reason.trim()} onClick={dayEnd}>{busy ? 'Closing…' : 'Complete Day End'}</button>{status?.status === 'OPEN' && <button className="ghost" disabled={busy} onClick={shiftEnd}>Cashier Shift End</button>}</div></div>
+      {isAdmin && <div className="glass panel"><h3>Admin · Opening Cash Correction</h3><p className="muted">Use only when the recorded Day Start opening cash is wrong. Every correction is re-authenticated and audited.</p><div className="form-grid compact"><input {...moneyInputProps(correctionCash, setCorrectionCash)} placeholder="Correct opening cash"/><input placeholder="Correction reason" value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)}/></div><div className="denomination-grid">{DENOMS.map(d=><label key={`correct-${d}`}><span>Rs. {d}</span><input {...intInputProps(correctionDenoms[String(d)]||'', (v)=>setCorrectionDenoms(prev=>({...prev,[String(d)]:v})), 0)}/></label>)}</div><div className="cash-total-box"><span>Corrected denomination total</span><strong>Rs. {DENOMS.reduce((sum,d)=>sum+d*Number(correctionDenoms[String(d)]||0),0).toFixed(2)}</strong></div><button disabled={busy||!correctionCash||!correctionReason.trim()} onClick={correctOpening}>Correct Opening Cash</button></div>}
+      <div className="glass panel"><h3>During Business</h3><div className="form-grid compact"><select value={reloadProvider} onChange={e => setReloadProvider(e.target.value)}><option>Dialog</option><option>Airtel</option><option>Mobitel</option><option>Hutch</option></select><input {...moneyInputProps(reload, setReload)} placeholder="Day-End Reload" /><button disabled={busy || !reload} onClick={addReload}>Add Reload</button><input {...moneyInputProps(cashIn, setCashIn)} placeholder="Other Cash In" /><button disabled={busy || !cashIn} onClick={addCashIn}>Add Cash In</button></div><p className="muted">Reload is recorded once for Day End. Other Cash In is a separate cash transaction.</p></div>
+      <div className="glass panel"><h3>Physical Cash Count</h3><div className="denomination-grid">{DENOMS.map(d => <label key={d}><span>Rs. {d}</span><input {...intInputProps(counts[String(d)] || '', (v) => setDenom('actual', d, v), 0)} placeholder="0" /><small>× Rs. {d * Number(counts[String(d)] || 0)}</small></label>)}</div><div className="cash-total-box"><span>Actual Cash</span><strong>Rs. {counted.toFixed(2)}</strong></div><label className="wide-field">Mandatory Day End Reason<textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Explain any difference or closing note" /></label><label className="wide-field">Optional Note<textarea value={note} onChange={e => setNote(e.target.value)} /></label><div className="form-actions"><button disabled={busy || !cashCountStarted || !reason.trim()} onClick={dayEnd}>{busy ? 'Closing…' : 'Complete Day End'}</button>{status?.status === 'OPEN' && <button className="ghost" disabled={busy} onClick={shiftEnd}>Cashier Shift End</button>}</div></div>
       {status?.status === 'SHIFT_ENDED' && isAdmin && <div className="glass panel"><h3>Continue Today Business</h3><p className="muted">Admin can continue the same business day within the allowed window.</p><button disabled={busy} onClick={continueBusiness}>Continue Today Business</button></div>}
     </>}
 

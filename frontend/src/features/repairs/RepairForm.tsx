@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
+import { moneyInputProps } from '../../utils/numberInput';
 
 export type RepairFormValues = {
   device_brand: string;
@@ -43,8 +44,6 @@ export function RepairForm({ onCreated, onError }: Props) {
     try {
       let created: { repair_id: string; repair_no: string } | null = pendingAdvance;
       if (!created) {
-        // The locked backend has no structured repair IMEI field. Preserve it in the
-        // repair's audited Special Note rather than silently losing it.
         const noteParts = [
           form.imei.trim() ? `IMEI/Serial: ${form.imei.trim()}` : '',
           form.special_note.trim(),
@@ -105,10 +104,10 @@ export function RepairForm({ onCreated, onError }: Props) {
         <label>Customer Name<input disabled={Boolean(pendingAdvance)} value={form.customer_name} onChange={e => set('customer_name', e.target.value)} placeholder="Optional" /></label>
         <label>Contact No.<input disabled={Boolean(pendingAdvance)} value={form.contact_no} onChange={e => set('contact_no', e.target.value)} placeholder="Optional" /></label>
         <label className="span-2">Given Accessories<input disabled={Boolean(pendingAdvance)} value={form.given_accessories} onChange={e => set('given_accessories', e.target.value)} placeholder="Charger, SIM tray..." /></label>
-        <label>Estimate (Rs)<input disabled={Boolean(pendingAdvance)} type="number" min="0" step="0.01" value={form.estimated_amount} onChange={e => set('estimated_amount', e.target.value)} /></label>
+        <label>Estimate (Rs)<input disabled={Boolean(pendingAdvance)} {...moneyInputProps(form.estimated_amount, (v) => set('estimated_amount', v))} /></label>
         <label>Warranty Period<input disabled={Boolean(pendingAdvance)} value={form.warranty_period} onChange={e => set('warranty_period', e.target.value)} placeholder="e.g. 30 DAYS" /></label>
         <label className="span-2">Reported Fault<textarea disabled={Boolean(pendingAdvance)} value={form.reported_fault} onChange={e => set('reported_fault', e.target.value)} placeholder="Customer reported fault" /></label>
-        <label>Advance Payment (Rs)<input disabled={Boolean(pendingAdvance)} type="number" min="0" step="0.01" value={pendingAdvance?.amount ?? form.advance_payment} onChange={e => set('advance_payment', e.target.value)} /></label>
+        <label>Advance Payment (Rs)<input disabled={Boolean(pendingAdvance)} {...moneyInputProps(pendingAdvance?.amount ?? form.advance_payment, (v) => set('advance_payment', v))} /></label>
         <label>Advance Method<select disabled={Boolean(pendingAdvance)} value={pendingAdvance?.method ?? form.advance_method} onChange={e => set('advance_method', e.target.value as RepairFormValues['advance_method'])}><option value="CASH">Cash</option><option value="CARD">Card</option><option value="ONLINE">Online</option></select></label>
         <label className="span-3">Special Note<textarea disabled={Boolean(pendingAdvance)} value={form.special_note} onChange={e => set('special_note', e.target.value)} placeholder="Special instructions / notes" /></label>
       </div>

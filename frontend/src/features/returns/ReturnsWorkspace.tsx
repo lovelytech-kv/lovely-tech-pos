@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { money, moneyPositive } from '../../services/money';
+import { moneyInputProps, intInputProps } from '../../utils/numberInput';
 
 type Props = { isAdmin: boolean; onError: (message: string) => void };
 
@@ -263,12 +264,8 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
                     </div>
                     <input
                       className="qty-input"
-                      type="number"
-                      min="0"
+                      {...intInputProps(line.return_qty, (v) => updateLine(line.sale_line_id, { return_qty: v }), 0)}
                       max={line.quantity}
-                      step="0.001"
-                      value={line.return_qty}
-                      onChange={(event) => updateLine(line.sale_line_id, { return_qty: event.target.value })}
                       aria-label={`Return quantity for ${line.item_code}`}
                     />
                     <select value={line.condition} onChange={(event) => updateLine(line.sale_line_id, { condition: event.target.value as 'GOOD' | 'DAMAGED' })}>
@@ -285,7 +282,7 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
               </div>
 
               <div className="form-grid compact">
-                <input type="number" min="0" step="0.01" value={returnCharge} onChange={(event) => setReturnCharge(event.target.value)} placeholder="Return charge" />
+                <input {...moneyInputProps(returnCharge, setReturnCharge)} placeholder="Return charge" />
                 <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required return reason" />
               </div>
               <button disabled={busy} onClick={() => void completeReturn()}>{busy ? 'Processing return…' : 'Complete Return'}</button>
@@ -323,7 +320,7 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
                   <option value="CARD">Card</option>
                   <option value="ONLINE">Online</option>
                 </select>
-                <input type="number" min="0.01" step="0.01" value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} placeholder="Refund amount" />
+                <input {...moneyInputProps(refundAmount, setRefundAmount)} placeholder="Refund amount" />
                 <input value={refundReference} onChange={(event) => setRefundReference(event.target.value)} placeholder="Reference (optional)" />
               </div>
               <button disabled={!moneyPositive(refundAmount) || Number(refundAmount) > Number(returnInfo.remaining_refund)} onClick={() => void recordRefund()}>Record Refund Payment</button>

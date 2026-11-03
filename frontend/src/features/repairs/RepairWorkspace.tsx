@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { money } from '../../services/money';
+import { moneyInputProps, intInputProps } from '../../utils/numberInput';
+import { useModal } from '../../ui/modals';
 
 export type RepairRow = {
   repair_id: string;
@@ -72,6 +74,7 @@ export function RepairWorkspace({ isAdmin, onError }: Props) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [loading, setLoading] = useState(false);
+  const modal = useModal();
 
   const visibleRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -114,9 +117,7 @@ export function RepairWorkspace({ isAdmin, onError }: Props) {
 
   async function loadDetail(repairId: string, updateSelection = true) {
     try {
-      const result = await api<RepairDetail>(
-        `/repairs/${encodeURIComponent(repairId)}`,
-      );
+      const result = await api<RepairDetail>(`/repairs/${encodeURIComponent(repairId)}`);
       setDetail(result);
       if (updateSelection) setSelectedId(repairId);
     } catch (error) {
@@ -164,11 +165,16 @@ export function RepairWorkspace({ isAdmin, onError }: Props) {
 
   async function cancel() {
     if (!detail) return;
-    const reason = window.prompt('Cancellation reason')?.trim();
-    if (!reason) return;
+    const reason = await modal.prompt({
+      title: 'Cancel Repair',
+      message: 'Enter the cancellation reason',
+      placeholder: 'Reason',
+      confirmText: 'Cancel Repair',
+    });
+    if (!reason?.trim()) return;
     await action(`/repairs/${detail.repair_id}/cancel`, {
       version: detail.version,
-      reason,
+      reason: reason.trim(),
     });
   }
 
@@ -303,6 +309,7 @@ function RepairDetailPanel({
   const [partCharge, setPartCharge] = useState('0');
   const [partNote, setPartNote] = useState('');
   const [warranty, setWarranty] = useState<any>(null);
+  const modal = useModal();
 
   useEffect(() => {
     setFinalAmount(String(detail.final_amount ?? ''));
@@ -389,6 +396,45 @@ function RepairDetailPanel({
           `/repairs/${encodeURIComponent(detail.repair_id)}/warranty`,
         ),
       );
+    } catch (error) {
+      onError((error as Error).message);
+    }
+  }
+
+  async function approveDamageReview(part: RepairPart) {
+    const pw = await modal.prompt({
+      title: 'Admin re-authentication',
+      message: 'Enter admin password to approve damage/loss write-off',
+      placeholder: 'Password',
+      confirmText: 'Approve',
+    });
+    if (!pw) return;
+    await onAction(
+      `/repairs/${detail.repair_id}/part/${part.id}/damage-review?admin_password=${encodeURIComponent(pw)}`,
+      { approve: true, reject_reason: null },
+    );
+  }
+
+  async function reversePayment(payment: RepairPayment) {
+    const reason = await modal.prompt({
+      title: 'Reverse / Refund Payment',
+      message: 'Enter the reason for reversing this payment',
+      placeholder: 'Reason',
+    });
+    if (!reason?.trim()) return;
+    const pw = await modal.prompt({
+      title: 'Admin re-authentication',
+      message: 'Enter admin password to reverse this payment',
+      placeholder: 'Password',
+      confirmText: 'Reverse',
+    });
+    if (!pw) return;
+    try {
+      await api(
+        `/repairs/${detail.repair_id}/payments/${payment.id}/reverse?reason=${encodeURIComponent(reason.trim())}&admin_password=${encodeURIComponent(pw)}`,
+        { method: 'POST' },
+      );
+      await onReload();
     } catch (error) {
       onError((error as Error).message);
     }
@@ -485,19 +531,11 @@ function RepairDetailPanel({
           ))}
         </select>
         <input
-          type="number"
-          min="0.001"
-          step="0.001"
-          value={partQuantity}
-          onChange={(event) => setPartQuantity(event.target.value)}
+          {...intInputProps(partQuantity, setPartQuantity, 1)}
           placeholder="Qty"
         />
         <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={partCharge}
-          onChange={(event) => setPartCharge(event.target.value)}
+          {...moneyInputProps(partCharge, setPartCharge)}
           placeholder="Customer charge"
         />
         <input
@@ -551,14 +589,7 @@ function RepairDetailPanel({
 
               {isAdmin && part.status === 'DAMAGED_REVIEW' && (
                 <>
-                  <button
-                    onClick={() =>
-                      void onAction(
-                        `/repairs/${detail.repair_id}/part/${part.id}/damage-review?admin_password=${encodeURIComponent(window.prompt('Admin password (re-authentication required)') || '')}`,
-                        { approve: true, reject_reason: null },
-                      )
-                    }
-                  >
+                  <button onClick={() => void approveDamageReview(part)}>
                     Approve Damage/Loss
                   </button>
                   <button
@@ -583,19 +614,11 @@ function RepairDetailPanel({
       <h4>Final amount</h4>
       <div className="form-grid compact">
         <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={finalAmount}
-          onChange={(event) => setFinalAmount(event.target.value)}
+          {...moneyInputProps(finalAmount, setFinalAmount)}
           placeholder="Final repair amount"
         />
         <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={labourAmount}
-          onChange={(event) => setLabourAmount(event.target.value)}
+          {...moneyInputProps(labourAmount, setLabourAmount)}
           placeholder="Labour amount"
         />
         <input
@@ -645,23 +668,7 @@ function RepairDetailPanel({
               </button>
             )}
             {isAdmin && payment.payment_type === 'RECEIPT' && !detail.payments.some((x) => x.reversal_of_id === payment.id) && (
-              <button
-                className="danger-button"
-                onClick={async () => {
-                  const reason = window.prompt('Reason for reversing / refunding this payment (required)')?.trim();
-                  if (!reason) return;
-                  const adminPassword = window.prompt('Admin password (re-authentication required)') || '';
-                  try {
-                    await api(
-                      `/repairs/${detail.repair_id}/payments/${payment.id}/reverse?reason=${encodeURIComponent(reason)}&admin_password=${encodeURIComponent(adminPassword)}`,
-                      { method: 'POST' },
-                    );
-                    await onReload();
-                  } catch (error) {
-                    onError((error as Error).message);
-                  }
-                }}
-              >
+              <button className="danger-button" onClick={() => void reversePayment(payment)}>
                 Reverse / Refund
               </button>
             )}
@@ -676,11 +683,7 @@ function RepairDetailPanel({
           <option value="ONLINE">Online</option>
         </select>
         <input
-          type="number"
-          min="0.01"
-          step="0.01"
-          value={paymentAmount}
-          onChange={(event) => setPaymentAmount(event.target.value)}
+          {...moneyInputProps(paymentAmount, setPaymentAmount)}
           placeholder="Payment amount"
         />
         <input

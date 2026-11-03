@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, serverLogout } from '../../api/client';
-import { money, moneyAdd, moneySub, moneyTimesQty, moneyPositive, moneyEqual } from '../../services/money';
+import { money, moneyAdd, moneySub, moneyTimesQty, moneyPositive } from '../../services/money';
 import { DashboardLayout } from '../../layouts/DashboardLayout';
 import { RepairForm } from '../repairs/RepairForm';
 import { RepairWorkspace } from '../repairs/RepairWorkspace';
@@ -10,14 +10,18 @@ import { ReturnsWorkspace } from '../returns/ReturnsWorkspace';
 import { WarrantyWorkspace } from '../warranty/WarrantyWorkspace';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { HomeDashboard } from '../home/HomeDashboard';
+import { moneyInputProps, intInputProps, signedIntInputProps } from '../../utils/numberInput';
+import { toast } from '../../ui/toast';
 
 type User = { display_name:string; role:string; branch_id:string; username?:string };
 type WarrantyDefault = { warranty_type:string; duration_value?:number|null; custom_rule?:string|null };
 type Item = { item_id:string; item_code:string; description:string; sale_price:string|number|null; stock:string|number; brand?:string; model?:string; warranty_default?:WarrantyDefault|null; is_serialized?:boolean };
 type CartLine = Item & { line_id:string; serial_number?:string; quantity:string; price:string; discount:string; serialized_unit_id?:string; warranty_override?:WarrantyDefault|null };
+type DocType = 'SYSTEM_PRINTED' | 'MANUAL' | 'NO_PRINT';
 const today = () => new Date().toISOString().slice(0,10);
 
 const RECENT_KEY = 'ltpos_recent_items';
+const DEFAULT_DOC_KEY = 'ltpos_default_doc_type';
 
 function loadRecent(): Item[] {
   try {
@@ -39,6 +43,46 @@ function saveRecent(items: Item[]): void {
   }
 }
 
+function getDefaultDocType(): DocType {
+  try {
+    const v = localStorage.getItem(DEFAULT_DOC_KEY);
+    if (v === 'SYSTEM_PRINTED' || v === 'MANUAL' || v === 'NO_PRINT') return v;
+  } catch {
+    // ignore storage errors
+  }
+  return 'SYSTEM_PRINTED';
+}
+
+function buildReceiptHTML(sale: any): string {
+  const lines = Array.isArray(sale?.lines) ? sale.lines : [];
+  return `<!DOCTYPE html><html><head><title>Receipt ${sale?.invoice_no || ''}</title>
+    <style>
+      body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
+      h1{font-size:16px;text-align:center;margin:0 0 4px;}
+      .meta{text-align:center;font-size:11px;color:#333;margin-bottom:8px;}
+      .divider{border-top:1px dashed #000;margin:8px 0;}
+      .row{display:flex;justify-content:space-between;gap:8px;}
+      .line{padding:2px 0;}
+      .total{font-size:15px;font-weight:700;}
+      .foot{text-align:center;font-size:11px;margin-top:8px;}
+    </style></head><body>
+    <h1>Lovely Tech POS</h1>
+    <div class="meta">Invoice: ${sale?.invoice_no || '-'}<br/>${new Date().toLocaleString()}</div>
+    <div class="divider"></div>
+    ${lines.map((l: any) => `
+      <div class="line">
+        <div>${l.description || l.item_code || ''}</div>
+        <div class="row"><span>${l.quantity || '1'} × Rs. ${l.unit_price || '0'}</span><span>Rs. ${l.final_total || l.line_total || l.unit_price || '0'}</span></div>
+      </div>
+    `).join('')}
+    <div class="divider"></div>
+    <div class="row total"><span>TOTAL</span><span>Rs. ${sale?.grand_total || '0'}</span></div>
+    <div class="divider"></div>
+    <div class="foot">Thank you for shopping at Lovely Tech!</div>
+    <script>window.onload = function(){ window.print(); };</script>
+    </body></html>`;
+}
+
 
 export function POSHome({user,onLogout}:{user:User,onLogout:()=>void}) {
   const [tab,setTab]=useState('Dashboard'); const [error,setError]=useState('');
@@ -54,14 +98,14 @@ function CustomersTab({onError}:{onError:(x:string)=>void}){
   const [form,setForm]=useState({name:'',contact_no:'',notes:'',version:0});
   async function search(){try{setRows(await api<any[]>(`/customers?q=${encodeURIComponent(q.trim())}`))}catch(e){onError((e as Error).message)}}
   async function open(c:any){setSelected(c);setForm({name:c.name||'',contact_no:c.contact_no||'',notes:c.notes||'',version:Number(c.version||0)});setHistory(null)}
-  async function save(){if(!selected)return;try{setBusy(true);const r=await api<any>(`/customers/${selected.customer_id}`,{method:'PUT',body:JSON.stringify(form)});setSelected(r);setRows(x=>x.map(c=>c.customer_id===r.customer_id?r:c));setForm({name:r.name||'',contact_no:r.contact_no||'',notes:r.notes||'',version:r.version});alert('Customer updated.')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}
+  async function save(){if(!selected)return;try{setBusy(true);const r=await api<any>(`/customers/${selected.customer_id}`,{method:'PUT',body:JSON.stringify(form)});setSelected(r);setRows(x=>x.map(c=>c.customer_id===r.customer_id?r:c));setForm({name:r.name||'',contact_no:r.contact_no||'',notes:r.notes||'',version:r.version});toast.success('Customer updated.')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}
   async function create(){try{setBusy(true);const r=await api<any>('/customers',{method:'POST',body:JSON.stringify({name:form.name||null,contact_no:form.contact_no||null,notes:form.notes||null})});await search();open(r)}catch(e){onError((e as Error).message)}finally{setBusy(false)}}
   async function loadHistory(){if(!selected)return;try{setHistory(await api<any>(`/customers/${selected.customer_id}/history`))}catch(e){onError((e as Error).message)}}
   return <section className="split"><div className="glass panel"><div className="section-head"><div><span className="eyebrow">CUSTOMERS</span><h2>Customer directory</h2><p className="muted">Customer details are optional. History covers sales, repairs, warranty claims and settlements.</p></div><button onClick={search}>Search</button></div><div className="search-row"><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&search()} placeholder="Name or contact number"/><button onClick={search}>Find</button></div><div className="list-stack">{rows.map(c=><button className="list-row customer-row" key={c.customer_id} onClick={()=>open(c)}><span><b>{c.name||'Unnamed customer'}</b><small>{c.contact_no||'No contact'} · Version {c.version}</small></span><span>›</span></button>)}{rows.length===0&&<p className="muted">No customers loaded.</p>}</div></div><div className="glass panel"><div className="section-head"><div><span className="eyebrow">CUSTOMER PROFILE</span><h2>{selected?selected.name||selected.contact_no||'Customer':'Create customer'}</h2></div>{selected&&<button onClick={loadHistory}>History</button>}</div><div className="form-grid compact"><input placeholder="Name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/><input placeholder="Contact no." value={form.contact_no} onChange={e=>setForm({...form,contact_no:e.target.value})}/><textarea className="wide-field" placeholder="Notes" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></div>{selected?<button disabled={busy} onClick={save}>Save Customer</button>:<button disabled={busy||(!form.name.trim()&&!form.contact_no.trim())} onClick={create}>Create Customer</button>}{selected&&<p className="muted">Optimistic lock version: {form.version}. A stale save is rejected by the backend.</p>}{history&&<div className="history-card"><h3>History</h3><div className="status-strip"><div><span>Sales</span><b>{history.sales?.length||0}</b></div><div><span>Repairs</span><b>{history.repairs?.length||0}</b></div><div><span>Warranty</span><b>{history.warranty_claims?.length||0}</b></div></div><h4>Sales</h4>{(history.sales||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.sale_id}><span>{x.invoice_no} · {new Date(x.date).toLocaleString()}</span><b>Rs. {money(x.total)}</b></div>)}<h4>Settlements</h4>{(history.settlements||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.settlement_id}><span>{new Date(x.date).toLocaleString()} · {x.method}</span><b>Rs. {money(x.amount)}</b></div>)}<h4>Repairs</h4>{(history.repairs||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.repair_id}><span>{x.repair_no} · {x.status}</span><b>Rs. {money(x.total)}</b></div>)}</div>}</div></section>
 }
 
 function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
-  const [q,setQ]=useState(''),[items,setItems]=useState<Item[]>([]),[cart,setCart]=useState<CartLine[]>([]),[cash,setCash]=useState(''),[cashReceived,setCashReceived]=useState(''),[card,setCard]=useState(''),[online,setOnline]=useState(''),[credit,setCredit]=useState(false),[customer,setCustomer]=useState(''),[customerQuery,setCustomerQuery]=useState(''),[customers,setCustomers]=useState<any[]>([]),[settleAmount,setSettleAmount]=useState(''),[settleMethod,setSettleMethod]=useState('CASH'),[settlementKey,setSettlementKey]=useState(()=>crypto.randomUUID()),[saleKey,setSaleKey]=useState(()=>crypto.randomUUID()),[approvalId,setApprovalId]=useState(''),[pendingApproval,setPendingApproval]=useState<any|null>(null),[customerHistory,setCustomerHistory]=useState<any|null>(null),[doc,setDoc]=useState<'SYSTEM_PRINTED'|'MANUAL'|'NO_PRINT'>('SYSTEM_PRINTED'),[manualRef,setManualRef]=useState(''),[saleDateTime,setSaleDateTime]=useState(''),[busy,setBusy]=useState(false),[last,setLast]=useState<any>();
+  const [q,setQ]=useState(''),[items,setItems]=useState<Item[]>([]),[cart,setCart]=useState<CartLine[]>([]),[cash,setCash]=useState(''),[card,setCard]=useState(''),[online,setOnline]=useState(''),[credit,setCredit]=useState(false),[customer,setCustomer]=useState(''),[customerQuery,setCustomerQuery]=useState(''),[customers,setCustomers]=useState<any[]>([]),[settleAmount,setSettleAmount]=useState(''),[settleMethod,setSettleMethod]=useState('CASH'),[settlementKey,setSettlementKey]=useState(()=>crypto.randomUUID()),[saleKey,setSaleKey]=useState(()=>crypto.randomUUID()),[approvalId,setApprovalId]=useState(''),[pendingApproval,setPendingApproval]=useState<any|null>(null),[customerHistory,setCustomerHistory]=useState<any|null>(null),[doc,setDoc]=useState<DocType>(() => getDefaultDocType()),[manualRef,setManualRef]=useState(''),[saleDateTime,setSaleDateTime]=useState(''),[busy,setBusy]=useState(false),[last,setLast]=useState<any>();
   const [toast,setToast]=useState('');
   const [recentItems,setRecentItems]=useState<Item[]>(()=>loadRecent());
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +113,7 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
   const cartRef = useRef<CartLine[]>(cart);
   const itemsRef = useRef<Item[]>(items);
   const pendingFocusRef = useRef<string | null>(null);
+  const checkoutGuardRef = useRef(false);
   useEffect(() => { cartRef.current = cart; }, [cart]);
   useEffect(() => { itemsRef.current = items; }, [items]);
   useEffect(() => {
@@ -87,6 +132,15 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
   }, [cart]);
 
   const total=useMemo(()=>cart.reduce((sum,x)=>moneyAdd(sum,moneySub(moneyTimesQty(x.price,x.quantity),x.discount)), '0.00'),[cart]);
+  const totalDiscount=useMemo(()=>cart.reduce((sum,x)=>moneyAdd(sum, String(x.discount||'0')), '0.00'),[cart]);
+
+  const cashPortion = Math.min(Number(cash || 0), Math.max(0, Number(total) - Number(card || 0) - Number(online || 0)));
+  const totalPaid = cashPortion + Number(card || 0) + Number(online || 0);
+  const changeDue = Math.max(0, Number(cash || 0) - cashPortion);
+  const remaining = Math.max(0, Number(total) - totalPaid);
+  const isFullyPaid = remaining < 0.01 || totalPaid >= Number(total);
+
+  const moneyInputPattern = /^\d*\.?\d{0,2}$/;
 
   function recordRecent(item: Item) {
     const stored = loadRecent().filter(x => x.item_id !== item.item_id);
@@ -239,15 +293,132 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
   function edit(id:string,k:'quantity'|'price'|'discount',v:string){setCart(c=>c.map(x=>x.line_id===id?{...x,[k]:v}:x))}
   function setWarrantyOverride(id:string, value:string){setCart(c=>c.map(x=>x.line_id===id?{...x,warranty_override:value==='DEFAULT'?null:{...(x.warranty_default||{warranty_type:'NONE'}),warranty_type:value,duration_value:value==='DAYS'||value==='MONTHS'?(x.warranty_override?.duration_value||x.warranty_default?.duration_value||null):null,custom_rule:value==='CUSTOM'?(x.warranty_override?.custom_rule||x.warranty_default?.custom_rule||''):null}}:x))}
 
-  async function checkout(){if(busy)return; try{setBusy(true); if(!cart.length){onError('Add at least one item.');return} const noImei=cart.find(x=>x.is_serialized&&!x.serialized_unit_id); if(noImei){onError(`Select the IMEI / serial number for ${noImei.description} (scan the IMEI into the search box).`);return} if(cart.some(x=>!x.price||!moneyPositive(x.price))){onError('Enter a sale price for every item.');return} if(doc==='MANUAL'&&!manualRef.trim()){onError('Manual invoice reference is required.');return} if(cart.some(x=>moneyPositive(moneySub(x.discount,moneyTimesQty(x.price,x.quantity))))){onError('Discount cannot exceed line total.');return}
-    const required=total; const entered=moneyAdd(cash,card,online);
-    if(!credit&&!moneyEqual(entered,required)){onError(`Payment total must equal Rs. ${required}. Cash change: Rs. ${moneyPositive(moneySub(cash,required))?moneySub(cash,required):'0.00'}`);return}
-    const payments=credit?[]:[['CASH',cash],['CARD',card],['ONLINE',online]].filter(([,v])=>moneyPositive(String(v))).map(([method,amount])=>({method,amount:String(amount)}));
-    const salePayload={lines:cart.map(x=>({item_id:x.item_id,quantity:x.quantity,unit_price:String(x.price),discount:String(x.discount),serialized_unit_id:x.serialized_unit_id||null,warranty_type:x.warranty_override?.warranty_type||null,warranty_duration_value:x.warranty_override?.duration_value||null,warranty_custom_rule:x.warranty_override?.custom_rule||null})),payments,credit_sale:credit,customer_id:credit?customer||null:null,document_type:doc,manual_invoice_ref:doc==='MANUAL'?manualRef.trim():null,sale_datetime:isAdmin&&saleDateTime?new Date(saleDateTime).toISOString():null,cash_received:cashReceived||null,idempotency_key:saleKey,admin_discount_approval_id:approvalId.trim()||null};
-    let result:any;
-    try { result=await api('/sales',{method:'POST',body:JSON.stringify(salePayload)}); setLast(result);setCart([]);setCash('');setCashReceived('');setCard('');setOnline('');setManualRef('');setSaleDateTime('');setCredit(false);setApprovalId('');setPendingApproval(null);setSaleKey(crypto.randomUUID()); }
-    catch(e){ const msg=(e as Error).message; if(msg.includes('Admin approval required')) { const approval=await api<any>('/sales/discount-approval',{method:'POST',body:JSON.stringify(salePayload)}); setPendingApproval(approval);setApprovalId(approval.approval_id);onError(`Discount approval requested: ${approval.approval_action_id}. After Admin approves it, retry the sale using the approval ID below.`); } else throw e; } }
-  catch(e){onError((e as Error).message)}finally{setBusy(false)}}
+  function writeReceipt(w: Window, sale: any) {
+    try {
+      if (!w || w.closed) return;
+      w.document.open();
+      w.document.write(buildReceiptHTML(sale));
+      w.document.close();
+    } catch {
+      // ignore
+    }
+  }
+
+  function printReceipt(sale: any) {
+    const w = window.open('', '_blank', 'width=420,height=640');
+    if (!w) {
+      onError('Print popup was blocked. Please allow popups for this site and try again.');
+      return;
+    }
+    writeReceipt(w, sale);
+  }
+
+  function openPrintWindow(): Window | null {
+    try {
+      const w = window.open('', '_blank', 'width=420,height=640');
+      if (w) {
+        w.document.write('<!DOCTYPE html><html><head><title>Preparing receipt…</title></head><body style="font-family:monospace;padding:20px;text-align:center;font-size:13px"><p>Preparing receipt…</p></body></html>');
+        w.document.close();
+      }
+      return w;
+    } catch {
+      return null;
+    }
+  }
+
+  async function checkout(preOpenedPrintWindow?: Window | null){
+    if(busy || checkoutGuardRef.current) return;
+    checkoutGuardRef.current = true;
+    const saleDoc = doc;
+    const saleCredit = credit;
+    let printed = false;
+    const closePre = () => {
+      if (preOpenedPrintWindow && !preOpenedPrintWindow.closed) {
+        try { preOpenedPrintWindow.close(); } catch { /* ignore */ }
+      }
+    };
+    try{
+      setBusy(true);
+      if(!cart.length){onError('Add at least one item.');closePre();return}
+      const noImei=cart.find(x=>x.is_serialized&&!x.serialized_unit_id);
+      if(noImei){onError(`Select the IMEI / serial number for ${noImei.description} (scan the IMEI into the search box).`);closePre();return}
+      if(cart.some(x=>!x.price||!moneyPositive(x.price))){onError('Enter a sale price for every item.');closePre();return}
+      if(saleDoc==='MANUAL'&&!manualRef.trim()){onError('Manual invoice reference is required.');closePre();return}
+      if(cart.some(x=>moneyPositive(moneySub(x.discount,moneyTimesQty(x.price,x.quantity))))){onError('Discount cannot exceed line total.');closePre();return}
+      if(!saleCredit){
+        const cardAndOnline = Number(card||0) + Number(online||0);
+        if(cardAndOnline > Number(total) + 0.01){onError(`Card + Online exceeds total. Reduce the amounts.`);closePre();return}
+        if(!isFullyPaid){onError(`Payment short. Remaining: Rs. ${remaining.toFixed(2)}`);closePre();return}
+      }
+      const cashPayStr = cashPortion > 0 ? cashPortion.toFixed(2) : '';
+      const payments = saleCredit ? [] : [
+        ['CASH', cashPayStr],
+        ['CARD', card],
+        ['ONLINE', online],
+      ].filter(([,v]) => moneyPositive(String(v))).map(([method, amount]) => ({ method, amount: String(amount) }));
+      const salePayload = {
+        lines: cart.map(x => ({
+          item_id: x.item_id,
+          quantity: x.quantity,
+          unit_price: String(x.price),
+          discount: String(x.discount),
+          serialized_unit_id: x.serialized_unit_id || null,
+          warranty_type: x.warranty_override?.warranty_type || null,
+          warranty_duration_value: x.warranty_override?.duration_value || null,
+          warranty_custom_rule: x.warranty_override?.custom_rule || null,
+        })),
+        payments,
+        credit_sale: saleCredit,
+        customer_id: saleCredit ? customer || null : null,
+        document_type: saleDoc,
+        manual_invoice_ref: saleDoc === 'MANUAL' ? manualRef.trim() : null,
+        sale_datetime: isAdmin && saleDateTime ? new Date(saleDateTime).toISOString() : null,
+        cash_received: cash || null,
+        idempotency_key: saleKey,
+        admin_discount_approval_id: approvalId.trim() || null,
+      };
+      try {
+        const result = await api<any>('/sales', { method: 'POST', body: JSON.stringify(salePayload) });
+        setLast(result);
+        setCart([]);
+        setCash('');
+        setCard('');
+        setOnline('');
+        setManualRef('');
+        setSaleDateTime('');
+        setCredit(false);
+        setApprovalId('');
+        setPendingApproval(null);
+        setSaleKey(crypto.randomUUID());
+        setDoc(getDefaultDocType());
+        if (saleDoc === 'SYSTEM_PRINTED' && !saleCredit && preOpenedPrintWindow && !preOpenedPrintWindow.closed) {
+          writeReceipt(preOpenedPrintWindow, result);
+          printed = true;
+        }
+      } catch(e) {
+        const msg = (e as Error).message;
+        if (msg.includes('Admin approval required')) {
+          const approval = await api<any>('/sales/discount-approval', { method: 'POST', body: JSON.stringify(salePayload) });
+          setPendingApproval(approval);
+          setApprovalId(approval.approval_id);
+          onError(`Discount approval requested: ${approval.approval_action_id}. After Admin approves it, retry the sale using the approval ID below.`);
+        } else throw e;
+      }
+    } catch(e) {
+      onError((e as Error).message);
+    } finally {
+      if (!printed) closePre();
+      checkoutGuardRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  function handleCompleteSale() {
+    if (busy || checkoutGuardRef.current) return;
+    const wantsPrint = doc === 'SYSTEM_PRINTED' && !credit;
+    const preOpened = wantsPrint ? openPrintWindow() : null;
+    void checkout(preOpened);
+  }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -289,50 +460,297 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  return <section className="workspace">
-    <div className="glass panel">
-      <div className="section-head"><div><span className="eyebrow">POINT OF SALE</span><h2>New Sale</h2><p className="muted">Scan barcode / IMEI or type code → Enter → auto-add. Multi-results open a grid.</p></div><button className="icon-button" disabled={!cart.length||busy} onClick={()=>{setCart([]);setApprovalId('');setPendingApproval(null)}}>Clear</button></div>
-      {toast && <div className="success-banner" style={{ marginTop: 0, marginBottom: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}>{toast}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', flexWrap: 'wrap', fontSize: '0.72rem' }}>
-        <span style={{ color: 'var(--muted)', fontWeight: 600 }}>Today's items:</span>
-        {recentItems.length === 0
-          ? <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>No recent items yet — items you sell today will appear here.</span>
-          : <>
-              {recentItems.map(r => (
+  return (
+    <section className="sales-layout">
+      <div className="sales-left">
+        {toast && <div className="sales-success">{toast}</div>}
+        <div className="sales-search-box">
+          <input
+            ref={searchInputRef}
+            autoFocus
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (q.trim() === '') {
+                  cashInputRef.current?.focus();
+                  cashInputRef.current?.select();
+                } else {
+                  void smartSearch();
+                }
+              }
+            }}
+            placeholder="Scan barcode / IMEI or search items…"
+          />
+          <span className="kbd-hint">F2</span>
+        </div>
+        <div className="sales-kbd-bar">
+          <span><kbd>F2</kbd> Search · <kbd>F4</kbd> Payment · <kbd>Esc</kbd> Clear · <kbd>Enter</kbd> Add/Scan · <kbd>Enter</kbd> (empty search) → Cash</span>
+        </div>
+        <div className="sales-recent">
+          <span>Today's items:</span>
+          {recentItems.length === 0
+            ? <span style={{ fontStyle: 'italic' }}>No recent items yet — items you sell today appear here.</span>
+            : <>
+                {recentItems.map(r => (
+                  <button
+                    key={r.item_id}
+                    type="button"
+                    className="recent-item"
+                    onClick={() => addItemWithFocus(r)}
+                    title={r.description}
+                  >
+                    <b>{r.item_code}</b> · {r.description.slice(0, 20)}
+                  </button>
+                ))}
                 <button
-                  key={r.item_id}
                   type="button"
-                  onClick={() => addItemWithFocus(r)}
-                  title={r.description}
-                  style={{ minHeight: 40, padding: '0.35rem 0.6rem', fontSize: '0.72rem', display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: '0.35rem', maxWidth: '220px', border: '1px solid var(--line)', borderRadius: '8px', background: 'var(--surface-2)', color: 'var(--text)', cursor: 'pointer' }}
-                >
-                  <b>{r.item_code}</b>
-                  <span style={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description.slice(0, 20)}</span>
-                </button>
-              ))}
-              <button type="button" aria-label="Clear recent items" onClick={() => { saveRecent([]); setRecentItems([]); }} style={{ height: 28, width: 'auto', padding: '0 8px', fontSize: 11, border: '1px solid var(--line)', borderRadius: 6, background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}>Clear</button>
-            </>
-        }
+                  onClick={() => { saveRecent([]); setRecentItems([]); }}
+                  style={{ padding: '4px 10px', fontSize: '0.7rem', background: 'transparent', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer', minHeight: 28 }}
+                >Clear</button>
+              </>
+          }
+        </div>
+        <div className="sales-product-grid">
+          {items.map(i => (
+            <button key={i.item_id} type="button" className="sales-product-card" onClick={() => addItemWithFocus(i)}>
+              <span className="code">{i.item_code}</span>
+              <span className="desc">{i.description}</span>
+              <span className="meta">Stock {i.stock} · Rs. {i.sale_price ?? 'Type price'}</span>
+            </button>
+          ))}
+        </div>
+        {last && (
+          <div className="sales-success" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+            <span>Completed: {last.invoice_no} · Rs. {money(last.grand_total)}{last.negative_stock ? ' · Negative stock warning' : ''}</span>
+            <button
+              type="button"
+              onClick={() => printReceipt(last)}
+              style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--color-success)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', minHeight: 36 }}
+            >
+              🖨 Print Receipt
+            </button>
+          </div>
+        )}
       </div>
-      <div className="search-row"><input ref={searchInputRef} autoFocus value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&smartSearch()} placeholder="Scan barcode / IMEI or type item code / name"/><button onClick={smartSearch}>Add</button></div>
-      <div style={{ fontSize: '0.72rem', color: 'var(--muted)', padding: '0.35rem 0 0.25rem', letterSpacing: '0.02em' }}>F2 Search · F4 Payment · Esc Cancel · Enter Add/Scan</div>
-      <div className="item-list" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON' && itemsRef.current.length > 0) { e.preventDefault(); addItemWithFocus(itemsRef.current[0]); } }}>{items.map(i=><button className="item-card" key={i.item_id} onClick={()=>addItemWithFocus(i)} style={{ minHeight: 44 }}><b>{i.item_code}</b><span>{i.description}</span><small>Stock: {i.stock} · Rs. {i.sale_price??'Type price'}</small></button>)}</div>
-      {last&&<div className="success-banner">Completed: {last.invoice_no} · Rs. {money(last.grand_total)}{last.negative_stock?' · Negative stock warning':''}</div>}
-    </div>
-    <div className="glass panel">
-      <h2>Cart</h2>
-      {cart.length===0?<p className="muted">No items added.</p>:cart.map(x=><div className="cart-line" key={x.line_id}><span><b>{x.description}</b>{x.is_serialized&&(x.serialized_unit_id?<small>IMEI / Serial: {x.serial_number}</small>:<small className="muted">IMEI required — scan the IMEI into the search box</small>)}<div className="line-controls" style={{ flexWrap: 'wrap' }}><input id={`qty-${x.line_id}`} type="number" min=".001" step=".001" value={x.quantity} disabled={!!x.is_serialized} onChange={e=>edit(x.line_id,'quantity',e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();searchInputRef.current?.focus();}}} title="Quantity"/><input type="number" min="0" step=".01" value={x.price} onChange={e=>edit(x.line_id,'price',e.target.value)} placeholder="Price" title="Sale price"/><input type="number" min="0" step=".01" value={x.discount} onChange={e=>edit(x.line_id,'discount',e.target.value)} placeholder="Discount" title="Discount"/><select value={x.warranty_override?.warranty_type||'DEFAULT'} onChange={e=>setWarrantyOverride(x.line_id,e.target.value)} title="Warranty override"><option value="DEFAULT">Warranty: Default</option><option value="NONE">No Warranty</option><option value="DAYS">Warranty: Days</option><option value="MONTHS">Warranty: Months</option><option value="CHECKING ONLY">Checking Only</option><option value="CUSTOM">Warranty: Custom</option></select>{(x.warranty_override?.warranty_type==='DAYS'||x.warranty_override?.warranty_type==='MONTHS')&&<input type="number" min="1" placeholder="Days" value={x.warranty_override?.duration_value||''} onChange={e=>setCart(c=>c.map(y=>y.line_id===x.line_id?{...y,warranty_override:{...y.warranty_override!,duration_value:Number(e.target.value)||null}}:y))} style={{ width: 90, flexShrink: 0 }} />} {x.warranty_override?.warranty_type==='CUSTOM'&&<input type="text" placeholder="Rule (e.g. 45 DAYS)" value={x.warranty_override?.custom_rule||''} onChange={e=>setCart(c=>c.map(y=>y.line_id===x.line_id?{...y,warranty_override:{...y.warranty_override!,custom_rule:e.target.value}}:y))} style={{ width: 200, minWidth: 200, flexShrink: 0 }} />}</div></span><span className="line-total-actions"><b>Rs. {moneySub(moneyTimesQty(x.price,x.quantity),x.discount)}</b><button className="icon-button" aria-label={`Remove ${x.description}`} onClick={()=>setCart(c=>c.filter(y=>y.line_id!==x.line_id))}>×</button></span></div>)}
-      <div className="cart-total"><span>Total</span><b>Rs. {money(total)}</b></div>
-      <div className="form-grid compact"><select value={doc} onChange={e=>setDoc(e.target.value as any)}><option value="SYSTEM_PRINTED">Thermal Receipt</option><option value="MANUAL">Manual Invoice Ref</option><option value="NO_PRINT">No Print</option></select>{doc==='MANUAL'&&<input placeholder="Handwritten invoice reference" value={manualRef} onChange={e=>setManualRef(e.target.value)}/>}</div>
-{isAdmin && <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}><label className="check" style={{ fontSize: '0.75rem', margin: 0 }}><input type="checkbox" checked={!!saleDateTime} onChange={e => { if (e.target.checked) { const now = new Date(); const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16); setSaleDateTime(local); } else { setSaleDateTime(''); } }} /> Backdate sale time (optional — leave blank to use now)</label>{saleDateTime && <input type="datetime-local" value={saleDateTime} onChange={e=>setSaleDateTime(e.target.value)} style={{ minHeight: 36 }} />}</div>}
-      {isAdmin&&<label className="check"><input type="checkbox" checked={credit} onChange={e=>setCredit(e.target.checked)}/> Admin Credit Sale</label>}
-      {credit&&<><div className="search-row"><input placeholder="Customer name / contact" value={customerQuery} onChange={e=>setCustomerQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchCustomers()}/><button onClick={searchCustomers}>Find Customer</button></div><select className="wide-input" value={customer} onChange={e=>setCustomer(e.target.value)}><option value="">Select customer</option>{customers.map(c=><option key={c.customer_id} value={c.customer_id}>{c.name||'Unnamed'} · {c.contact_no||'No contact'}</option>)}</select><div className="form-grid compact"><input id="newCustomerName" placeholder="New customer name (optional)"/><input id="newCustomerContact" placeholder="Contact no."/><button onClick={async()=>{try{const n=(document.getElementById('newCustomerName') as HTMLInputElement)?.value.trim();const c=(document.getElementById('newCustomerContact') as HTMLInputElement)?.value.trim();if(!n&&!c){onError('Enter customer name or contact.');return}const r=await api<any>('/customers',{method:'POST',body:JSON.stringify({name:n||null,contact_no:c||null,notes:null})});setCustomer(r.customer_id);setCustomerQuery(r.name||r.contact_no||'');searchCustomers()}catch(e){onError((e as Error).message)}}}>Create Customer</button></div><button disabled={!customer} onClick={loadCustomerHistory}>History</button>{customerHistory&&<div className="glass panel"><div className="section-head"><h3>Customer History · {customerHistory.customer?.name||customerHistory.customer?.contact_no||'Customer'}</h3><button onClick={()=>setCustomerHistory(null)}>Close</button></div><div className="day-card"><span>Sales</span><b>{customerHistory.sales?.length||0}</b><span>Settlements</span><b>{customerHistory.settlements?.length||0}</b><span>Repairs</span><b>{customerHistory.repairs?.length||0}</b><span>Warranty Claims</span><b>{customerHistory.warranty_claims?.length||0}</b></div><h4>Sales</h4>{(customerHistory.sales||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.sale_id}><span>{x.invoice_no} · {new Date(x.date).toLocaleString()}</span><b>Rs. {money(x.total)}</b></div>)}<h4>Settlements</h4>{(customerHistory.settlements||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.settlement_id}><span>{new Date(x.date).toLocaleString()} · {x.method}</span><b>Rs. {money(x.amount)} · Remaining Rs. {money(x.remaining)}</b></div>)}<h4>Repairs</h4>{(customerHistory.repairs||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.repair_id}><span>{x.repair_no} · {x.status} · {new Date(x.date).toLocaleDateString()}</span><b>Rs. {money(x.total)}</b></div>)}<h4>Warranty Claims</h4>{(customerHistory.warranty_claims||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.claim_id}><span>{x.claim_no} · {x.invoice_no} · {x.decision}</span><b>{x.outcome||'Pending'}</b></div>)}</div>}{isAdmin&&<><input type="number" min="0.01" step="0.01" placeholder="Settlement amount" value={settleAmount} onChange={e=>setSettleAmount(e.target.value)}/><select value={settleMethod} onChange={e=>setSettleMethod(e.target.value)}><option>CASH</option><option>CARD</option><option>ONLINE</option></select><button disabled={!customer||!settleAmount} onClick={async()=>{try{const r=await api<any>('/settlements',{method:'POST',body:JSON.stringify({idempotency_key:settlementKey,customer_id:customer,amount:settleAmount,payment_method:settleMethod})});setSettleAmount('');setSettlementKey(crypto.randomUUID());alert(`Settlement ${r.proof_no} recorded · Remaining Rs. ${money(r.remaining_outstanding)}`); await api(`/documents/SETTLEMENT/${r.settlement_id}/reprint`,{method:'POST'})}catch(e){onError((e as Error).message)}}}>Settle Credit</button></>}</>}
-      {!credit&&<div className="payment-grid"><input ref={cashInputRef} type="number" min="0" step=".01" placeholder="Cash applied" value={cash} onChange={e=>setCash(e.target.value)}/><input type="number" min="0" step=".01" placeholder="Cash received" value={cashReceived} onChange={e=>setCashReceived(e.target.value)}/><input type="number" min="0" step=".01" placeholder="Card" value={card} onChange={e=>setCard(e.target.value)}/><input type="number" min="0" step=".01" placeholder="Online" value={online} onChange={e=>setOnline(e.target.value)}/></div>}
-      {!credit&&<div className="balance-box">Balance / Change: <b>Rs. {(moneyPositive(moneySub(cashReceived,cash)) ? moneySub(cashReceived,cash) : '0.00')}</b></div>}
-      {pendingApproval&&<div className="approval-box"><b>Discount approval</b><span>Request: {pendingApproval.approval_action_id}</span><label>Approved approval ID<input value={approvalId} onChange={e=>setApprovalId(e.target.value)} placeholder="Paste approved approval_id"/></label><small>Do not reuse an approval for a different sale. The backend validates the approved request.</small></div>}
-      <button disabled={!cart.length||busy} onClick={checkout} style={{ minHeight: 44 }}>{busy?'Processing…':credit?'Complete Credit Sale':'Complete Sale'}</button>
-    </div>
-  </section>;
+
+      <div className="sales-right">
+        <div className="sales-panel">
+          <div className="sales-panel-header">
+            <h2>Cart <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--muted)', marginLeft: 6 }}>({cart.length} items)</span></h2>
+            <button
+              type="button"
+              disabled={!cart.length || busy}
+              onClick={() => { setCart([]); setApprovalId(''); setPendingApproval(null); }}
+              style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--muted)', cursor: cart.length ? 'pointer' : 'not-allowed', minHeight: 28 }}
+            >Clear</button>
+          </div>
+          {cart.length === 0
+            ? <div className="sales-cart-empty">No items yet. Scan or search to add.</div>
+            : cart.map(x => (
+                <div className="sales-cart-line" key={x.line_id}>
+                  <div className="line-top">
+                    <div>
+                      <div className="line-name">{x.description}</div>
+                      {x.is_serialized && (
+                        <div className={`line-serial ${x.serialized_unit_id ? '' : 'missing'}`}>
+                          {x.serialized_unit_id ? `IMEI: ${x.serial_number}` : '⚠ IMEI required — scan now'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="line-total">Rs. {moneySub(moneyTimesQty(x.price, x.quantity), x.discount)}</div>
+                    <button type="button" className="line-remove" aria-label={`Remove ${x.description}`} onClick={() => setCart(c => c.filter(y => y.line_id !== x.line_id))}>×</button>
+                  </div>
+                  <div className="line-controls">
+                    <label>Qty <input
+                      id={`qty-${x.line_id}`}
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={x.quantity}
+                      disabled={!!x.is_serialized}
+                      onChange={e => {
+                        const raw = e.target.value;
+                        if (raw === '') { edit(x.line_id, 'quantity', '1'); return; }
+                        const n = parseInt(raw, 10);
+                        if (!Number.isFinite(n) || n < 1) { edit(x.line_id, 'quantity', '1'); return; }
+                        edit(x.line_id, 'quantity', String(n));
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchInputRef.current?.focus(); } }}
+                      onWheel={e => e.currentTarget.blur()}
+                    /></label>
+                    <label>Price <input type="number" min="0" step=".01" value={x.price} onChange={e => edit(x.line_id, 'price', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
+                    <label>Disc <input type="number" min="0" step=".01" value={x.discount} onChange={e => edit(x.line_id, 'discount', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
+                    <label>Warranty <select value={x.warranty_override?.warranty_type || 'DEFAULT'} onChange={e => setWarrantyOverride(x.line_id, e.target.value)}>
+                      <option value="DEFAULT">Default</option>
+                      <option value="NONE">None</option>
+                      <option value="DAYS">Days</option>
+                      <option value="MONTHS">Months</option>
+                      <option value="CHECKING ONLY">Checking Only</option>
+                      <option value="CUSTOM">Custom</option>
+                    </select></label>
+                    {(x.warranty_override?.warranty_type === 'DAYS' || x.warranty_override?.warranty_type === 'MONTHS') && (
+                      <label>Duration <input type="number" min="1" step="1" value={x.warranty_override?.duration_value || ''} onChange={e => setCart(c => c.map(y => y.line_id === x.line_id ? { ...y, warranty_override: { ...y.warranty_override!, duration_value: Number(e.target.value) || null } } : y))} style={{ flexShrink: 0, width: 90 }} onWheel={(e) => e.currentTarget.blur()} /></label>
+                    )}
+                    {x.warranty_override?.warranty_type === 'CUSTOM' && (
+                      <label>Rule <input type="text" placeholder="e.g. 45 DAYS" value={x.warranty_override?.custom_rule || ''} onChange={e => setCart(c => c.map(y => y.line_id === x.line_id ? { ...y, warranty_override: { ...y.warranty_override!, custom_rule: e.target.value } } : y))} style={{ flexShrink: 0, width: 200, minWidth: 200 }} /></label>
+                    )}
+                  </div>
+                </div>
+              ))
+          }
+          <div className="sales-totals">
+            <div className="subtotal-row"><span>Subtotal</span><span>Rs. {money(moneyAdd(total, totalDiscount))}</span></div>
+            <div className="subtotal-row"><span>Discount</span><span>Rs. {money(totalDiscount)}</span></div>
+            <div className="total-row"><span>TOTAL</span><span className="amount">Rs. {money(total)}</span></div>
+          </div>
+        </div>
+
+        <div className="sales-panel">
+          <div className="sales-panel-header"><h3>Payment</h3></div>
+
+          <div className={`payment-method ${Number(cash) > 0 ? 'active' : ''}`}>
+            <label>💵 Cash (customer gives) <span>Rs.</span></label>
+            <input
+              ref={cashInputRef}
+              type="text"
+              inputMode="decimal"
+              value={cash}
+              onChange={e => { const v = e.target.value; if (v === '' || moneyInputPattern.test(v)) setCash(v); }}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCompleteSale(); } }}
+              placeholder="0.00"
+            />
+          </div>
+          <div className={`payment-method ${Number(card) > 0 ? 'active' : ''}`}>
+            <label>💳 Card <span>Rs.</span></label>
+            <input type="text" inputMode="decimal" value={card} onChange={e => { const v = e.target.value; if (v === '' || moneyInputPattern.test(v)) setCard(v); }} placeholder="0.00" />
+          </div>
+          <div className={`payment-method ${Number(online) > 0 ? 'active' : ''}`}>
+            <label>🏦 Online <span>Rs.</span></label>
+            <input type="text" inputMode="decimal" value={online} onChange={e => { const v = e.target.value; if (v === '' || moneyInputPattern.test(v)) setOnline(v); }} placeholder="0.00" />
+          </div>
+
+          {changeDue > 0 && (
+            <div className="sales-change-due">
+              <span>CHANGE TO GIVE</span>
+              <span className="amount">Rs. {money(changeDue.toFixed(2))}</span>
+            </div>
+          )}
+
+          {cart.length > 0 && (
+            <div className={`sales-paid-status ${isFullyPaid ? 'complete' : ''}`}>
+              <span>{isFullyPaid ? '✓ Paid in full' : 'Remaining'}</span>
+              <span>Rs. {money((isFullyPaid ? totalPaid : remaining).toFixed(2))} / Rs. {money(total)}</span>
+            </div>
+          )}
+
+          {isAdmin && (
+            <div className="sales-admin-row">
+              <label><input type="checkbox" checked={credit} onChange={e => setCredit(e.target.checked)} /> Credit Sale</label>
+            </div>
+          )}
+
+          {isAdmin && (
+            <div className="sales-admin-row">
+              <label><input type="checkbox" checked={!!saleDateTime} onChange={e => {
+                if (e.target.checked) {
+                  const now = new Date();
+                  const pad = (n:number) => String(n).padStart(2, '0');
+                  const local = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+                  setSaleDateTime(local);
+                } else {
+                  setSaleDateTime('');
+                }
+              }} /> Backdate sale</label>
+              {saleDateTime && <input type="datetime-local" value={saleDateTime} onChange={e => setSaleDateTime(e.target.value)} />}
+            </div>
+          )}
+
+          {credit && (
+            <div className="sales-panel" style={{ background: 'var(--surface-2)', marginTop: 'var(--space-2)' }}>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <input placeholder="Customer name / contact" value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchCustomers()} style={{ flex: 1, padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />
+                <button type="button" onClick={searchCustomers} style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600 }}>Find</button>
+              </div>
+              <select value={customer} onChange={e => setCustomer(e.target.value)} style={{ width: '100%', marginTop: 'var(--space-2)', padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }}>
+                <option value="">Select customer</option>
+                {customers.map(c => <option key={c.customer_id} value={c.customer_id}>{c.name || 'Unnamed'} · {c.contact_no || 'No contact'}</option>)}
+              </select>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                <input id="newCustomerName" placeholder="New customer name" style={{ flex: 1, padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />
+                <input id="newCustomerContact" placeholder="Contact no." style={{ flex: 1, padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />
+                <button type="button" onClick={async () => {
+                  try {
+                    const n = (document.getElementById('newCustomerName') as HTMLInputElement)?.value.trim();
+                    const c = (document.getElementById('newCustomerContact') as HTMLInputElement)?.value.trim();
+                    if (!n && !c) { onError('Enter customer name or contact.'); return; }
+                    const r = await api<any>('/customers', { method: 'POST', body: JSON.stringify({ name: n || null, contact_no: c || null, notes: null }) });
+                    setCustomer(r.customer_id);
+                    setCustomerQuery(r.name || r.contact_no || '');
+                    searchCustomers();
+                  } catch (e) { onError((e as Error).message); }
+                }} style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600 }}>Create</button>
+              </div>
+              <button type="button" disabled={!customer} onClick={loadCustomerHistory} style={{ marginTop: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', cursor: customer ? 'pointer' : 'not-allowed' }}>History</button>
+              {customerHistory && (
+                <div style={{ marginTop: 'var(--space-2)', padding: 'var(--space-2)', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-1)' }}>
+                    <b>{customerHistory.customer?.name || customerHistory.customer?.contact_no || 'Customer'}</b>
+                    <button type="button" onClick={() => setCustomerHistory(null)}>Close</button>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                    Sales: {customerHistory.sales?.length || 0} · Repairs: {customerHistory.repairs?.length || 0} · Warranty: {customerHistory.warranty_claims?.length || 0}
+                  </div>
+                </div>
+              )}
+              {isAdmin && (
+                <div style={{ marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-2)' }}>
+                  <input type="text" inputMode="decimal" placeholder="Settlement amount" value={settleAmount} onChange={e => { const v = e.target.value; if (v === '' || moneyInputPattern.test(v)) setSettleAmount(v); }} style={{ flex: 1, padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />
+                  <select value={settleMethod} onChange={e => setSettleMethod(e.target.value)} style={{ padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }}>
+                    <option>CASH</option>
+                    <option>CARD</option>
+                    <option>ONLINE</option>
+                  </select>
+                  <button type="button" disabled={!customer || !settleAmount} onClick={async () => {
+                    try {
+                      const r = await api<any>('/settlements', { method: 'POST', body: JSON.stringify({ idempotency_key: settlementKey, customer_id: customer, amount: settleAmount, payment_method: settleMethod }) });
+                      setSettleAmount('');
+                      setSettlementKey(crypto.randomUUID());
+                      alert(`Settlement ${r.proof_no} recorded · Remaining Rs. ${money(r.remaining_outstanding)}`);
+                      await api(`/documents/SETTLEMENT/${r.settlement_id}/reprint`, { method: 'POST' });
+                    } catch (e) { onError((e as Error).message); }
+                  }} style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', cursor: (customer && settleAmount) ? 'pointer' : 'not-allowed', fontWeight: 600 }}>Settle</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="sales-doc-row">
+            <select value={doc} onChange={e => setDoc(e.target.value as DocType)}>
+              <option value="SYSTEM_PRINTED">Thermal Receipt</option>
+              <option value="MANUAL">Manual Invoice</option>
+              <option value="NO_PRINT">No Print</option>
+            </select>
+            {doc === 'MANUAL' && <input placeholder="Handwritten invoice reference" value={manualRef} onChange={e => setManualRef(e.target.value)} style={{ flex: 1, padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />}
+          </div>
+
+          {pendingApproval && (
+            <div className="approval-box" style={{ marginTop: 'var(--space-2)' }}>
+              <b>Discount approval</b>
+              <span>Request: {pendingApproval.approval_action_id}</span>
+              <label>Approved approval ID<input value={approvalId} onChange={e => setApprovalId(e.target.value)} placeholder="Paste approved approval_id" /></label>
+              <small>Do not reuse an approval for a different sale. The backend validates the approved request.</small>
+            </div>
+          )}
+
+          <button className="sales-complete-btn" disabled={!cart.length || busy || (!credit && !isFullyPaid)} onClick={handleCompleteSale}>
+            {busy ? 'Processing…' : credit ? '✓ Complete Credit Sale' : '✓ Complete Sale'}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function StockTab(){const [rows,setRows]=useState<any[]>([]),[age,setAge]=useState<any[]>([]),[serialRows,setSerialRows]=useState<any[]>([]),[q,setQ]=useState(''),[serial,setSerial]=useState('');async function load(){try{setRows(await api<any[]>('/inventory/summary'))}catch{}}async function loadAge(){try{setAge(await api<any[]>('/reports/stock-age',{method:'POST',body:JSON.stringify({start:today(),end:today()})}))}catch{}}async function findSerial(){try{setSerialRows(await api<any[]>(`/inventory/serialized/search?q=${encodeURIComponent(serial.trim())}`))}catch{setSerialRows([])}}useEffect(()=>{load()},[]);return <section className="glass panel"><div className="section-head"><h2>Stock Count / Serial & IMEI</h2><div><button onClick={load}>Refresh</button><button onClick={loadAge}>Stock Age by Batch</button></div></div><div className="search-row"><input placeholder="Search IMEI / Serial / barcode" value={serial} onChange={e=>setSerial(e.target.value)} onKeyDown={e=>e.key==='Enter'&&findSerial()}/><button onClick={findSerial}>Find Serial / IMEI</button></div>{serialRows.length>0&&<div className="glass panel"><h3>Serialized Units</h3>{serialRows.map(x=><div className="stock-row" key={x.serialized_unit_id}><span>{x.serial_number} · {x.item_code} · {x.description}</span><b>{x.status||'—'}</b></div>)}</div>}<input className="wide-input" placeholder="Filter stock" value={q} onChange={e=>setQ(e.target.value)}/>{rows.filter(x=>(x.item_code+' '+x.description).toLowerCase().includes(q.toLowerCase())).map(x=><div className="stock-row" key={x.item_id}><span>{x.item_code} · {x.description}</span><b>{money(x.stock)}{Number(x.stock)<0?' · NEGATIVE':''}</b></div>)}{age.length>0&&<><h3>Purchase Batch Age</h3>{age.map(x=><div className="stock-row" key={x.lot_id}><span>{x.item_code} · {x.description} · {x.lot_date}</span><b>{x.remaining_quantity} units · {x.age_days} days</b></div>)}</>}</section>}
@@ -342,7 +760,7 @@ function ExpensesTab({onError}:{onError:(x:string)=>void}){
   async function load(){try{const c=await api<any[]>('/admin/expense-categories');setCats(c);if(!category&&c[0])setCategory(c[0].id)}catch(e){onError((e as Error).message)}}
   useEffect(()=>{load()},[]);
   async function save(){if(!amount)return;setBusy(true);try{const path=mode==='EXPENSE'?'/admin/expenses':'/admin/other-income';const body=mode==='EXPENSE'?{category_id:category,expense_date:date,amount,payment_method:method,description:description||null}:{income_date:date,amount,payment_method:method,description:description||null};const r=await api(path,{method:'POST',body:JSON.stringify(body)});setLast({...r,mode});setAmount('');setDescription('')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}
-  return <section className="glass panel"><div className="section-head"><h2>Expenses / Other Income</h2><button onClick={load}>Refresh</button></div><div className="button-row"><button className={mode==='EXPENSE'?'':'ghost'} onClick={()=>setMode('EXPENSE')}>Expense</button><button className={mode==='INCOME'?'':'ghost'} onClick={()=>setMode('INCOME')}>Other Income</button></div><div className="form-grid compact">{mode==='EXPENSE'&&<select value={category} onChange={e=>setCategory(e.target.value)}><option value="">Category</option>{cats.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}<input type="date" value={date} onChange={e=>setDate(e.target.value)}/><input type="number" min="0.01" step="0.01" placeholder="Amount" value={amount} onChange={e=>setAmount(e.target.value)}/><select value={method} onChange={e=>setMethod(e.target.value)}><option>CASH</option><option>CARD</option><option>ONLINE</option></select><input placeholder="Description / note" value={description} onChange={e=>setDescription(e.target.value)}/><button disabled={busy||!amount||(mode==='EXPENSE'&&!category)} onClick={save}>{busy?'Saving…':mode==='EXPENSE'?'Add Expense':'Add Other Income'}</button></div>{last&&<div className="success-banner">{mode==='EXPENSE'?'Expense':'Other income'} saved · {last.status==='PENDING_APPROVAL'?'Pending Admin approval':'Approved'}</div>}<p className="muted">Cashier entries remain pending until Admin approval. Expenses are monthly outflows and do not automatically reduce the Day-End drawer.</p></section>}
+  return <section className="glass panel"><div className="section-head"><h2>Expenses / Other Income</h2><button onClick={load}>Refresh</button></div><div className="button-row"><button className={mode==='EXPENSE'?'':'ghost'} onClick={()=>setMode('EXPENSE')}>Expense</button><button className={mode==='INCOME'?'':'ghost'} onClick={()=>setMode('INCOME')}>Other Income</button></div><div className="form-grid compact">{mode==='EXPENSE'&&<select value={category} onChange={e=>setCategory(e.target.value)}><option value="">Category</option>{cats.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}<input type="date" value={date} onChange={e=>setDate(e.target.value)}/><input {...moneyInputProps(amount, setAmount)} placeholder="Amount"/><select value={method} onChange={e=>setMethod(e.target.value)}><option>CASH</option><option>CARD</option><option>ONLINE</option></select><input placeholder="Description / note" value={description} onChange={e=>setDescription(e.target.value)}/><button disabled={busy||!amount||(mode==='EXPENSE'&&!category)} onClick={save}>{busy?'Saving…':mode==='EXPENSE'?'Add Expense':'Add Other Income'}</button></div>{last&&<div className="success-banner">{mode==='EXPENSE'?'Expense':'Other income'} saved · {last.status==='PENDING_APPROVAL'?'Pending Admin approval':'Approved'}</div>}<p className="muted">Cashier entries remain pending until Admin approval. Expenses are monthly outflows and do not automatically reduce the Day-End drawer.</p></section>}
 
 function ReportsTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
  const [d,setD]=useState<any>(),[comparison,setComparison]=useState<any>(),[cashHands,setCashHands]=useState<any>(),[cashiers,setCashiers]=useState<any[]>([]),[rows,setRows]=useState<any[]>([]),[start,setStart]=useState(today()),[end,setEnd]=useState(today()),[reportType,setReportType]=useState('sales'),[loading,setLoading]=useState(false);
@@ -377,12 +795,13 @@ function ItemMasterPanel({onError}:{onError:(x:string)=>void}){
   useEffect(()=>{load()},[]);
   function startNew(){setEditing(undefined);setForm(empty);setWarranty({warranty_type:'NONE',duration_value:'',custom_rule:''});setVariants([]);setVariantName('');setVariantValue('')}
   async function edit(x:any){setEditing(x);setForm({description:x.description,category_id:x.category_id,item_type_id:x.item_type_id,brand:x.brand||'',model:x.model||'',compatible_models:x.compatible_models||'',master_sale_price:x.master_sale_price==null?'':String(x.master_sale_price),barcode:''});setWarranty({warranty_type:x.warranty_default?.warranty_type||'NONE',duration_value:x.warranty_default?.duration_value==null?'':String(x.warranty_default.duration_value),custom_rule:x.warranty_default?.custom_rule||''});try{setVariants(await api<any[]>(`/items/${x.item_id}/variants`))}catch{setVariants([])}}
-  async function save(){try{if(!form.description||!form.category_id||!form.item_type_id){onError('Description, category and item type are required.');return}const payload={description:form.description,category_id:form.category_id,item_type_id:form.item_type_id,brand:form.brand||null,model:form.model||null,compatible_models:form.compatible_models||null,master_sale_price:form.master_sale_price||null,version:editing?.version};const r:any=editing?await api(`/items/${editing.item_id}`,{method:'PUT',body:JSON.stringify(payload)}):await api('/items',{method:'POST',body:JSON.stringify({...payload,barcode:form.barcode||null})});const itemId=editing?.item_id||r.item_id;if(itemId){await api(`/items/${itemId}/warranty-default`,{method:'PUT',body:JSON.stringify({warranty_type:warranty.warranty_type,duration_value:warranty.duration_value?Number(warranty.duration_value):null,custom_rule:warranty.custom_rule||null})})}if(editing&&form.barcode.trim())await api(`/items/${editing.item_id}/barcodes`,{method:'POST',body:JSON.stringify({barcode:form.barcode.trim(),is_primary:false})});setForm(empty);setEditing(undefined);await load();alert(editing?'Item updated':'Item created')}catch(e){onError((e as Error).message)}}
+  async function save(){try{if(!form.description||!form.category_id||!form.item_type_id){onError('Description, category and item type are required.');return}const payload={description:form.description,category_id:form.category_id,item_type_id:form.item_type_id,brand:form.brand||null,model:form.model||null,compatible_models:form.compatible_models||null,master_sale_price:form.master_sale_price||null,version:editing?.version};const r:any=editing?await api(`/items/${editing.item_id}`,{method:'PUT',body:JSON.stringify(payload)}):await api('/items',{method:'POST',body:JSON.stringify({...payload,barcode:form.barcode||null})});const itemId=editing?.item_id||r.item_id;if(itemId){await api(`/items/${itemId}/warranty-default`,{method:'PUT',body:JSON.stringify({warranty_type:warranty.warranty_type,duration_value:warranty.duration_value?Number(warranty.duration_value):null,custom_rule:warranty.custom_rule||null})})}if(editing&&form.barcode.trim())await api(`/items/${editing.item_id}/barcodes`,{method:'POST',body:JSON.stringify({barcode:form.barcode.trim(),is_primary:false})});setForm(empty);setEditing(undefined);await load();toast.success(editing?'Item updated':'Item created')}catch(e){onError((e as Error).message)}}
   return <div className="glass panel"><div className="section-head"><h3>Item Master</h3><button disabled={busy} onClick={load}>Refresh</button></div><div className="search-row"><input placeholder="Item code / description / brand / model" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&load()}/><button onClick={load}>Search</button><button onClick={startNew}>New Item</button></div><div className="form-grid compact"><input placeholder="Description" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/><select value={form.category_id} onChange={e=>setForm({...form,category_id:e.target.value})}><option value="">Category</option>{masters.categories?.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select value={form.item_type_id} onChange={e=>setForm({...form,item_type_id:e.target.value})}><option value="">Item Type</option>{masters.item_types?.map((t:any)=><option key={t.id} value={t.id}>{t.name}</option>)}</select><input placeholder="Brand" value={form.brand} onChange={e=>setForm({...form,brand:e.target.value})}/><input placeholder="Model" value={form.model} onChange={e=>setForm({...form,model:e.target.value})}/><input placeholder="Also compatible with models (comma separated)" value={form.compatible_models} onChange={e=>setForm({...form,compatible_models:e.target.value})}/><input type="number" min="0" step="0.01" placeholder="Master sale price" value={form.master_sale_price} onChange={e=>setForm({...form,master_sale_price:e.target.value})}/><input placeholder="Barcode" value={form.barcode} onChange={e=>setForm({...form,barcode:e.target.value})}/><select value={warranty.warranty_type} onChange={e=>setWarranty({...warranty,warranty_type:e.target.value})}><option>NONE</option><option>DAYS</option><option>MONTHS</option><option>CHECKING ONLY</option><option>CUSTOM</option></select>{warranty.warranty_type==="DAYS"||warranty.warranty_type==="MONTHS"?<input type="number" min="1" placeholder="Warranty duration" value={warranty.duration_value} onChange={e=>setWarranty({...warranty,duration_value:e.target.value})}/>:null}{warranty.warranty_type==="CUSTOM"?<input placeholder="Custom warranty rule" value={warranty.custom_rule} onChange={e=>setWarranty({...warranty,custom_rule:e.target.value})}/>:null}<button onClick={save}>{editing?'Save Item':'Create Item'}</button>{editing&&<><input placeholder="Variant / compatibility name" value={variantName} onChange={e=>setVariantName(e.target.value)}/><input placeholder="Variant value (e.g. Original / A12)" value={variantValue} onChange={e=>setVariantValue(e.target.value)}/><button disabled={!variantName.trim()||!variantValue.trim()} onClick={async()=>{try{const r=await api<any>(`/items/${editing.item_id}/variants`,{method:'POST',body:JSON.stringify({name:variantName,value:variantValue})});setVariants(v=>v.concat(r));setVariantName('');setVariantValue('')}catch(e){onError((e as Error).message)}}}>Add Variant</button></>}</div>{editing&&variants.length>0&&<div className="stock-row"><span>Variants / Compatibility</span><b>{variants.map(v=>`${v.name}: ${v.value}`).join(' · ')}</b></div>}<div className="stock-row"><span>Categories</span><b>{masters.categories?.length??0}</b><span>Item Types</span><b>{masters.item_types?.length??0}</b></div>{rows.map(x=><div className="claim-row" key={x.item_id}><span><b>{x.item_code}</b> · {x.description}{x.brand?` · ${x.brand}`:''}{x.model?` · ${x.model}`:''}<small> · {x.is_active?'ACTIVE':'INACTIVE'} · {x.barcodes?.join(', ')||'No barcode'}</small></span><span><b>{x.master_sale_price==null?'No master price':`Rs. ${money(x.master_sale_price)}`}</b><button onClick={()=>edit(x)}>Edit</button></span></div>)}</div>}
 
 function AdminTab({onError}:{onError:(x:string)=>void}){
  const [roles,setRoles]=useState<any[]>([]),[perms,setPerms]=useState<any[]>([]),[users,setUsers]=useState<any[]>([]),[targets,setTargets]=useState<any[]>([]),[approvals,setApprovals]=useState<any[]>([]),[expenses,setExpenses]=useState<any[]>([]),[otherIncome,setOtherIncome]=useState<any[]>([]),[audit,setAudit]=useState<any[]>([]),[targetHistory,setTargetHistory]=useState<any[]>([]),[suppliers,setSuppliers]=useState<any[]>([]),[supplierName,setSupplierName]=useState(''),[supplierContact,setSupplierContact]=useState(''),[supplierAddress,setSupplierAddress]=useState(''),[expenseCats,setExpenseCats]=useState<any[]>([]),[expenseCatName,setExpenseCatName]=useState(''),[target,setTarget]=useState({target_type:'SALES_AMOUNT',target_value:'',period_type:'DAILY',period_start:today(),period_end:today()});
- async function load(){try{const [r,p,u,t,a,e,au,h,sp,ec,oi]=await Promise.all([api<any[]>('/admin/roles'),api<any[]>('/admin/permissions'),api<any[]>('/admin/users'),api<any[]>('/admin/targets'),api<any[]>('/admin/approvals'),api<any[]>('/admin/pending-expenses'),api<any[]>('/admin/audit'),api<any[]>('/reports/target-history',{method:'POST',body:JSON.stringify({start:'2000-01-01',end:'2100-12-31'})}),api<any[]>('/admin/suppliers'),api<any[]>('/admin/expense-categories'),api<any[]>('/admin/pending-other-income')]);setOtherIncome(oi);setRoles(r);setPerms(p);setUsers(u);setTargets(t);setApprovals(a);setExpenses(e);setAudit(au);setTargetHistory(h);setSuppliers(sp);setExpenseCats(ec)}catch(e){onError((e as Error).message)}}
+ const [adminLoading,setAdminLoading]=useState(false);
+ async function load(){try{setAdminLoading(true);const [r,p,u,t,a,e,au,h,sp,ec,oi]=await Promise.all([api<any[]>('/admin/roles'),api<any[]>('/admin/permissions'),api<any[]>('/admin/users'),api<any[]>('/admin/targets'),api<any[]>('/admin/approvals'),api<any[]>('/admin/pending-expenses'),api<any[]>('/admin/audit'),api<any[]>('/reports/target-history',{method:'POST',body:JSON.stringify({start:'2000-01-01',end:'2100-12-31'})}),api<any[]>('/admin/suppliers'),api<any[]>('/admin/expense-categories'),api<any[]>('/admin/pending-other-income')]);setOtherIncome(oi);setRoles(r);setPerms(p);setUsers(u);setTargets(t);setApprovals(a);setExpenses(e);setAudit(au);setTargetHistory(h);setSuppliers(sp);setExpenseCats(ec)}catch(e){onError((e as Error).message)}finally{setAdminLoading(false)}}
  useEffect(()=>{load()},[]);
  async function saveRole(r:any){try{const admin_password=window.prompt('Admin password (re-authentication required)')||'';await api(`/admin/roles/${r.role_id}/permissions?admin_password=${encodeURIComponent(admin_password)}`,{method:'PUT',body:JSON.stringify({permission_codes:r.permissions})});load()}catch(e){onError((e as Error).message)}}
  async function addTarget(){try{await api('/admin/targets',{method:'POST',body:JSON.stringify({...target,target_value:String(target.target_value)})});setTarget({...target,target_value:''});load()}catch(e){onError((e as Error).message)}}
@@ -391,7 +810,15 @@ function AdminTab({onError}:{onError:(x:string)=>void}){
  async function reviewExpense(x:any,approve:boolean){try{await api(`/admin/expenses/${x.expense_id}/decision?approve=${approve}&version=${encodeURIComponent(String(x.version??''))}&reason=${encodeURIComponent(approve?'Approved by Admin':'Rejected by Admin')}`,{method:'POST'});load()}catch(e){onError((e as Error).message)}}
  async function reviewOtherIncome(x:any,approve:boolean){try{await api(`/admin/other-income/${x.other_income_id}/decision?approve=${approve}&version=${encodeURIComponent(String(x.version??''))}&reason=${encodeURIComponent(approve?'Approved by Admin':'Rejected by Admin')}`,{method:'POST'});load()}catch(e){onError((e as Error).message)}}
  async function reviewApproval(a:any,approve:boolean){try{await api(`/approvals/${a.approval_id}/review`,{method:'POST',body:JSON.stringify({approve,version:a.version??null,reject_reason:approve?null:'Rejected by Admin'})});load()}catch(e){onError((e as Error).message)}}
- return <section className="admin-page">
+ return <section className="admin-page" style={{ position: 'relative' }}>
+  {adminLoading && (
+    <div className="loading-overlay" aria-live="polite">
+      <div style={{ display: 'grid', placeItems: 'center', gap: 8 }}>
+        <span className="spinner spinner-lg" />
+        <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Loading admin data…</span>
+      </div>
+    </div>
+  )}
   <div className="glass panel"><div className="section-head"><div><h2>Admin / Controls</h2><p className="muted">Security, users, permissions, suppliers, targets and approvals.</p></div><button onClick={load}>Refresh</button></div></div>
   <CategoryTypeManager onError={onError}/>
   <div className="glass panel"><h3>Expense Categories</h3><p className="muted">Admin can add categories beyond the locked defaults.</p><div className="form-grid compact"><input placeholder="New expense category" value={expenseCatName} onChange={e=>setExpenseCatName(e.target.value)}/><button disabled={!expenseCatName.trim()} onClick={addExpenseCategory}>Add Expense Category</button></div>{expenseCats.map(c=><span key={c.id} className="feature-badge" style={{display:'inline-block',margin:'4px'}}>{c.name}</span>)}</div>
@@ -401,7 +828,7 @@ function AdminTab({onError}:{onError:(x:string)=>void}){
   <div className="glass panel"><h3>Pending Expense Approvals</h3>{expenses.length===0?<p className="muted">No pending expenses.</p>:expenses.map(x=><div className="claim-row" key={x.expense_id}><span>{x.expense_date} · Rs. {money(x.amount)} · {x.description||'Expense'}</span><button onClick={()=>reviewExpense(x,true)}>Approve</button><button className="danger-button" onClick={()=>reviewExpense(x,false)}>Reject</button></div>)}</div>
   <div className="glass panel"><h3>Pending Other Income Approvals</h3>{otherIncome.length===0?<p className="muted">No pending other income.</p>:otherIncome.map(x=><div className="claim-row" key={x.other_income_id}><span>{x.income_date} · Rs. {money(x.amount)} · {x.description||'Other income'}</span><button onClick={()=>reviewOtherIncome(x,true)}>Approve</button><button className="danger-button" onClick={()=>reviewOtherIncome(x,false)}>Reject</button></div>)}</div>
   <div className="glass panel"><h3>Approval Requests</h3>{approvals.filter(x=>x.status==='PENDING').length===0?<p className="muted">No pending approval requests.</p>:approvals.filter(x=>x.status==='PENDING').map(x=><div className="claim-row" key={x.approval_id}><span><b>{x.approval_action_id||x.action_type}</b> · {String(x.action_type).replaceAll('_',' ')}{x.payload?.discount_percent!=null&&<> · discount {money(x.payload.discount_percent)}%</>}{Array.isArray(x.payload?.sale?.lines)&&<> · {x.payload.sale.lines.length} line(s), Rs. {money(x.payload.sale.payments?.reduce((t:string,p:any)=>moneyAdd(t,p.amount),'0')||'0')} to pay</>}<small> requested {x.requested_at?new Date(x.requested_at).toLocaleString():''}</small></span><button onClick={()=>reviewApproval(x,true)}>Approve</button><button className="danger-button" onClick={()=>reviewApproval(x,false)}>Reject</button></div>)}</div>
-  <div className="glass panel"><h3>Targets</h3><div className="form-grid compact"><select value={target.target_type} onChange={e=>setTarget({...target,target_type:e.target.value})}>{['SALES_AMOUNT','ITEM_SALES_PROFIT','REPAIR_INCOME','REPAIR_PROFIT','BILLS_COUNT','ITEMS_SOLD_COUNT'].map(x=><option key={x}>{x}</option>)}</select><input placeholder="Target value" value={target.target_value} onChange={e=>setTarget({...target,target_value:e.target.value})}/><select value={target.period_type} onChange={e=>setTarget({...target,period_type:e.target.value})}><option>DAILY</option><option>MONTHLY</option></select><input type="date" value={target.period_start} onChange={e=>setTarget({...target,period_start:e.target.value})}/><input type="date" value={target.period_end} onChange={e=>setTarget({...target,period_end:e.target.value})}/><button onClick={addTarget}>Add Target</button></div>{targets.map(t=><div className="stock-row" key={t.target_id}><span>{t.target_type} · {t.period_start} → {t.period_end}</span><b>{t.target_value}</b></div>)}<h4>Target Progress History</h4>{targetHistory.length===0?<p className="muted">No target history.</p>:targetHistory.map(t=><div className="stock-row" key={`history-${t.target_id}`}><span>{t.target_type} · {t.period_start} → {t.period_end}</span><b>{t.progress==null?'Not calculated':`${money(t.progress)}%`}</b></div>)}</div>
+  <div className="glass panel"><h3>Targets</h3><div className="form-grid compact"><select value={target.target_type} onChange={e=>setTarget({...target,target_type:e.target.value})}>{['SALES_AMOUNT','ITEM_SALES_PROFIT','REPAIR_INCOME','REPAIR_PROFIT','BILLS_COUNT','ITEMS_SOLD_COUNT'].map(x=><option key={x}>{x}</option>)}</select><input {...moneyInputProps(target.target_value, (v)=>setTarget({...target,target_value:v}))} placeholder="Target value"/><select value={target.period_type} onChange={e=>setTarget({...target,period_type:e.target.value})}><option>DAILY</option><option>MONTHLY</option></select><input type="date" value={target.period_start} onChange={e=>setTarget({...target,period_start:e.target.value})}/><input type="date" value={target.period_end} onChange={e=>setTarget({...target,period_end:e.target.value})}/><button onClick={addTarget}>Add Target</button></div>{targets.map(t=><div className="stock-row" key={t.target_id}><span>{t.target_type} · {t.period_start} → {t.period_end}</span><b>{t.target_value}</b></div>)}<h4>Target Progress History</h4>{targetHistory.length===0?<p className="muted">No target history.</p>:targetHistory.map(t=><div className="stock-row" key={`history-${t.target_id}`}><span>{t.target_type} · {t.period_start} → {t.period_end}</span><b>{t.progress==null?'Not calculated':`${money(t.progress)}%`}</b></div>)}</div>
   <div className="glass panel"><h3>Stock Adjustment</h3><StockAdjustPanel onError={onError}/></div>
   <div className="glass panel"><h3>Damage / Loss Records</h3><DamageRestockPanel onError={onError}/></div>
   <div className="glass panel"><h3>Void Sale</h3><VoidSalePanel onError={onError}/></div>
@@ -409,17 +836,17 @@ function AdminTab({onError}:{onError:(x:string)=>void}){
   <div className="glass panel"><h3>Recent Audit</h3>{audit.slice(0,20).map(x=><div className="audit-row" key={x.audit_id}><span>{new Date(x.timestamp).toLocaleString()} · {x.action_type} · {x.entity_type}</span><small>{x.reason||''}</small></div>)}</div>
  </section>}
 
-function CategoryTypeManager({onError}:{onError:(x:string)=>void}){const [categoryName,setCategoryName]=useState(''),[typeName,setTypeName]=useState(''),[code,setCode]=useState(''),[serialized,setSerialized]=useState(false),[busy,setBusy]=useState(false);async function addCategory(){try{setBusy(true);await api('/items/categories',{method:'POST',body:JSON.stringify({name:categoryName})});setCategoryName('');alert('Category added')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}async function addType(){try{setBusy(true);await api('/items/item-types',{method:'POST',body:JSON.stringify({code,name:typeName,is_serialized:serialized})});setCode('');setTypeName('');setSerialized(false);alert('Item type added')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div className="glass panel"><h3>Category / Item Type Management</h3><div className="form-grid compact"><input placeholder="New category name" value={categoryName} onChange={e=>setCategoryName(e.target.value)}/><button disabled={busy||!categoryName.trim()} onClick={addCategory}>Add Category</button><input placeholder="Item type code" value={code} onChange={e=>setCode(e.target.value)}/><input placeholder="Item type name" value={typeName} onChange={e=>setTypeName(e.target.value)}/><label className="check"><input type="checkbox" checked={serialized} onChange={e=>setSerialized(e.target.checked)}/> Serialized / IMEI</label><button disabled={busy||!code.trim()||!typeName.trim()} onClick={addType}>Add Item Type</button></div></div>}
+function CategoryTypeManager({onError}:{onError:(x:string)=>void}){const [categoryName,setCategoryName]=useState(''),[typeName,setTypeName]=useState(''),[code,setCode]=useState(''),[serialized,setSerialized]=useState(false),[busy,setBusy]=useState(false);async function addCategory(){try{setBusy(true);await api('/items/categories',{method:'POST',body:JSON.stringify({name:categoryName})});setCategoryName('');toast.success('Category added')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}async function addType(){try{setBusy(true);await api('/items/item-types',{method:'POST',body:JSON.stringify({code,name:typeName,is_serialized:serialized})});setCode('');setTypeName('');setSerialized(false);toast.success('Item type added')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div className="glass panel"><h3>Category / Item Type Management</h3><div className="form-grid compact"><input placeholder="New category name" value={categoryName} onChange={e=>setCategoryName(e.target.value)}/><button disabled={busy||!categoryName.trim()} onClick={addCategory}>Add Category</button><input placeholder="Item type code" value={code} onChange={e=>setCode(e.target.value)}/><input placeholder="Item type name" value={typeName} onChange={e=>setTypeName(e.target.value)}/><label className="check"><input type="checkbox" checked={serialized} onChange={e=>setSerialized(e.target.checked)}/> Serialized / IMEI</label><button disabled={busy||!code.trim()||!typeName.trim()} onClick={addType}>Add Item Type</button></div></div>}
 
-function UserRow({user,onError,onSaved}:{user:any,onError:(x:string)=>void,onSaved:()=>void}){const [limit,setLimit]=useState(String(user.discount_limit_percent??0));const [busy,setBusy]=useState(false);async function save(){if(busy)return;const n=Number(limit);if(!Number.isFinite(n)||n<0||n>100)return onError('Discount limit must be between 0 and 100%.');if(user.version==null)return onError('User version is missing; refresh before editing.');try{setBusy(true);await api(`/admin/users/${user.user_id}/discount-limit`,{method:'PUT',body:JSON.stringify({discount_limit_percent:String(n),version:user.version})});onSaved()}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div className="stock-row"><span>{user.username} · {user.display_name} · {user.role} · v{user.version ?? '—'}</span><span className="inline-control">Discount limit % <input type="number" min="0" max="100" step="0.01" value={limit} onChange={e=>setLimit(e.target.value)}/><button disabled={busy} onClick={save}>{busy?'Saving…':'Save'}</button></span></div>}
-function StockAdjustPanel({onError}:{onError:(x:string)=>void}){const [item,setItem]=useState(''),[search,setSearch]=useState(''),[items,setItems]=useState<any[]>([]),[qty,setQty]=useState(''),[reason,setReason]=useState(''),[units,setUnits]=useState<any[]>([]),[picked,setPicked]=useState<string[]>([]);const chosen=items.find((x:any)=>x.item_id===item);const serialized=!!chosen?.is_serialized;async function find(){try{setItems(await api<any[]>(`/inventory/items/search?q=${encodeURIComponent(search.trim())}`))}catch(e){onError((e as Error).message)}}async function pickItem(id:string){setItem(id);setPicked([]);setUnits([]);const it=items.find((x:any)=>x.item_id===id);if(it?.is_serialized){try{setUnits(await api<any[]>(`/inventory/serialized/search?q=&item_id=${id}&status=IN_STOCK`))}catch(e){onError((e as Error).message)}}}async function save(){try{const admin_password=window.prompt('Admin password (re-authentication required)')||''; await api(`/stock-control/adjust?admin_password=${encodeURIComponent(admin_password)}`,{method:'POST',body:JSON.stringify(serialized?{item_id:item,quantity_delta:String(-picked.length),reason:reason.trim(),serialized_unit_ids:picked}:{item_id:item,quantity_delta:String(qty),reason:reason.trim()})});setQty('');setReason('');setPicked([]);if(serialized)pickItem(item);alert('Stock adjustment saved')}catch(e){onError((e as Error).message)}}return <div className="form-grid compact"><input placeholder="Search item / code" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&find()}/><button onClick={find}>Find Item</button><select value={item} onChange={e=>pickItem(e.target.value)}><option value="">Select item</option>{items.map((x:any)=><option key={x.item_id} value={x.item_id}>{x.item_code} · {x.description} · Stock {x.stock}</option>)}</select>{serialized?<div className="wide-field"><p className="muted">IMEI-tracked phone: tick the phones to WRITE OFF (stock goes down by the number ticked). To add phones use Purchases with their IMEI.</p>{units.length===0?<p className="muted">No in-stock units.</p>:units.map((u:any)=><label className="check" key={u.serialized_unit_id}><input type="checkbox" checked={picked.includes(u.serialized_unit_id)} onChange={e=>setPicked(p=>e.target.checked?[...p,u.serialized_unit_id]:p.filter(x=>x!==u.serialized_unit_id))}/> {u.serial_number}</label>)}</div>:<input placeholder="+/- Quantity" value={qty} onChange={e=>setQty(e.target.value)}/>}<input placeholder="Required reason" value={reason} onChange={e=>setReason(e.target.value)}/><button disabled={serialized&&picked.length===0} onClick={save}>Adjust Stock</button></div>}
+function UserRow({user,onError,onSaved}:{user:any,onError:(x:string)=>void,onSaved:()=>void}){const [limit,setLimit]=useState(String(user.discount_limit_percent??0));const [busy,setBusy]=useState(false);async function save(){if(busy)return;const n=Number(limit);if(!Number.isFinite(n)||n<0||n>100)return onError('Discount limit must be between 0 and 100%.');if(user.version==null)return onError('User version is missing; refresh before editing.');try{setBusy(true);await api(`/admin/users/${user.user_id}/discount-limit`,{method:'PUT',body:JSON.stringify({discount_limit_percent:String(n),version:user.version})});onSaved()}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div className="stock-row"><span>{user.username} · {user.display_name} · {user.role} · v{user.version ?? '—'}</span><span className="inline-control">Discount limit % <input {...moneyInputProps(limit, setLimit)}/><button disabled={busy} onClick={save}>{busy?'Saving…':'Save'}</button></span></div>}
+function StockAdjustPanel({onError}:{onError:(x:string)=>void}){const [item,setItem]=useState(''),[search,setSearch]=useState(''),[items,setItems]=useState<any[]>([]),[qty,setQty]=useState(''),[reason,setReason]=useState(''),[units,setUnits]=useState<any[]>([]),[picked,setPicked]=useState<string[]>([]);const chosen=items.find((x:any)=>x.item_id===item);const serialized=!!chosen?.is_serialized;async function find(){try{setItems(await api<any[]>(`/inventory/items/search?q=${encodeURIComponent(search.trim())}`))}catch(e){onError((e as Error).message)}}async function pickItem(id:string){setItem(id);setPicked([]);setUnits([]);const it=items.find((x:any)=>x.item_id===id);if(it?.is_serialized){try{setUnits(await api<any[]>(`/inventory/serialized/search?q=&item_id=${id}&status=IN_STOCK`))}catch(e){onError((e as Error).message)}}}async function save(){try{const admin_password=window.prompt('Admin password (re-authentication required)')||''; await api(`/stock-control/adjust?admin_password=${encodeURIComponent(admin_password)}`,{method:'POST',body:JSON.stringify(serialized?{item_id:item,quantity_delta:String(-picked.length),reason:reason.trim(),serialized_unit_ids:picked}:{item_id:item,quantity_delta:String(qty),reason:reason.trim()})});setQty('');setReason('');setPicked([]);if(serialized)pickItem(item);toast.success('Stock adjustment saved')}catch(e){onError((e as Error).message)}}return <div className="form-grid compact"><input placeholder="Search item / code" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&find()}/><button onClick={find}>Find Item</button><select value={item} onChange={e=>pickItem(e.target.value)}><option value="">Select item</option>{items.map((x:any)=><option key={x.item_id} value={x.item_id}>{x.item_code} · {x.description} · Stock {x.stock}</option>)}</select>{serialized?<div className="wide-field"><p className="muted">IMEI-tracked phone: tick the phones to WRITE OFF (stock goes down by the number ticked). To add phones use Purchases with their IMEI.</p>{units.length===0?<p className="muted">No in-stock units.</p>:units.map((u:any)=><label className="check" key={u.serialized_unit_id}><input type="checkbox" checked={picked.includes(u.serialized_unit_id)} onChange={e=>setPicked(p=>e.target.checked?[...p,u.serialized_unit_id]:p.filter(x=>x!==u.serialized_unit_id))}/> {u.serial_number}</label>)}</div>:<input {...signedIntInputProps(qty, setQty)} placeholder="+/- Quantity"/>}<input placeholder="Required reason" value={reason} onChange={e=>setReason(e.target.value)}/><button disabled={serialized&&picked.length===0} onClick={save}>Adjust Stock</button></div>}
 function VoidSalePanel({onError}:{onError:(x:string)=>void}){const [inv,setInv]=useState(''),[sale,setSale]=useState<any>(null),[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[done,setDone]=useState('');async function find(){try{setDone('');setSale(await api<any>(`/sales/${encodeURIComponent(inv.trim())}`))}catch(e){setSale(null);onError((e as Error).message)}}async function voidIt(){if(busy||!sale)return;if(!reason.trim())return onError('Void reason is required.');if(!window.confirm(`Void ${sale.invoice_no}? Stock, IMEI, warranty, drawer and reports are reversed. The invoice number is never reused.`))return;const admin_password=window.prompt('Admin password (re-authentication required)')||'';try{setBusy(true);await api(`/sales/${sale.sale_id}/void?reason=${encodeURIComponent(reason.trim())}&version=${encodeURIComponent(String(sale.version??''))}&admin_password=${encodeURIComponent(admin_password)}`,{method:'POST'});setDone(`${sale.invoice_no} voided.`);setSale(null);setInv('');setReason('')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div><p className="muted">Admin only. Use for a wrong sale rung up today. After Day End, or once a return/settlement/warranty claim exists, use Returns instead.</p><div className="form-grid compact"><input placeholder="Invoice no. (e.g. INV-000123)" value={inv} onChange={e=>setInv(e.target.value)}/><button disabled={!inv.trim()} onClick={find}>Find Sale</button></div>{done&&<p className="success-banner">{done}</p>}{sale&&<div><p><b>{sale.invoice_no}</b> · Rs. {money(sale.grand_total)} · {new Date(sale.sale_datetime).toLocaleString()}</p>{sale.lines.map((l:any)=><div className="stock-row" key={l.sale_line_id}><span>{l.item_code} · {l.description} × {money(l.quantity)}</span><span>Rs. {money(l.final_total)}</span></div>)}<div className="form-grid compact"><input placeholder="Required void reason" value={reason} onChange={e=>setReason(e.target.value)}/><button className="danger-button" disabled={busy||!reason.trim()} onClick={voidIt}>{busy?'Voiding…':'Void This Sale'}</button></div></div>}</div>}
 
 function RoleEditor({role,perms,onSave}:{role:any,perms:any[],onSave:(r:any)=>void}){const [selected,setSelected]=useState<string[]>(role.permissions);return <div className="role-editor"><b>{role.name}</b><div className="permission-grid">{perms.map(p=><label key={p.code}><input type="checkbox" checked={selected.includes(p.code)} onChange={e=>setSelected(e.target.checked?[...selected,p.code]:selected.filter(x=>x!==p.code))}/>{p.code}</label>)}</div><button onClick={()=>onSave({...role,permissions:selected})}>Save Permissions</button></div>}
 
-function PasswordResetPanel({users,onError}:{users:any[],onError:(x:string)=>void}){const [uid,setUid]=useState(''),[adminPass,setAdminPass]=useState(''),[newPass,setNewPass]=useState('');async function reset(){try{await api('/admin/users/reset-password',{method:'POST',body:JSON.stringify({user_id:uid,admin_password:adminPass,new_password:newPass})});setAdminPass('');setNewPass('');alert('Password reset. Cashier must change password on next login.')}catch(e){onError((e as Error).message)}}return <div className="form-grid compact"><select value={uid} onChange={e=>setUid(e.target.value)}><option value="">Select cashier</option>{users.map(u=><option key={u.user_id} value={u.user_id}>{u.username} · {u.display_name}</option>)}</select><input type="password" placeholder="Admin password" value={adminPass} onChange={e=>setAdminPass(e.target.value)}/><input type="password" placeholder="Temporary new password" value={newPass} onChange={e=>setNewPass(e.target.value)}/><button disabled={!uid||!adminPass||!newPass} onClick={reset}>Reset Cashier Password</button></div>}
+function PasswordResetPanel({users,onError}:{users:any[],onError:(x:string)=>void}){const [uid,setUid]=useState(''),[adminPass,setAdminPass]=useState(''),[newPass,setNewPass]=useState('');async function reset(){try{await api('/admin/users/reset-password',{method:'POST',body:JSON.stringify({user_id:uid,admin_password:adminPass,new_password:newPass})});setAdminPass('');setNewPass('');toast.success('Password reset. Cashier must change password on next login.')}catch(e){onError((e as Error).message)}}return <div className="form-grid compact"><select value={uid} onChange={e=>setUid(e.target.value)}><option value="">Select cashier</option>{users.map(u=><option key={u.user_id} value={u.user_id}>{u.username} · {u.display_name}</option>)}</select><input type="password" placeholder="Admin password" value={adminPass} onChange={e=>setAdminPass(e.target.value)}/><input type="password" placeholder="Temporary new password" value={newPass} onChange={e=>setNewPass(e.target.value)}/><button disabled={!uid||!adminPass||!newPass} onClick={reset}>Reset Cashier Password</button></div>}
 
-function BackupTab({onError}:{onError:(x:string)=>void}){const [rows,setRows]=useState<any[]>([]),[busy,setBusy]=useState(false);async function load(){try{setRows(await api<any[]>('/backup/points'))}catch(e){onError((e as Error).message)}}useEffect(()=>{load()},[]);async function create(){try{setBusy(true);await api('/backup/create',{method:'POST',body:JSON.stringify({filename:`lovely-tech-${Date.now()}.ltbak`})});await load();alert('Encrypted PostgreSQL backup created and verified.')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}async function verify(id:string){try{await api(`/backup/verify/${id}`,{method:'POST'});await load()}catch(e){onError((e as Error).message)}}async function sync(id:string){try{await api(`/backup/sync/${id}`,{method:'POST'});await load()}catch(e){onError((e as Error).message)}}return <section className="glass panel"><h2>Backup / Restore</h2><p className="muted">Only VERIFIED backups are valid restore points. Google Drive sync is optional and shown separately.</p><div className="button-row"><button disabled={busy} onClick={create}>{busy?'Creating verified backup…':'Create Verified PostgreSQL Backup'}</button><button onClick={load}>Refresh</button></div>{rows.map(r=><div className="claim-row" key={r.backup_id}><span><b>{r.filename}</b> · {r.state} · {r.sync_state||'—'} · {r.sha256?.slice(0,12)||''}</span><span><button onClick={()=>verify(r.backup_id)}>Verify</button>{r.state==='VERIFIED'&&r.sync_state!=='SYNCED'&&<button onClick={()=>sync(r.backup_id)}>Sync Google Drive</button>}{r.state==='VERIFIED'&&<button onClick={async()=>{if(!window.confirm('Restore this verified backup? Current database will be replaced after a safety backup.'))return;const pw=window.prompt('Admin password')||'';try{await api(`/backup/restore/${r.backup_id}?confirm=true&admin_password=${encodeURIComponent(pw)}`,{method:'POST'});alert('Restore completed. Please log in again if the server session was reset.')}catch(e){onError((e as Error).message)}}}>Restore</button>}</span></div>)}</section>}
+function BackupTab({onError}:{onError:(x:string)=>void}){const [rows,setRows]=useState<any[]>([]),[busy,setBusy]=useState(false);async function load(){try{setRows(await api<any[]>('/backup/points'))}catch(e){onError((e as Error).message)}}useEffect(()=>{load()},[]);async function create(){try{setBusy(true);await api('/backup/create',{method:'POST',body:JSON.stringify({filename:`lovely-tech-${Date.now()}.ltbak`})});await load();toast.success('Encrypted PostgreSQL backup created and verified.')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}async function verify(id:string){try{await api(`/backup/verify/${id}`,{method:'POST'});await load()}catch(e){onError((e as Error).message)}}async function sync(id:string){try{await api(`/backup/sync/${id}`,{method:'POST'});await load()}catch(e){onError((e as Error).message)}}return <section className="glass panel"><h2>Backup / Restore</h2><p className="muted">Only VERIFIED backups are valid restore points. Google Drive sync is optional and shown separately.</p><div className="button-row"><button disabled={busy} onClick={create}>{busy?'Creating verified backup…':'Create Verified PostgreSQL Backup'}</button><button onClick={load}>Refresh</button></div>{rows.map(r=><div className="claim-row" key={r.backup_id}><span><b>{r.filename}</b> · {r.state} · {r.sync_state||'—'} · {r.sha256?.slice(0,12)||''}</span><span><button onClick={()=>verify(r.backup_id)}>Verify</button>{r.state==='VERIFIED'&&r.sync_state!=='SYNCED'&&<button onClick={()=>sync(r.backup_id)}>Sync Google Drive</button>}{r.state==='VERIFIED'&&<button onClick={async()=>{if(!window.confirm('Restore this verified backup? Current database will be replaced after a safety backup.'))return;const pw=window.prompt('Admin password')||'';try{await api(`/backup/restore/${r.backup_id}?confirm=true&admin_password=${encodeURIComponent(pw)}`,{method:'POST'});toast.success('Restore completed. Please log in again if the server session was reset.')}catch(e){onError((e as Error).message)}}}>Restore</button>}</span></div>)}</section>}
 
 function DamageRestockPanel({onError}:{onError:(x:string)=>void}){
   const [rows,setRows]=useState<any[]>([]),[search,setSearch]=useState(''),[items,setItems]=useState<any[]>([]),[item,setItem]=useState(''),[qty,setQty]=useState('1'),[kind,setKind]=useState('DAMAGE'),[reason,setReason]=useState(''),[units,setUnits]=useState<any[]>([]),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false);
@@ -431,12 +858,12 @@ function DamageRestockPanel({onError}:{onError:(x:string)=>void}){
   async function record(){
     if(busy) return; if(!item||!reason.trim()) return onError('Select an item and enter a reason.');
     const admin_password=window.prompt('Admin password (re-authentication required)')||'';
-    try{setBusy(true);await api(`/stock-control/damage-loss?admin_password=${encodeURIComponent(admin_password)}`,{method:'POST',body:JSON.stringify({item_id:item,quantity:String(serialized?picked.length:qty),reason:reason.trim(),loss_type:kind,serialized_unit_ids:serialized?picked:undefined,idempotency_key:crypto.randomUUID()})});setReason('');setPicked([]);await load();if(serialized)pickItem(item);alert('Recorded')}catch(e){onError((e as Error).message)}finally{setBusy(false)}
+    try{setBusy(true);await api(`/stock-control/damage-loss?admin_password=${encodeURIComponent(admin_password)}`,{method:'POST',body:JSON.stringify({item_id:item,quantity:String(serialized?picked.length:qty),reason:reason.trim(),loss_type:kind,serialized_unit_ids:serialized?picked:undefined,idempotency_key:crypto.randomUUID()})});setReason('');setPicked([]);await load();if(serialized)pickItem(item);toast.success('Recorded')}catch(e){onError((e as Error).message)}finally{setBusy(false)}
   }
   async function restock(r:any){
     const reason=window.prompt('Reason: why is this item resellable? (required)')?.trim(); if(!reason) return;
     const admin_password=window.prompt('Admin password (re-authentication required)')||'';
-    try{await api(`/stock-control/damage-loss/${r.damage_loss_id}/restock?reason=${encodeURIComponent(reason)}&admin_password=${encodeURIComponent(admin_password)}`,{method:'POST'});await load();alert('Item restocked (audited)')}catch(e){onError((e as Error).message)}
+    try{await api(`/stock-control/damage-loss/${r.damage_loss_id}/restock?reason=${encodeURIComponent(reason)}&admin_password=${encodeURIComponent(admin_password)}`,{method:'POST'});await load();toast.success('Item restocked (audited)')}catch(e){onError((e as Error).message)}
   }
   async function finalize(r:any){
     const admin_password=window.prompt('Admin password (re-authentication required)')||'';
@@ -446,7 +873,7 @@ function DamageRestockPanel({onError}:{onError:(x:string)=>void}){
     <div className="form-grid compact"><input placeholder="Item code / description" value={search} onChange={e=>setSearch(e.target.value)}/><button onClick={find}>Find Item</button>
       <select value={item} onChange={e=>pickItem(e.target.value)}><option value="">Select item</option>{items.map((x:any)=><option key={x.item_id} value={x.item_id}>{x.item_code} · {x.description}</option>)}</select>
       <select value={kind} onChange={e=>setKind(e.target.value)}><option value="DAMAGE">Damage</option><option value="LOSS">Loss</option><option value="INTERNAL_USE">Internal use</option></select>
-      {serialized?<div className="wide-field">{units.length===0?<p className="muted">No in-stock units.</p>:units.map((u:any)=><label className="check" key={u.serialized_unit_id}><input type="checkbox" checked={picked.includes(u.serialized_unit_id)} onChange={e=>setPicked(p=>e.target.checked?[...p,u.serialized_unit_id]:p.filter(x=>x!==u.serialized_unit_id))}/> {u.serial_number}</label>)}</div>:<input placeholder="Quantity" value={qty} onChange={e=>setQty(e.target.value)}/>}
+      {serialized?<div className="wide-field">{units.length===0?<p className="muted">No in-stock units.</p>:units.map((u:any)=><label className="check" key={u.serialized_unit_id}><input type="checkbox" checked={picked.includes(u.serialized_unit_id)} onChange={e=>setPicked(p=>e.target.checked?[...p,u.serialized_unit_id]:p.filter(x=>x!==u.serialized_unit_id))}/> {u.serial_number}</label>)}</div>:<input {...intInputProps(qty, setQty, 1)} placeholder="Quantity"/>}
       <input placeholder="Required reason" value={reason} onChange={e=>setReason(e.target.value)}/><button disabled={busy||!item||!reason.trim()||(serialized&&picked.length===0)} onClick={record}>Record</button></div>
     {rows.length===0?<p className="muted">No damage/loss records.</p>:rows.map(r=><div className="stock-row" key={r.damage_loss_id}><span><b>{r.item_code}</b> · {r.description} · qty {String(r.quantity)} · {String(r.loss_type||'DAMAGE').replace('_',' ')} · {r.reason} · <small>{r.source_type||'MANUAL'} · {r.review_status}</small></span>{r.review_status==='PENDING'&&<button onClick={()=>finalize(r)}>Finalize</button>}{(r.review_status==='APPROVED'||r.review_status==='PENDING')&&<button onClick={()=>restock(r)}>Restock</button>}</div>)}
   </div>}

@@ -24,6 +24,8 @@ import {
   isTransientSetupState,
 } from './services/machine-config';
 import { ThemeProvider } from './theme/ThemeProvider';
+import { ToastContainer } from './ui/ToastContainer';
+import { ModalProvider } from './ui/modals';
 import './styles.css';
 
 // Shows the real error instead of a blank white screen, so problems can be reported and fixed quickly.
@@ -85,7 +87,6 @@ function App() {
         await ensureApiBaseResolved();
         if (alive) {
           setBootPhase('ready');
-          // On successful discovery for a CLIENT, transition to SERVER_DETECTED
           if (isTauriEnvironment()) {
             const current = loadMachineConfig();
             if (current?.machine_role === 'CLIENT') {
@@ -102,7 +103,6 @@ function App() {
       } catch (err) {
         if (alive) {
           setBootPhase('failed');
-          // On discovery failure for a CLIENT, transition to appropriate error/setup state
           if (isTauriEnvironment()) {
             const current = loadMachineConfig();
             if (current?.machine_role === 'CLIENT') {
@@ -166,12 +166,10 @@ function App() {
     setBootPhase('failed');
   };
 
-  // If we're in a transient discovery state, clear it on successful boot
   if (bootPhase === 'ready' && machineConfig && isTransientSetupState(machineConfig.setup_state)) {
     clearTransientSetupState();
   }
 
-  // Show discovery status during boot
   if (bootPhase === 'discovering') {
     return (
       <DiscoveryStatus
@@ -181,7 +179,6 @@ function App() {
     );
   }
 
-  // Show manual config or failed state
   if (bootPhase === 'failed' || showManualConfig) {
     return (
       <AdminManualServerPanel
@@ -198,12 +195,10 @@ function App() {
     );
   }
 
-  // At this point, bootPhase is 'ready'. Check setup state for Tauri environments.
   if (isTauriEnvironment() && machineRole) {
     const config = loadMachineConfig();
     const currentSetupState = config?.setup_state ?? 'UNINITIALIZED';
 
-    // For CLIENT machines, show setup-required UI if not READY
     if (machineRole === 'CLIENT' && !isReadySetupState(currentSetupState)) {
       const isAdmin = user?.role.toUpperCase() === 'ADMIN';
       return (
@@ -217,7 +212,6 @@ function App() {
       );
     }
 
-    // For SERVER machines (not implemented in this packet, but reserved)
     if (machineRole === 'SERVER' && !isReadySetupState(currentSetupState)) {
       const isAdmin = user?.role.toUpperCase() === 'ADMIN';
       if (requiresAdminSetup(currentSetupState) && !isAdmin) {
@@ -231,11 +225,9 @@ function App() {
           />
         );
       }
-      // Admin would see the setup flow here (future packets)
     }
   }
 
-  // Normal authenticated flow
   return user ? (
     user.must_change_password ? (
       <ChangePassword user={user} onDone={setUser} onLogout={() => { logout(); setUser(null); }} />
@@ -251,7 +243,10 @@ createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
       <ThemeProvider>
-        <App />
+        <ModalProvider>
+          <App />
+          <ToastContainer />
+        </ModalProvider>
       </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>
