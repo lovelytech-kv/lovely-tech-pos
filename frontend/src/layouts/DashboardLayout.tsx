@@ -3,6 +3,7 @@ import { checkServerHealth } from '../api/client';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { NAV_ITEMS, getNavForRole } from '../config/navigation';
 import { loadPermissions, getDefaultPermissions, type Permission } from '../config/permissions';
+import { useShopProfile } from '../features/settings/ShopContext';
 
 type User = { display_name: string; role: string; branch_id: string };
 
@@ -18,6 +19,10 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
   const [serverState, setServerState] = useState<'checking' | 'online' | 'offline'>('checking');
   const searchRef = useRef<HTMLInputElement>(null);
   const isAdmin = user.role.toUpperCase() === 'ADMIN';
+  const { getShopName, getLogoDataUrl } = useShopProfile();
+
+  const shopName = getShopName();
+  const logoUrl = getLogoDataUrl();
 
   const role = isAdmin ? 'ADMIN' : 'CASHIER';
   const permissions: Permission[] = loadPermissions()[role] ?? getDefaultPermissions(role);
@@ -26,7 +31,6 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
   const moreItems = navItems.filter((item) => item.group === 'more');
   const adminItems = navItems.filter((item) => item.group === 'admin');
 
-  // Server health check (unchanged).
   useEffect(() => {
     let alive = true;
     const check = async () => {
@@ -46,16 +50,19 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
     return () => { alive = false; window.clearInterval(timer); window.removeEventListener('keydown', focusSearch); };
   }, []);
 
-  // Preserved from original: match by label and return key. Keeps existing page-title behavior.
   const activeLabelSource = isAdmin ? NAV_ITEMS : NAV_ITEMS.filter((item) => !item.adminOnly);
-  const activeLabel = activeLabelSource.find((item) => item.label === activeKey)?.key ?? 'Lovely Tech POS';
+  const activeLabel = activeLabelSource.find((item) => item.label === activeKey)?.key ?? shopName;
 
   return (
     <main className="v0-shell">
       <aside className="v0-sidebar glass-card">
         <button className="v0-brand" onClick={() => onNavigate('Dashboard')} aria-label="Go to dashboard">
-          <span className="brand-mark">LT</span>
-          <span><strong>Lovely Tech</strong><small>POS System</small></span>
+          {logoUrl ? (
+            <img src={logoUrl} alt="" style={{ width: 39, height: 39, borderRadius: 12, objectFit: 'contain', background: 'var(--surface-2)' }} />
+          ) : (
+            <span className="brand-mark">{shopName.slice(0, 2).toUpperCase()}</span>
+          )}
+          <span><strong>{shopName}</strong><small>POS System</small></span>
         </button>
         <div className="v0-sidebar-scroll">
           <div className="v0-sidebar-label">Workspace</div>
@@ -104,7 +111,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
 
       <section className="v0-main">
         <header className="v0-header glass-card">
-          <div><span className="breadcrumb">Lovely Tech <b>/</b> {activeLabel}</span><h1>{activeLabel}</h1></div>
+          <div><span className="breadcrumb">{shopName} <b>/</b> {activeLabel}</span><h1>{activeLabel}</h1></div>
           <div className="v0-header-actions">
             <label className="global-search"><span>⌕</span><input ref={searchRef} aria-label="Quick search" placeholder="Search products, customers, invoices..." onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLInputElement).blur(); }} /><kbd>Ctrl K</kbd></label>
             <span className={`header-status header-${serverState}`} aria-live="polite"><i className="online-dot" /> {serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Checking…'}</span>

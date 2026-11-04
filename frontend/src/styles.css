@@ -652,3 +652,200 @@ input:focus:not(:focus-visible) {
 @keyframes chunk7c-spin {
   to { transform: rotate(360deg); }
 }
+
+/* ============ CHUNK 8 — SALES HISTORY ============ */
+.sales-history-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+  gap: var(--space-4, 1rem);
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .sales-history-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.sales-history-table-wrap {
+  overflow: hidden;
+}
+.sales-history-detail {
+  position: sticky;
+  top: 1rem;
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+}
+.sh-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.sh-status-ok {
+  background: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+}
+.sh-status-void {
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+}
+[data-theme="dark"] .sh-status-ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+[data-theme="dark"] .sh-status-void {
+  background: rgba(220, 38, 38, 0.18);
+  color: #f87171;
+}
+/* ============ CHUNK 9a — SHOP PROFILE ============ */
+.shop-logo-preview {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.shop-logo-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.brand-mark img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+/* ============ CHUNK 9a — TOAST + LOGIN LOGO POLISH ============ */
+
+/* ── Toast stack ── */
+.toast-stack {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 380px;
+  pointer-events: none;
+}
+.toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  pointer-events: auto;
+  animation: toast-in 0.22s ease-out;
+  overflow: hidden;
+  min-width: 280px;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.toast-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+}
+.toast-success .toast-icon { background: #16a34a; }
+.toast-error .toast-icon { background: #dc2626; }
+.toast-info .toast-icon { background: #2563eb; }
+.toast-message {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.4;
+  padding-top: 1px;
+}
+.toast-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.toast-close:hover { opacity: 1; }
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  transform-origin: left;
+  animation: toast-progress 4s linear forwards;
+}
+.toast-success { border-left: 3px solid #16a34a; }
+.toast-success .toast-progress { background: #16a34a; }
+.toast-error { border-left: 3px solid #dc2626; }
+.toast-error .toast-progress { background: #dc2626; }
+.toast-info { border-left: 3px solid #2563eb; }
+.toast-info .toast-progress { background: #2563eb; }
+@keyframes toast-progress {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+[data-theme="dark"] .toast {
+  background: var(--surface-2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Login logo ── */
+.login-logo-large {
+  width: 88px;
+  height: 88px;
+  border-radius: 22px;
+  margin-bottom: 26px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 28px rgba(20, 20, 30, 0.08), 0 2px 6px rgba(20, 20, 30, 0.04);
+  overflow: hidden;
+  padding: 10px;
+}
+.login-logo-large img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.login-logo-fallback {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  box-shadow: 0 12px 28px rgba(var(--accent-rgb), 0.28), 0 3px 8px rgba(var(--accent-rgb), 0.15);
+  padding: 0;
+}
+[data-theme="dark"] .login-logo-large {
+  background: var(--surface-2);
+  border-color: var(--line);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+[data-theme="dark"] .login-logo-fallback {
+  background: var(--accent);
+  box-shadow: 0 12px 28px rgba(var(--accent-rgb), 0.32);
+}

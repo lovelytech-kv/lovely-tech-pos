@@ -11,6 +11,14 @@ class Branch(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    address: Mapped[str | None] = mapped_column(String(255))
+    phone: Mapped[str | None] = mapped_column(String(50))
+    email: Mapped[str | None] = mapped_column(String(120))
+    logo_base64: Mapped[str | None] = mapped_column(Text)
+    logo_mime: Mapped[str | None] = mapped_column(String(50))
+    invoice_prefix: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default='INV', default='INV'
+    )
 
 class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "roles"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, checkServerHealth } from '../../api/client';
 import { money } from '../../services/money';
+import { useShopProfile } from '../settings/ShopContext';
 
 type HomeDashboardUser = { display_name: string; role: string; branch_id?: string };
 
@@ -41,6 +42,10 @@ function saveHidden(ids: string[]): void {
 
 export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
   const isAdmin = user.role.toUpperCase() === 'ADMIN';
+
+  const { getShopName, getLogoDataUrl } = useShopProfile();
+  const shopName = getShopName();
+  const shopLogo = getLogoDataUrl();
 
   const [now, setNow] = useState<Date>(new Date());
   const [salesSummary, setSalesSummary] = useState<any>(null);
@@ -141,16 +146,20 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
         }}
       >
         <div>
-          <span className="eyebrow">WELCOME BACK</span>
-          <h2
-            style={{
-              margin: '4px 0 0',
-              fontSize: '1.25rem',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Welcome, {user.display_name}
-          </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '4px' }}>
+        {shopLogo && <img src={shopLogo} alt="" style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'contain', background: 'var(--surface-2)' }} />}
+        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{shopName}</span>
+        </div>
+        <span className="eyebrow">WELCOME BACK</span>
+        <h2
+          style={{
+          margin: '4px 0 0',
+          fontSize: '1.25rem',
+          letterSpacing: '-0.02em',
+          }}
+        >
+         Welcome, {user.display_name}
+        </h2>
         </div>
         <div
           className="date-time-display"

@@ -5,10 +5,10 @@ type Item = { id: number; msg: string; type: ToastType };
 
 let _id = 0;
 
-const COLORS: Record<ToastType, { bg: string; border: string; color: string }> = {
-  success: { bg: 'rgba(22, 163, 74, 0.12)', border: 'rgba(22, 163, 74, 0.4)', color: '#16a34a' },
-  error: { bg: 'rgba(220, 38, 38, 0.12)', border: 'rgba(220, 38, 38, 0.4)', color: '#dc2626' },
-  info: { bg: 'rgba(37, 99, 235, 0.12)', border: 'rgba(37, 99, 235, 0.4)', color: '#2563eb' },
+const TOAST_CONFIG: Record<ToastType, { icon: string }> = {
+  success: { icon: '✓' },
+  error: { icon: '✕' },
+  info: { icon: 'i' },
 };
 
 export function ToastContainer() {
@@ -20,7 +20,7 @@ export function ToastContainer() {
       setItems((prev) => [...prev, { id, msg, type }]);
       window.setTimeout(() => {
         setItems((prev) => prev.filter((x) => x.id !== id));
-      }, 3000);
+      }, 4000);
     });
     return unsub;
   }, []);
@@ -30,40 +30,22 @@ export function ToastContainer() {
   if (items.length === 0) return null;
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 16,
-        right: 16,
-        zIndex: 9999,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        maxWidth: 360,
-      }}
-      aria-live='polite'
-    >
+    <div className="toast-stack" aria-live="polite" aria-atomic="false">
       {items.map((it) => {
-        const c = COLORS[it.type];
+        const cfg = TOAST_CONFIG[it.type];
         return (
-          <div
-            key={it.id}
-            role='status'
-            onClick={() => dismiss(it.id)}
-            style={{
-              padding: '0.75rem 1rem',
-              borderRadius: 10,
-              background: c.bg,
-              border: `1px solid ${c.border}`,
-              color: c.color,
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
-          >
-            {it.msg}
+          <div key={it.id} className={`toast toast-${it.type}`} role="status">
+            <div className="toast-icon" aria-hidden="true">{cfg.icon}</div>
+            <div className="toast-message">{it.msg}</div>
+            <button
+              type="button"
+              className="toast-close"
+              onClick={() => dismiss(it.id)}
+              aria-label="Dismiss notification"
+            >
+              ×
+            </button>
+            <div className="toast-progress" />
           </div>
         );
       })}

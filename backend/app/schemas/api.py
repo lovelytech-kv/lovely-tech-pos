@@ -397,3 +397,32 @@ class ProvisioningOut(BaseModel):
     protocol_version: str
     api_version: str
     setup_state: str
+
+# ============ CHUNK 9a — BRANCH SHOP PROFILE ============
+
+class BranchPublicOut(BaseModel):
+    name: str
+    logo_base64: str | None = None
+    logo_mime: str | None = None
+
+
+class BranchProfileOut(BaseModel):
+    branch_id: UUID
+    code: str
+    name: str
+    address: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    logo_base64: str | None = None
+    logo_mime: str | None = None
+    invoice_prefix: str = 'INV'
+
+
+class BranchProfileUpdateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    address: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=120)
+    logo_base64: str | None = None
+    logo_mime: str | None = None
+    invoice_prefix: str = Field(default='INV', max_length=20)

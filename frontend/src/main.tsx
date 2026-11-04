@@ -24,11 +24,11 @@ import {
   isTransientSetupState,
 } from './services/machine-config';
 import { ThemeProvider } from './theme/ThemeProvider';
+import { ShopProvider } from './features/settings/ShopContext';
 import { ToastContainer } from './ui/ToastContainer';
 import { ModalProvider } from './ui/modals';
 import './styles.css';
 
-// Shows the real error instead of a blank white screen, so problems can be reported and fixed quickly.
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
@@ -64,8 +64,6 @@ function App() {
     return () => window.removeEventListener('ltpos:session-expired', h);
   }, []);
 
-  // Machine-role foundation: in a Tauri build the app is always a CLIENT.
-  // In browser dev mode there is no machine role; we skip persistence.
   useEffect(() => {
     if (!isTauriEnvironment()) {
       setMachineRoleState(null);
@@ -78,8 +76,6 @@ function App() {
     setSetupStateLocal(config.setup_state);
   }, []);
 
-  // Startup discovery runs once on mount. It does not block browser development:
-  // in a non-Tauri environment ensureApiBaseResolved resolves to /api/v1 immediately.
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -243,10 +239,12 @@ createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
       <ThemeProvider>
-        <ModalProvider>
-          <App />
-          <ToastContainer />
-        </ModalProvider>
+        <ShopProvider>
+          <ModalProvider>
+            <App />
+            <ToastContainer />
+          </ModalProvider>
+        </ShopProvider>
       </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>

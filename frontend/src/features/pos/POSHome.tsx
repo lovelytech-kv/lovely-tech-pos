@@ -10,8 +10,11 @@ import { ReturnsWorkspace } from '../returns/ReturnsWorkspace';
 import { WarrantyWorkspace } from '../warranty/WarrantyWorkspace';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { HomeDashboard } from '../home/HomeDashboard';
+import { SalesHistory } from '../sales/SalesHistory';
 import { moneyInputProps, intInputProps, signedIntInputProps } from '../../utils/numberInput';
 import { toast } from '../../ui/toast';
+import { useModal } from '../../ui/modals';
+import { useShopProfile } from '../settings/ShopContext';
 
 type User = { display_name:string; role:string; branch_id:string; username?:string };
 type WarrantyDefault = { warranty_type:string; duration_value?:number|null; custom_rule?:string|null };
@@ -53,8 +56,10 @@ function getDefaultDocType(): DocType {
   return 'SYSTEM_PRINTED';
 }
 
-function buildReceiptHTML(sale: any): string {
+function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoDataUrl: () => string | null }): string {
   const lines = Array.isArray(sale?.lines) ? sale.lines : [];
+  const shopName = shop.getShopName();
+  const logoUrl = shop.getLogoDataUrl();
   return `<!DOCTYPE html><html><head><title>Receipt ${sale?.invoice_no || ''}</title>
     <style>
       body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
@@ -65,8 +70,10 @@ function buildReceiptHTML(sale: any): string {
       .line{padding:2px 0;}
       .total{font-size:15px;font-weight:700;}
       .foot{text-align:center;font-size:11px;margin-top:8px;}
+      .logo{display:block;margin:0 auto 4px;max-width:80px;max-height:80px;object-fit:contain;}
     </style></head><body>
-    <h1>Lovely Tech POS</h1>
+    ${logoUrl ? `<img src="${logoUrl}" class="logo" />` : ''}
+    <h1>${shopName}</h1>
     <div class="meta">Invoice: ${sale?.invoice_no || '-'}<br/>${new Date().toLocaleString()}</div>
     <div class="divider"></div>
     ${lines.map((l: any) => `
@@ -78,7 +85,7 @@ function buildReceiptHTML(sale: any): string {
     <div class="divider"></div>
     <div class="row total"><span>TOTAL</span><span>Rs. ${sale?.grand_total || '0'}</span></div>
     <div class="divider"></div>
-    <div class="foot">Thank you for shopping at Lovely Tech!</div>
+    <div class="foot">Thank you for shopping at ${shopName}!</div>
     <script>window.onload = function(){ window.print(); };</script>
     </body></html>`;
 }
@@ -89,7 +96,7 @@ export function POSHome({user,onLogout}:{user:User,onLogout:()=>void}) {
   const isAdmin=user.role.toUpperCase()==='ADMIN';
   return <DashboardLayout user={user} activeKey={tab} onNavigate={key=>{setTab(key);setError('')}} onLogout={()=>{serverLogout().finally(onLogout)}}>
     {error&&<div className="error-banner" role="alert"><span>{error}</span><button className="error-dismiss" aria-label="Dismiss error" onClick={()=>setError('')}>×</button></div>}
-    {tab==='Dashboard'&&<HomeDashboard user={user} onNavigate={setTab}/>} {tab==='Customers'&&<CustomersTab onError={setError}/>} {tab==='Items'&&<ItemsTab onError={setError}/>} {tab==='Sales'&&<SalesTab isAdmin={isAdmin} onError={setError}/>} {tab==='Returns'&&<ReturnsWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Repairs'&&<><RepairForm onError={setError} /><RepairWorkspace isAdmin={isAdmin} onError={setError}/></>} {tab==='Warranty'&&<WarrantyWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Stock'&&<StockTab/>} {tab==='Purchases'&&<Purchases isAdmin={isAdmin} onError={setError}/>} {tab==='Expenses'&&<ExpensesTab onError={setError}/>} {tab==='Cash/Day'&&<DayEnd isAdmin={isAdmin} onError={setError}/>} {tab==='Reports'&&<ReportsTab isAdmin={isAdmin} onError={setError}/>} {tab==='Documents'&&<DocumentsTab onError={setError}/>} {tab==='Settings'&&<SettingsPanel isAdmin={isAdmin}/>} {tab==='Admin'&&isAdmin&&<AdminTab onError={setError}/>} {tab==='Backup'&&isAdmin&&<BackupTab onError={setError}/>}
+    {tab==='Dashboard'&&<HomeDashboard user={user} onNavigate={setTab}/>} {tab==='Customers'&&<CustomersTab onError={setError}/>} {tab==='Items'&&<ItemsTab onError={setError}/>} {tab==='Sales'&&<SalesTab isAdmin={isAdmin} onError={setError}/>} {tab==='SalesHistory'&&<SalesHistory isAdmin={isAdmin} onError={setError} onNavigate={setTab} user={user}/>} {tab==='Returns'&&<ReturnsWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Repairs'&&<><RepairForm onError={setError} /><RepairWorkspace isAdmin={isAdmin} onError={setError}/></>} {tab==='Warranty'&&<WarrantyWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Stock'&&<StockTab/>} {tab==='Purchases'&&<Purchases isAdmin={isAdmin} onError={setError}/>} {tab==='Expenses'&&<ExpensesTab onError={setError}/>} {tab==='Cash/Day'&&<DayEnd isAdmin={isAdmin} onError={setError}/>} {tab==='Reports'&&<ReportsTab isAdmin={isAdmin} onError={setError}/>} {tab==='Documents'&&<DocumentsTab onError={setError}/>} {tab==='Settings'&&<SettingsPanel isAdmin={isAdmin}/>} {tab==='Admin'&&isAdmin&&<AdminTab onError={setError}/>} {tab==='Backup'&&isAdmin&&<BackupTab onError={setError}/>}
   </DashboardLayout>;
 }
 
@@ -114,6 +121,7 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
   const itemsRef = useRef<Item[]>(items);
   const pendingFocusRef = useRef<string | null>(null);
   const checkoutGuardRef = useRef(false);
+  const shop = useShopProfile();
   useEffect(() => { cartRef.current = cart; }, [cart]);
   useEffect(() => { itemsRef.current = items; }, [items]);
   useEffect(() => {
@@ -293,25 +301,25 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
   function edit(id:string,k:'quantity'|'price'|'discount',v:string){setCart(c=>c.map(x=>x.line_id===id?{...x,[k]:v}:x))}
   function setWarrantyOverride(id:string, value:string){setCart(c=>c.map(x=>x.line_id===id?{...x,warranty_override:value==='DEFAULT'?null:{...(x.warranty_default||{warranty_type:'NONE'}),warranty_type:value,duration_value:value==='DAYS'||value==='MONTHS'?(x.warranty_override?.duration_value||x.warranty_default?.duration_value||null):null,custom_rule:value==='CUSTOM'?(x.warranty_override?.custom_rule||x.warranty_default?.custom_rule||''):null}}:x))}
 
-  function writeReceipt(w: Window, sale: any) {
-    try {
-      if (!w || w.closed) return;
-      w.document.open();
-      w.document.write(buildReceiptHTML(sale));
-      w.document.close();
-    } catch {
-      // ignore
-    }
+  function writeReceipt(w: Window, sale: any, shop: { getShopName: () => string; getLogoDataUrl: () => string | null }) {
+  try {
+    if (!w || w.closed) return;
+    w.document.open();
+    w.document.write(buildReceiptHTML(sale, shop));
+    w.document.close();
+  } catch {
+    // ignore
   }
+}
 
-  function printReceipt(sale: any) {
-    const w = window.open('', '_blank', 'width=420,height=640');
-    if (!w) {
-      onError('Print popup was blocked. Please allow popups for this site and try again.');
-      return;
-    }
-    writeReceipt(w, sale);
+  function printReceipt(sale: any, shop: { getShopName: () => string; getLogoDataUrl: () => string | null }) {
+  const w = window.open('', '_blank', 'width=420,height=640');
+  if (!w) {
+    onError('Print popup was blocked. Please allow popups for this site and try again.');
+    return;
   }
+  writeReceipt(w, sale, shop);
+}
 
   function openPrintWindow(): Window | null {
     try {
@@ -392,7 +400,7 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
         setSaleKey(crypto.randomUUID());
         setDoc(getDefaultDocType());
         if (saleDoc === 'SYSTEM_PRINTED' && !saleCredit && preOpenedPrintWindow && !preOpenedPrintWindow.closed) {
-          writeReceipt(preOpenedPrintWindow, result);
+          writeReceipt(preOpenedPrintWindow, result, shop);
           printed = true;
         }
       } catch(e) {
@@ -526,7 +534,7 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
             <span>Completed: {last.invoice_no} · Rs. {money(last.grand_total)}{last.negative_stock ? ' · Negative stock warning' : ''}</span>
             <button
               type="button"
-              onClick={() => printReceipt(last)}
+              onClick={() => printReceipt(last, shop)}
               style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--color-success)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', minHeight: 36 }}
             >
               🖨 Print Receipt
@@ -801,9 +809,10 @@ function ItemMasterPanel({onError}:{onError:(x:string)=>void}){
 function AdminTab({onError}:{onError:(x:string)=>void}){
  const [roles,setRoles]=useState<any[]>([]),[perms,setPerms]=useState<any[]>([]),[users,setUsers]=useState<any[]>([]),[targets,setTargets]=useState<any[]>([]),[approvals,setApprovals]=useState<any[]>([]),[expenses,setExpenses]=useState<any[]>([]),[otherIncome,setOtherIncome]=useState<any[]>([]),[audit,setAudit]=useState<any[]>([]),[targetHistory,setTargetHistory]=useState<any[]>([]),[suppliers,setSuppliers]=useState<any[]>([]),[supplierName,setSupplierName]=useState(''),[supplierContact,setSupplierContact]=useState(''),[supplierAddress,setSupplierAddress]=useState(''),[expenseCats,setExpenseCats]=useState<any[]>([]),[expenseCatName,setExpenseCatName]=useState(''),[target,setTarget]=useState({target_type:'SALES_AMOUNT',target_value:'',period_type:'DAILY',period_start:today(),period_end:today()});
  const [adminLoading,setAdminLoading]=useState(false);
+ const modal = useModal();
  async function load(){try{setAdminLoading(true);const [r,p,u,t,a,e,au,h,sp,ec,oi]=await Promise.all([api<any[]>('/admin/roles'),api<any[]>('/admin/permissions'),api<any[]>('/admin/users'),api<any[]>('/admin/targets'),api<any[]>('/admin/approvals'),api<any[]>('/admin/pending-expenses'),api<any[]>('/admin/audit'),api<any[]>('/reports/target-history',{method:'POST',body:JSON.stringify({start:'2000-01-01',end:'2100-12-31'})}),api<any[]>('/admin/suppliers'),api<any[]>('/admin/expense-categories'),api<any[]>('/admin/pending-other-income')]);setOtherIncome(oi);setRoles(r);setPerms(p);setUsers(u);setTargets(t);setApprovals(a);setExpenses(e);setAudit(au);setTargetHistory(h);setSuppliers(sp);setExpenseCats(ec)}catch(e){onError((e as Error).message)}finally{setAdminLoading(false)}}
  useEffect(()=>{load()},[]);
- async function saveRole(r:any){try{const admin_password=window.prompt('Admin password (re-authentication required)')||'';await api(`/admin/roles/${r.role_id}/permissions?admin_password=${encodeURIComponent(admin_password)}`,{method:'PUT',body:JSON.stringify({permission_codes:r.permissions})});load()}catch(e){onError((e as Error).message)}}
+  async function saveRole(r:any){try{const admin_password=(await modal.prompt({title:'Admin re-authentication',message:'Enter admin password to save role permissions',placeholder:'Password',confirmText:'Save',type:'password'}))||'';if(!admin_password)return;await api(`/admin/roles/${r.role_id}/permissions?admin_password=${encodeURIComponent(admin_password)}`,{method:'PUT',body:JSON.stringify({permission_codes:r.permissions})});load()}catch(e){onError((e as Error).message)}}
  async function addTarget(){try{await api('/admin/targets',{method:'POST',body:JSON.stringify({...target,target_value:String(target.target_value)})});setTarget({...target,target_value:''});load()}catch(e){onError((e as Error).message)}}
  async function addExpenseCategory(){if(!expenseCatName.trim())return onError('Expense category name is required.');try{await api('/admin/expense-categories',{method:'POST',body:JSON.stringify({name:expenseCatName.trim()})});setExpenseCatName('');load()}catch(e){onError((e as Error).message)}}
  async function addSupplier(){if(!supplierName.trim())return onError('Supplier name is required.');try{await api('/admin/suppliers',{method:'POST',body:JSON.stringify({name:supplierName.trim(),contact_no:supplierContact.trim()||null,address:supplierAddress.trim()||null})});setSupplierName('');setSupplierContact('');setSupplierAddress('');load()}catch(e){onError((e as Error).message)}}
@@ -839,8 +848,8 @@ function AdminTab({onError}:{onError:(x:string)=>void}){
 function CategoryTypeManager({onError}:{onError:(x:string)=>void}){const [categoryName,setCategoryName]=useState(''),[typeName,setTypeName]=useState(''),[code,setCode]=useState(''),[serialized,setSerialized]=useState(false),[busy,setBusy]=useState(false);async function addCategory(){try{setBusy(true);await api('/items/categories',{method:'POST',body:JSON.stringify({name:categoryName})});setCategoryName('');toast.success('Category added')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}async function addType(){try{setBusy(true);await api('/items/item-types',{method:'POST',body:JSON.stringify({code,name:typeName,is_serialized:serialized})});setCode('');setTypeName('');setSerialized(false);toast.success('Item type added')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div className="glass panel"><h3>Category / Item Type Management</h3><div className="form-grid compact"><input placeholder="New category name" value={categoryName} onChange={e=>setCategoryName(e.target.value)}/><button disabled={busy||!categoryName.trim()} onClick={addCategory}>Add Category</button><input placeholder="Item type code" value={code} onChange={e=>setCode(e.target.value)}/><input placeholder="Item type name" value={typeName} onChange={e=>setTypeName(e.target.value)}/><label className="check"><input type="checkbox" checked={serialized} onChange={e=>setSerialized(e.target.checked)}/> Serialized / IMEI</label><button disabled={busy||!code.trim()||!typeName.trim()} onClick={addType}>Add Item Type</button></div></div>}
 
 function UserRow({user,onError,onSaved}:{user:any,onError:(x:string)=>void,onSaved:()=>void}){const [limit,setLimit]=useState(String(user.discount_limit_percent??0));const [busy,setBusy]=useState(false);async function save(){if(busy)return;const n=Number(limit);if(!Number.isFinite(n)||n<0||n>100)return onError('Discount limit must be between 0 and 100%.');if(user.version==null)return onError('User version is missing; refresh before editing.');try{setBusy(true);await api(`/admin/users/${user.user_id}/discount-limit`,{method:'PUT',body:JSON.stringify({discount_limit_percent:String(n),version:user.version})});onSaved()}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div className="stock-row"><span>{user.username} · {user.display_name} · {user.role} · v{user.version ?? '—'}</span><span className="inline-control">Discount limit % <input {...moneyInputProps(limit, setLimit)}/><button disabled={busy} onClick={save}>{busy?'Saving…':'Save'}</button></span></div>}
-function StockAdjustPanel({onError}:{onError:(x:string)=>void}){const [item,setItem]=useState(''),[search,setSearch]=useState(''),[items,setItems]=useState<any[]>([]),[qty,setQty]=useState(''),[reason,setReason]=useState(''),[units,setUnits]=useState<any[]>([]),[picked,setPicked]=useState<string[]>([]);const chosen=items.find((x:any)=>x.item_id===item);const serialized=!!chosen?.is_serialized;async function find(){try{setItems(await api<any[]>(`/inventory/items/search?q=${encodeURIComponent(search.trim())}`))}catch(e){onError((e as Error).message)}}async function pickItem(id:string){setItem(id);setPicked([]);setUnits([]);const it=items.find((x:any)=>x.item_id===id);if(it?.is_serialized){try{setUnits(await api<any[]>(`/inventory/serialized/search?q=&item_id=${id}&status=IN_STOCK`))}catch(e){onError((e as Error).message)}}}async function save(){try{const admin_password=window.prompt('Admin password (re-authentication required)')||''; await api(`/stock-control/adjust?admin_password=${encodeURIComponent(admin_password)}`,{method:'POST',body:JSON.stringify(serialized?{item_id:item,quantity_delta:String(-picked.length),reason:reason.trim(),serialized_unit_ids:picked}:{item_id:item,quantity_delta:String(qty),reason:reason.trim()})});setQty('');setReason('');setPicked([]);if(serialized)pickItem(item);toast.success('Stock adjustment saved')}catch(e){onError((e as Error).message)}}return <div className="form-grid compact"><input placeholder="Search item / code" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&find()}/><button onClick={find}>Find Item</button><select value={item} onChange={e=>pickItem(e.target.value)}><option value="">Select item</option>{items.map((x:any)=><option key={x.item_id} value={x.item_id}>{x.item_code} · {x.description} · Stock {x.stock}</option>)}</select>{serialized?<div className="wide-field"><p className="muted">IMEI-tracked phone: tick the phones to WRITE OFF (stock goes down by the number ticked). To add phones use Purchases with their IMEI.</p>{units.length===0?<p className="muted">No in-stock units.</p>:units.map((u:any)=><label className="check" key={u.serialized_unit_id}><input type="checkbox" checked={picked.includes(u.serialized_unit_id)} onChange={e=>setPicked(p=>e.target.checked?[...p,u.serialized_unit_id]:p.filter(x=>x!==u.serialized_unit_id))}/> {u.serial_number}</label>)}</div>:<input {...signedIntInputProps(qty, setQty)} placeholder="+/- Quantity"/>}<input placeholder="Required reason" value={reason} onChange={e=>setReason(e.target.value)}/><button disabled={serialized&&picked.length===0} onClick={save}>Adjust Stock</button></div>}
-function VoidSalePanel({onError}:{onError:(x:string)=>void}){const [inv,setInv]=useState(''),[sale,setSale]=useState<any>(null),[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[done,setDone]=useState('');async function find(){try{setDone('');setSale(await api<any>(`/sales/${encodeURIComponent(inv.trim())}`))}catch(e){setSale(null);onError((e as Error).message)}}async function voidIt(){if(busy||!sale)return;if(!reason.trim())return onError('Void reason is required.');if(!window.confirm(`Void ${sale.invoice_no}? Stock, IMEI, warranty, drawer and reports are reversed. The invoice number is never reused.`))return;const admin_password=window.prompt('Admin password (re-authentication required)')||'';try{setBusy(true);await api(`/sales/${sale.sale_id}/void?reason=${encodeURIComponent(reason.trim())}&version=${encodeURIComponent(String(sale.version??''))}&admin_password=${encodeURIComponent(admin_password)}`,{method:'POST'});setDone(`${sale.invoice_no} voided.`);setSale(null);setInv('');setReason('')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div><p className="muted">Admin only. Use for a wrong sale rung up today. After Day End, or once a return/settlement/warranty claim exists, use Returns instead.</p><div className="form-grid compact"><input placeholder="Invoice no. (e.g. INV-000123)" value={inv} onChange={e=>setInv(e.target.value)}/><button disabled={!inv.trim()} onClick={find}>Find Sale</button></div>{done&&<p className="success-banner">{done}</p>}{sale&&<div><p><b>{sale.invoice_no}</b> · Rs. {money(sale.grand_total)} · {new Date(sale.sale_datetime).toLocaleString()}</p>{sale.lines.map((l:any)=><div className="stock-row" key={l.sale_line_id}><span>{l.item_code} · {l.description} × {money(l.quantity)}</span><span>Rs. {money(l.final_total)}</span></div>)}<div className="form-grid compact"><input placeholder="Required void reason" value={reason} onChange={e=>setReason(e.target.value)}/><button className="danger-button" disabled={busy||!reason.trim()} onClick={voidIt}>{busy?'Voiding…':'Void This Sale'}</button></div></div>}</div>}
+function StockAdjustPanel({onError}:{onError:(x:string)=>void}){const [item,setItem]=useState(''),[search,setSearch]=useState(''),[items,setItems]=useState<any[]>([]),[qty,setQty]=useState(''),[reason,setReason]=useState(''),[units,setUnits]=useState<any[]>([]),[picked,setPicked]=useState<string[]>([]);const chosen=items.find((x:any)=>x.item_id===item);const serialized=!!chosen?.is_serialized;const modal = useModal();async function find(){try{setItems(await api<any[]>(`/inventory/items/search?q=${encodeURIComponent(search.trim())}`))}catch(e){onError((e as Error).message)}}async function pickItem(id:string){setItem(id);setPicked([]);setUnits([]);const it=items.find((x:any)=>x.item_id===id);if(it?.is_serialized){try{setUnits(await api<any[]>(`/inventory/serialized/search?q=&item_id=${id}&status=IN_STOCK`))}catch(e){onError((e as Error).message)}}}async function save(){try{const admin_password=(await modal.prompt({title:'Admin re-authentication',message:'Enter admin password to adjust stock',placeholder:'Password',confirmText:'Adjust',type:'password'}))||'';if(!admin_password)return; await api(`/stock-control/adjust?admin_password=${encodeURIComponent(admin_password)}`,{method:'POST',body:JSON.stringify(serialized?{item_id:item,quantity_delta:String(-picked.length),reason:reason.trim(),serialized_unit_ids:picked}:{item_id:item,quantity_delta:String(qty),reason:reason.trim()})});setQty('');setReason('');setPicked([]);if(serialized)pickItem(item);toast.success('Stock adjustment saved')}catch(e){onError((e as Error).message)}}return <div className="form-grid compact"><input placeholder="Search item / code" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&find()}/><button onClick={find}>Find Item</button><select value={item} onChange={e=>pickItem(e.target.value)}><option value="">Select item</option>{items.map((x:any)=><option key={x.item_id} value={x.item_id}>{x.item_code} · {x.description} · Stock {x.stock}</option>)}</select>{serialized?<div className="wide-field"><p className="muted">IMEI-tracked phone: tick the phones to WRITE OFF (stock goes down by the number ticked). To add phones use Purchases with their IMEI.</p>{units.length===0?<p className="muted">No in-stock units.</p>:units.map((u:any)=><label className="check" key={u.serialized_unit_id}><input type="checkbox" checked={picked.includes(u.serialized_unit_id)} onChange={e=>setPicked(p=>e.target.checked?[...p,u.serialized_unit_id]:p.filter(x=>x!==u.serialized_unit_id))}/> {u.serial_number}</label>)}</div>:<input {...signedIntInputProps(qty, setQty)} placeholder="+/- Quantity"/>}<input placeholder="Required reason" value={reason} onChange={e=>setReason(e.target.value)}/><button disabled={serialized&&picked.length===0} onClick={save}>Adjust Stock</button></div>}
+function VoidSalePanel({onError}:{onError:(x:string)=>void}){const [inv,setInv]=useState(''),[sale,setSale]=useState<any>(null),[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[done,setDone]=useState('');const modal=useModal();async function find(){try{setDone('');setSale(await api<any>(`/sales/${encodeURIComponent(inv.trim())}`))}catch(e){setSale(null);onError((e as Error).message)}}async function voidIt(){if(busy||!sale)return;if(!reason.trim())return onError('Void reason is required.');if(!window.confirm(`Void ${sale.invoice_no}? Stock, IMEI, warranty, drawer and reports are reversed. The invoice number is never reused.`))return;const admin_password=(await modal.prompt({title:'Admin re-authentication',message:'Enter admin password to void this sale',placeholder:'Password',confirmText:'Void Sale',type:'password'}))||'';if(!admin_password)return;try{setBusy(true);await api(`/sales/${sale.sale_id}/void?reason=${encodeURIComponent(reason.trim())}&version=${encodeURIComponent(String(sale.version??''))}&admin_password=${encodeURIComponent(admin_password)}`,{method:'POST'});setDone(`${sale.invoice_no} voided.`);setSale(null);setInv('');setReason('')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div><p className="muted">Admin only. Use for a wrong sale rung up today. After Day End, or once a return/settlement/warranty claim exists, use Returns instead.</p><div className="form-grid compact"><input placeholder="Invoice no. (e.g. INV-000123)" value={inv} onChange={e=>setInv(e.target.value)}/><button disabled={!inv.trim()} onClick={find}>Find Sale</button></div>{done&&<p className="success-banner">{done}</p>}{sale&&<div><p><b>{sale.invoice_no}</b> · Rs. {money(sale.grand_total)} · {new Date(sale.sale_datetime).toLocaleString()}</p>{sale.lines.map((l:any)=><div className="stock-row" key={l.sale_line_id}><span>{l.item_code} · {l.description} × {money(l.quantity)}</span><span>Rs. {money(l.final_total)}</span></div>)}<div className="form-grid compact"><input placeholder="Required void reason" value={reason} onChange={e=>setReason(e.target.value)}/><button className="danger-button" disabled={busy||!reason.trim()} onClick={voidIt}>{busy?'Voiding…':'Void This Sale'}</button></div></div>}</div>}
 
 function RoleEditor({role,perms,onSave}:{role:any,perms:any[],onSave:(r:any)=>void}){const [selected,setSelected]=useState<string[]>(role.permissions);return <div className="role-editor"><b>{role.name}</b><div className="permission-grid">{perms.map(p=><label key={p.code}><input type="checkbox" checked={selected.includes(p.code)} onChange={e=>setSelected(e.target.checked?[...selected,p.code]:selected.filter(x=>x!==p.code))}/>{p.code}</label>)}</div><button onClick={()=>onSave({...role,permissions:selected})}>Save Permissions</button></div>}
 
@@ -851,22 +860,24 @@ function BackupTab({onError}:{onError:(x:string)=>void}){const [rows,setRows]=us
 function DamageRestockPanel({onError}:{onError:(x:string)=>void}){
   const [rows,setRows]=useState<any[]>([]),[search,setSearch]=useState(''),[items,setItems]=useState<any[]>([]),[item,setItem]=useState(''),[qty,setQty]=useState('1'),[kind,setKind]=useState('DAMAGE'),[reason,setReason]=useState(''),[units,setUnits]=useState<any[]>([]),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false);
   const chosen=items.find((x:any)=>x.item_id===item); const serialized=!!chosen?.is_serialized;
+  const modal = useModal();
   async function load(){try{setRows(await api<any[]>('/stock-control/damage-loss?limit=50'))}catch(e){onError((e as Error).message)}}
   useEffect(()=>{load()},[]);
   async function find(){try{setItems(await api<any[]>(`/inventory/items/search?q=${encodeURIComponent(search.trim())}`))}catch(e){onError((e as Error).message)}}
   async function pickItem(id:string){setItem(id);setPicked([]);setUnits([]);const it=items.find((x:any)=>x.item_id===id);if(it?.is_serialized){try{setUnits(await api<any[]>(`/inventory/serialized/search?q=&item_id=${id}&status=IN_STOCK`))}catch(e){onError((e as Error).message)}}}
   async function record(){
     if(busy) return; if(!item||!reason.trim()) return onError('Select an item and enter a reason.');
-    const admin_password=window.prompt('Admin password (re-authentication required)')||'';
+    const admin_password=(await modal.prompt({title:'Admin re-authentication',message:'Enter admin password to record damage/loss',placeholder:'Password',confirmText:'Record',type:'password'}))||'';if(!admin_password)return;
     try{setBusy(true);await api(`/stock-control/damage-loss?admin_password=${encodeURIComponent(admin_password)}`,{method:'POST',body:JSON.stringify({item_id:item,quantity:String(serialized?picked.length:qty),reason:reason.trim(),loss_type:kind,serialized_unit_ids:serialized?picked:undefined,idempotency_key:crypto.randomUUID()})});setReason('');setPicked([]);await load();if(serialized)pickItem(item);toast.success('Recorded')}catch(e){onError((e as Error).message)}finally{setBusy(false)}
   }
   async function restock(r:any){
     const reason=window.prompt('Reason: why is this item resellable? (required)')?.trim(); if(!reason) return;
-    const admin_password=window.prompt('Admin password (re-authentication required)')||'';
+    const admin_password=(await modal.prompt({title:'Admin re-authentication',message:'Enter admin password to restock this item',placeholder:'Password',confirmText:'Restock',type:'password'}))||'';if(!admin_password)return;
     try{await api(`/stock-control/damage-loss/${r.damage_loss_id}/restock?reason=${encodeURIComponent(reason)}&admin_password=${encodeURIComponent(admin_password)}`,{method:'POST'});await load();toast.success('Item restocked (audited)')}catch(e){onError((e as Error).message)}
   }
   async function finalize(r:any){
-    const admin_password=window.prompt('Admin password (re-authentication required)')||'';
+        const admin_password=(await modal.prompt({title:'Admin re-authentication',message:'Enter admin password to finalize this damage/loss record',placeholder:'Password',confirmText:'Finalize',type:'password'}))||'';
+    if(!admin_password)return;
     try{await api(`/stock-control/damage-loss/${r.damage_loss_id}/finalize?admin_password=${encodeURIComponent(admin_password)}`,{method:'POST'});await load()}catch(e){onError((e as Error).message)}
   }
   return <div><p className="muted">Record damage, loss or internal use. Cashier-marked damage (returns/exchanges) waits here for Admin to finalize. Resellable items can be restocked: the damage stays in history and the loss is given back in profit.</p>
