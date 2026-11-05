@@ -849,3 +849,154 @@ input:focus:not(:focus-visible) {
   background: var(--accent);
   box-shadow: 0 12px 28px rgba(var(--accent-rgb), 0.32);
 }
+/* ============ CHUNK 9b FIX v2 — INSTANT INPUT THEME SWITCH ============ */
+/* Covers Chrome -webkit-text-fill-color quirk + disables transitions to force repaint */
+
+/* Base — disable transition on all inputs (prevents stuck colors) */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+textarea,
+select {
+  transition: none !important;
+}
+
+/* Light theme — force dark text */
+html[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+html[data-theme="light"] textarea,
+html[data-theme="light"] select,
+html[data-theme="light"] .search-row input,
+html[data-theme="light"] .global-search input,
+html[data-theme="light"] .search-box input {
+  color: #171717 !important;
+  -webkit-text-fill-color: #171717 !important;
+  caret-color: #171717 !important;
+}
+
+html[data-theme="light"] input:focus:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="light"] textarea:focus,
+html[data-theme="light"] select:focus {
+  color: #171717 !important;
+  -webkit-text-fill-color: #171717 !important;
+}
+
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder {
+  color: #999 !important;
+  -webkit-text-fill-color: #999 !important;
+}
+
+/* Dark theme — force light text */
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select,
+html[data-theme="dark"] .search-row input,
+html[data-theme="dark"] .global-search input,
+html[data-theme="dark"] .search-box input {
+  color: #f4f4f5 !important;
+  -webkit-text-fill-color: #f4f4f5 !important;
+  caret-color: #f4f4f5 !important;
+}
+
+html[data-theme="dark"] input:focus:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] select:focus {
+  color: #f4f4f5 !important;
+  -webkit-text-fill-color: #f4f4f5 !important;
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: #6b6e75 !important;
+  -webkit-text-fill-color: #6b6e75 !important;
+}
+
+/* Disabled inputs */
+html[data-theme="light"] input:disabled,
+html[data-theme="light"] textarea:disabled {
+  color: #999 !important;
+  -webkit-text-fill-color: #999 !important;
+}
+html[data-theme="dark"] input:disabled,
+html[data-theme="dark"] textarea:disabled {
+  color: #6b6e75 !important;
+  -webkit-text-fill-color: #6b6e75 !important;
+}
+
+/* Chrome autofill — override yellow/white flash */
+html[data-theme="light"] input:-webkit-autofill,
+html[data-theme="light"] input:-webkit-autofill:hover,
+html[data-theme="light"] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #171717 !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  caret-color: #171717 !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+html[data-theme="dark"] input:-webkit-autofill,
+html[data-theme="dark"] input:-webkit-autofill:hover,
+html[data-theme="dark"] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f4f4f5 !important;
+  -webkit-box-shadow: 0 0 0 1000px #111318 inset !important;
+  caret-color: #f4f4f5 !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+/* ============ CHUNK 9b FIX v3 — CONTENT TEXT COLOR ON THEME TOGGLE ============ */
+/* Chrome bug: inherited colors don't repaint on data-theme toggle.
+   Fix: explicit color + !important + transition on both light & dark for containers. */
+
+html[data-theme="light"] .v0-content,
+html[data-theme="light"] .workspace,
+html[data-theme="light"] .glass,
+html[data-theme="light"] .glass-panel,
+html[data-theme="light"] .glass-card,
+html[data-theme="light"] .surface-card,
+html[data-theme="light"] .panel,
+html[data-theme="light"] .data-table,
+html[data-theme="light"] .data-table td,
+html[data-theme="light"] .stock-row,
+html[data-theme="light"] .claim-row,
+html[data-theme="light"] .list-row,
+html[data-theme="light"] .empty-state,
+html[data-theme="light"] .item-card,
+html[data-theme="light"] .detail-card,
+html[data-theme="light"] .day-card,
+html[data-theme="light"] .metric,
+html[data-theme="light"] .cart-line {
+  color: #171717 !important;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+html[data-theme="dark"] .v0-content,
+html[data-theme="dark"] .workspace,
+html[data-theme="dark"] .glass,
+html[data-theme="dark"] .glass-panel,
+html[data-theme="dark"] .glass-card,
+html[data-theme="dark"] .surface-card,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .data-table,
+html[data-theme="dark"] .data-table td,
+html[data-theme="dark"] .stock-row,
+html[data-theme="dark"] .claim-row,
+html[data-theme="dark"] .list-row,
+html[data-theme="dark"] .empty-state,
+html[data-theme="dark"] .item-card,
+html[data-theme="dark"] .detail-card,
+html[data-theme="dark"] .day-card,
+html[data-theme="dark"] .metric,
+html[data-theme="dark"] .cart-line {
+  color: #f4f4f5 !important;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+/* Muted text — explicit per theme */
+html[data-theme="light"] .muted { color: #777777 !important; }
+html[data-theme="dark"] .muted { color: #a2a5ad !important; }
+
+/* Table headers (th) — currently use var(--muted); make explicit */
+html[data-theme="light"] .data-table th { color: #777777 !important; }
+html[data-theme="dark"] .data-table th { color: #a2a5ad !important; }
+
+/* Preserve status badge colors (they have own rules — do not override) */
+html[data-theme="light"] .sh-status-void { color: #dc2626 !important; }
+html[data-theme="dark"] .sh-status-void { color: #f87171 !important; }
+html[data-theme="light"] .sh-status-ok { color: #16a34a !important; }
+html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }

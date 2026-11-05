@@ -402,8 +402,12 @@ class ProvisioningOut(BaseModel):
 
 class BranchPublicOut(BaseModel):
     name: str
-    logo_base64: str | None = None
-    logo_mime: str | None = None
+    logo_base64: str | None = None  # legacy
+    logo_mime: str | None = None  # legacy
+    logo_base64_light: str | None = None
+    logo_mime_light: str | None = None
+    logo_base64_dark: str | None = None
+    logo_mime_dark: str | None = None
 
 
 class BranchProfileOut(BaseModel):
@@ -413,8 +417,12 @@ class BranchProfileOut(BaseModel):
     address: str | None = None
     phone: str | None = None
     email: str | None = None
-    logo_base64: str | None = None
-    logo_mime: str | None = None
+    logo_base64: str | None = None  # legacy
+    logo_mime: str | None = None  # legacy
+    logo_base64_light: str | None = None
+    logo_mime_light: str | None = None
+    logo_base64_dark: str | None = None
+    logo_mime_dark: str | None = None
     invoice_prefix: str = 'INV'
 
 
@@ -423,6 +431,10 @@ class BranchProfileUpdateIn(BaseModel):
     address: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=50)
     email: str | None = Field(default=None, max_length=120)
-    logo_base64: str | None = None
-    logo_mime: str | None = None
+    logo_base64: str | None = None  # legacy — maps to light
+    logo_mime: str | None = None  # legacy
+    logo_base64_light: str | None = None
+    logo_mime_light: str | None = None
+    logo_base64_dark: str | None = None
+    logo_mime_dark: str | None = None
     invoice_prefix: str = Field(default='INV', max_length=20)

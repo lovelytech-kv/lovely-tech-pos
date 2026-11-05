@@ -12,8 +12,14 @@ type FullProfile = {
   email: string | null;
   logo_base64: string | null;
   logo_mime: string | null;
+  logo_base64_light: string | null;
+  logo_mime_light: string | null;
+  logo_base64_dark: string | null;
+  logo_mime_dark: string | null;
   invoice_prefix: string;
 };
+
+type LogoState = { base64: string; mime: string } | null;
 
 const MAX_LOGO_BYTES = 500 * 1024;
 const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/svg+xml'];
@@ -34,6 +40,31 @@ const labelStyle: React.CSSProperties = {
   color: 'var(--muted)',
 };
 
+function readFileAsLogo(file: File): Promise<LogoState> {
+  return new Promise((resolve, reject) => {
+    if (!ALLOWED_MIMES.includes(file.type)) {
+      reject(new Error('Logo must be PNG, JPEG, or SVG'));
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      reject(new Error(`Logo must be under 500KB (this file is ${Math.round(file.size / 1024)}KB)`));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const idx = result.indexOf(',');
+      if (idx < 0) {
+        reject(new Error('Failed to read image'));
+        return;
+      }
+      resolve({ base64: result.slice(idx + 1), mime: file.type });
+    };
+    reader.onerror = () => reject(new Error('Failed to read image'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
   const { refetch: refetchPublic } = useShopProfile();
   const [profile, setProfile] = useState<FullProfile | null>(null);
@@ -42,11 +73,12 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [invoicePrefix, setInvoicePrefix] = useState('INV');
-  const [logoBase64, setLogoBase64] = useState<string | null>(null);
-  const [logoMime, setLogoMime] = useState<string | null>(null);
+  const [logoLight, setLogoLight] = useState<LogoState>(null);
+  const [logoDark, setLogoDark] = useState<LogoState>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const fileLightRef = useRef<HTMLInputElement>(null);
+  const fileDarkRef = useRef<HTMLInputElement>(null);
 
   async function load() {
     try {
@@ -58,8 +90,15 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
       setPhone(result.phone || '');
       setEmail(result.email || '');
       setInvoicePrefix(result.invoice_prefix || 'INV');
-      setLogoBase64(result.logo_base64);
-      setLogoMime(result.logo_mime);
+      // Light: prefer explicit, fallback to legacy
+      const lightB64 = result.logo_base64_light || result.logo_base64;
+      const lightMime = result.logo_mime_light || result.logo_mime;
+      setLogoLight(lightB64 && lightMime ? { base64: lightB64, mime: lightMime } : null);
+      setLogoDark(
+        result.logo_base64_dark && result.logo_mime_dark
+          ? { base64: result.logo_base64_dark, mime: result.logo_mime_dark }
+          : null,
+      );
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -72,38 +111,38 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function onFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onPickLight(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!ALLOWED_MIMES.includes(file.type)) {
-      toast.error('Logo must be PNG, JPEG, or SVG');
-      if (fileRef.current) fileRef.current.value = '';
-      return;
+    try {
+      const parsed = await readFileAsLogo(file);
+      setLogoLight(parsed);
+    } catch (err) {
+      toast.error((err as Error).message);
+      if (fileLightRef.current) fileLightRef.current.value = '';
     }
-    if (file.size > MAX_LOGO_BYTES) {
-      toast.error(`Logo must be under 500KB (this file is ${Math.round(file.size / 1024)}KB)`);
-      if (fileRef.current) fileRef.current.value = '';
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const commaIdx = result.indexOf(',');
-      if (commaIdx < 0) {
-        toast.error('Failed to read image');
-        return;
-      }
-      setLogoBase64(result.slice(commaIdx + 1));
-      setLogoMime(file.type);
-    };
-    reader.onerror = () => toast.error('Failed to read image');
-    reader.readAsDataURL(file);
   }
 
-  function removeLogo() {
-    setLogoBase64(null);
-    setLogoMime(null);
-    if (fileRef.current) fileRef.current.value = '';
+  async function onPickDark(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const parsed = await readFileAsLogo(file);
+      setLogoDark(parsed);
+    } catch (err) {
+      toast.error((err as Error).message);
+      if (fileDarkRef.current) fileDarkRef.current.value = '';
+    }
+  }
+
+  function removeLight() {
+    setLogoLight(null);
+    if (fileLightRef.current) fileLightRef.current.value = '';
+  }
+
+  function removeDark() {
+    setLogoDark(null);
+    if (fileDarkRef.current) fileDarkRef.current.value = '';
   }
 
   async function save() {
@@ -120,8 +159,12 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
           address: address.trim() || null,
           phone: phone.trim() || null,
           email: email.trim() || null,
-          logo_base64: logoBase64,        // null keeps current; '' removes
-          logo_mime: logoMime,
+          // Light logo — explicit field (empty string clears)
+          logo_base64_light: logoLight ? logoLight.base64 : '',
+          logo_mime_light: logoLight ? logoLight.mime : null,
+          // Dark logo
+          logo_base64_dark: logoDark ? logoDark.base64 : '',
+          logo_mime_dark: logoDark ? logoDark.mime : null,
           invoice_prefix: invoicePrefix.trim() || 'INV',
         }),
       });
@@ -135,7 +178,81 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
-  const logoDataUrl = logoBase64 && logoMime ? `data:${logoMime};base64,${logoBase64}` : null;
+  function LogoBox({
+    logo,
+    onPick,
+    onRemove,
+    fileRef,
+    mode,
+  }: {
+    logo: LogoState;
+    onPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onRemove: () => void;
+    fileRef: React.RefObject<HTMLInputElement | null>;
+    mode: 'light' | 'dark';
+  }) {
+    const src = logo ? `data:${logo.mime};base64,${logo.base64}` : null;
+    const bg = mode === 'light' ? '#ffffff' : '#15171b';
+    const fg = mode === 'light' ? '#999' : '#666';
+    return (
+      <div style={{ display: 'grid', gap: '0.35rem' }}>
+        <div
+          style={{
+            width: 120,
+            height: 120,
+            border: '1px solid var(--line)',
+            borderRadius: 12,
+            background: bg,
+            display: 'grid',
+            placeItems: 'center',
+            overflow: 'hidden',
+            padding: src ? 6 : 0,
+          }}
+        >
+          {src ? (
+            <img
+              src={src}
+              alt={`${mode} mode logo preview`}
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+            />
+          ) : (
+            <span style={{ color: fg, fontSize: '0.7rem', textAlign: 'center', padding: '0.5rem' }}>
+              No {mode} logo
+            </span>
+          )}
+        </div>
+        {isAdmin && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml"
+              onChange={onPick}
+              style={{ display: 'none' }}
+            />
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => fileRef.current?.click()}
+              style={{ fontSize: '0.7rem', padding: '0.3rem 0.5rem' }}
+            >
+              Upload
+            </button>
+            {src && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={onRemove}
+                style={{ fontSize: '0.7rem', padding: '0.3rem 0.5rem', color: '#dc2626' }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -156,152 +273,119 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
       <div className="settings-card-title">
         <div>
           <h3>Shop Profile</h3>
-          <p className="muted">Name, contact and branding shown on receipts, login and header. Only admin can edit.</p>
+          <p className="muted">
+            Name, contact and branding shown on receipts, login and header. Only admin can edit.
+          </p>
         </div>
         <span className="settings-symbol">🏪</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1rem', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gap: '1rem' }}>
+        {/* Logo row: light + dark side by side */}
         <div>
-          <div
-            className="shop-logo-preview"
-            style={{
-              width: 120, height: 120,
-              border: '1px solid var(--line)',
-              borderRadius: 12,
-              background: 'var(--surface-2)',
-              display: 'grid',
-              placeItems: 'center',
-              overflow: 'hidden',
-            }}
-          >
-            {logoDataUrl ? (
-              <img src={logoDataUrl} alt="Logo preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-            ) : (
-              <span style={{ color: 'var(--muted)', fontSize: '0.75rem', textAlign: 'center', padding: '0.5rem' }}>No logo</span>
-            )}
+          <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '0.5rem', fontWeight: 600 }}>
+            Logos
           </div>
-          {isAdmin && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.5rem' }}>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/png,image/jpeg,image/svg+xml"
-                onChange={onFileSelect}
-                style={{ display: 'none' }}
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'grid', gap: '0.35rem' }}>
+              <small className="muted" style={{ fontSize: '0.7rem', textAlign: 'center', fontWeight: 600 }}>
+                ☀ Light mode
+              </small>
+              <LogoBox
+                logo={logoLight}
+                onPick={onPickLight}
+                onRemove={removeLight}
+                fileRef={fileLightRef}
+                mode="light"
               />
-              <button type="button" className="btn-secondary" onClick={() => fileRef.current?.click()} style={{ fontSize: '0.75rem', padding: '0.35rem 0.5rem' }}>
-                Upload
-              </button>
-              {logoDataUrl && (
-                <button type="button" className="btn-secondary" onClick={removeLogo} style={{ fontSize: '0.75rem', padding: '0.35rem 0.5rem', color: '#dc2626' }}>
-                  Remove
-                </button>
-              )}
-              <small className="muted" style={{ fontSize: '0.65rem', textAlign: 'center' }}>PNG/JPEG/SVG · max 500KB</small>
             </div>
-          )}
+            <div style={{ display: 'grid', gap: '0.35rem' }}>
+              <small className="muted" style={{ fontSize: '0.7rem', textAlign: 'center', fontWeight: 600 }}>
+                ☾ Dark mode
+              </small>
+              <LogoBox
+                logo={logoDark}
+                onPick={onPickDark}
+                onRemove={removeDark}
+                fileRef={fileDarkRef}
+                mode="dark"
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 200, fontSize: '0.7rem', color: 'var(--muted)', alignSelf: 'center' }}>
+              <p style={{ margin: '0 0 0.35rem' }}>
+                Upload separate logos for light and dark themes. The app automatically shows the matching logo based on the current theme.
+              </p>
+              <p style={{ margin: 0 }}>
+                If no dark logo is uploaded, the light logo is used in both modes. PNG, JPEG or SVG — max 500KB each.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gap: '0.75rem' }}>
-          <label style={labelStyle}>
-            Shop Name *
-            {isAdmin ? (
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={150}
-                placeholder="Lovely Tech"
-                style={inputStyle}
-              />
-            ) : (
-              <b style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{profile?.name || '—'}</b>
-            )}
-          </label>
-
-          <label style={labelStyle}>
-            Address
-            {isAdmin ? (
-              <textarea
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                maxLength={255}
-                rows={3}
-                placeholder="Shop address"
-                style={{ ...inputStyle, resize: 'vertical' }}
-              />
-            ) : (
-              <b style={{ color: 'var(--text)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{profile?.address || '—'}</b>
-            )}
-          </label>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <label style={labelStyle}>
-              Phone
-              {isAdmin ? (
-                <input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  maxLength={50}
-                  placeholder="Phone"
-                  style={inputStyle}
-                />
-              ) : (
-                <b style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{profile?.phone || '—'}</b>
-              )}
-            </label>
-
-            <label style={labelStyle}>
-              Email
-              {isAdmin ? (
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  maxLength={120}
-                  placeholder="Email"
-                  style={inputStyle}
-                />
-              ) : (
-                <b style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{profile?.email || '—'}</b>
-              )}
-            </label>
-          </div>
-
-          <label style={labelStyle}>
-            Invoice Prefix
-            {isAdmin ? (
-              <>
-                <input
-                  value={invoicePrefix}
-                  onChange={(e) => setInvoicePrefix(e.target.value)}
-                  maxLength={20}
-                  placeholder="INV"
-                  style={inputStyle}
-                />
-                <small className="muted" style={{ fontSize: '0.65rem' }}>
-                  Reserved for future invoice formatting (currently not applied to invoice numbers)
-                </small>
-              </>
-            ) : (
-              <b style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{profile?.invoice_prefix || 'INV'}</b>
-            )}
-          </label>
-
-          {!isAdmin && (
-            <p className="muted" style={{ margin: 0, fontSize: '0.75rem' }}>
-              Only admin can edit shop profile.
-            </p>
+        <label style={labelStyle}>
+          Shop Name *
+          {isAdmin ? (
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} placeholder="Lovely Tech" style={inputStyle} />
+          ) : (
+            <b style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{profile?.name || '—'}</b>
           )}
+        </label>
 
-          {isAdmin && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
-              <button type="button" className="primary" onClick={() => void save()} disabled={busy}>
-                {busy ? 'Saving…' : 'Save Shop Profile'}
-              </button>
-            </div>
+        <label style={labelStyle}>
+          Address
+          {isAdmin ? (
+            <textarea value={address} onChange={(e) => setAddress(e.target.value)} maxLength={255} rows={3} placeholder="Shop address" style={{ ...inputStyle, resize: 'vertical' }} />
+          ) : (
+            <b style={{ color: 'var(--text)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{profile?.address || '—'}</b>
           )}
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <label style={labelStyle}>
+            Phone
+            {isAdmin ? (
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={50} placeholder="Phone" style={inputStyle} />
+            ) : (
+              <b style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{profile?.phone || '—'}</b>
+            )}
+          </label>
+          <label style={labelStyle}>
+            Email
+            {isAdmin ? (
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={120} placeholder="Email" style={inputStyle} />
+            ) : (
+              <b style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{profile?.email || '—'}</b>
+            )}
+          </label>
         </div>
+
+        <label style={labelStyle}>
+          Invoice Prefix
+          {isAdmin ? (
+            <>
+              <input value={invoicePrefix} onChange={(e) => setInvoicePrefix(e.target.value)} maxLength={20} placeholder="INV" style={inputStyle} />
+              <small className="muted" style={{ fontSize: '0.65rem' }}>
+                Used as the display prefix for new invoices (e.g. INV-000123 → LT-000123)
+              </small>
+            </>
+          ) : (
+            <b style={{ color: 'var(--text)', fontSize: '0.9rem' }}>{profile?.invoice_prefix || 'INV'}</b>
+          )}
+        </label>
+
+        {!isAdmin && (
+          <p className="muted" style={{ margin: 0, fontSize: '0.75rem' }}>
+            Only admin can edit shop profile.
+          </p>
+        )}
+
+        {isAdmin && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
+            <button type="button" className="primary" onClick={() => void save()} disabled={busy}>
+              {busy ? 'Saving…' : 'Save Shop Profile'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

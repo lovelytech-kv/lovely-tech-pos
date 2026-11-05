@@ -9,11 +9,174 @@ from app.models.master import Item
 from app.models.warranty import ProductWarranty
 from app.models.security import DocumentEvent
 from app.schemas.api import DocumentSearchOut
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 router=APIRouter(prefix='/documents',tags=['documents'])
 
 @router.get('/search',response_model=list[DocumentSearchOut])
+@router.get('')
+def list_documents(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    document_type: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    user: User = Depends(require_permission('DOCUMENT_REPRINT')),
+    db: Session = Depends(db_session),
+):
+    """List all documents across sales, repairs, repair payments and settlements.
+
+    Permission: same as /documents/search — Admin sees all, Cashier sees only their own sales.
+    Settlement proofs are Admin-only (as in /search).
+
+    Default date range is today. Pagination via limit/offset with has_more flag.
+    """
+    limit = max(1, min(int(limit), 200))
+    offset = max(0, int(offset))
+    is_admin = user.role.code.upper() == 'ADMIN'
+
+    if date_from is None and date_to is None:
+        today_local = datetime.now(timezone.utc).date()
+        date_from = today_local
+        date_to = today_local
+
+    dt_from = datetime.combine(date_from, time.min, tzinfo=timezone.utc) if date_from else None
+    dt_to_excl = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=timezone.utc) if date_to else None
+
+    like = f'%{q.strip()}%' if q and q.strip() else None
+    wanted = document_type.strip().upper() if document_type else None
+    want_status = status.strip().upper() if status else None
+
+    def rng(col):
+        conds = []
+        if dt_from is not None:
+            conds.append(col >= dt_from)
+        if dt_to_excl is not None:
+            conds.append(col < dt_to_excl)
+        return conds
+
+    fetch_cap = offset + limit
+    results = []
+
+    # ---- SALES ----
+    if not wanted or wanted == 'SALE':
+        stmt = select(Sale).where(Sale.branch_id == user.branch_id)
+        if not is_admin:
+            stmt = stmt.where(Sale.cashier_id == user.id)
+        for c in rng(Sale.sale_datetime):
+            stmt = stmt.where(c)
+        if like:
+            stmt = stmt.where(
+                or_(
+                    Sale.invoice_no.ilike(like),
+                    Sale.manual_invoice_ref.ilike(like),
+                    Sale.customer_id.in_(
+                        select(Customer.id).where(
+                            or_(Customer.name.ilike(like), Customer.contact_no.ilike(like))
+                        )
+                    ),
+                    Sale.id.in_(
+                        select(SaleLine.sale_id)
+                        .join(Item, Item.id == SaleLine.item_id)
+                        .where(or_(Item.description.ilike(like), Item.item_code.ilike(like)))
+                    ),
+                )
+            )
+        if want_status:
+            stmt = stmt.where(Sale.status == want_status)
+        for s in db.scalars(stmt.order_by(Sale.sale_datetime.desc()).limit(fetch_cap)).all():
+            results.append({
+                'document_type': 'SALE',
+                'document_id': str(s.id),
+                'document_no': s.invoice_no,
+                'document_datetime': s.sale_datetime,
+                'status': s.status,
+            })
+
+    # ---- REPAIRS ----
+    if not wanted or wanted == 'REPAIR':
+        stmt = select(Repair).where(Repair.branch_id == user.branch_id)
+        for c in rng(Repair.date_in):
+            stmt = stmt.where(c)
+        if like:
+            stmt = stmt.where(
+                or_(
+                    Repair.repair_no.ilike(like),
+                    Repair.customer_name.ilike(like),
+                    Repair.contact_no.ilike(like),
+                )
+            )
+        if want_status:
+            stmt = stmt.where(Repair.status == want_status)
+        for r in db.scalars(stmt.order_by(Repair.date_in.desc()).limit(fetch_cap)).all():
+            results.append({
+                'document_type': 'REPAIR',
+                'document_id': str(r.id),
+                'document_no': r.repair_no,
+                'document_datetime': r.date_in,
+                'status': r.status,
+            })
+
+    # ---- REPAIR PAYMENTS ----
+    if not wanted or wanted == 'REPAIR_PAYMENT':
+        stmt = (
+            select(RepairPayment, Repair)
+            .join(Repair, Repair.id == RepairPayment.repair_id)
+            .where(Repair.branch_id == user.branch_id)
+        )
+        for c in rng(RepairPayment.payment_datetime):
+            stmt = stmt.where(c)
+        if like:
+            stmt = stmt.where(
+                or_(
+                    RepairPayment.proof_no.ilike(like),
+                    RepairPayment.reference.ilike(like),
+                    Repair.repair_no.ilike(like),
+                )
+            )
+        if want_status:
+            stmt = stmt.where(RepairPayment.payment_type == want_status)
+        for p, _repair in db.execute(stmt.order_by(RepairPayment.payment_datetime.desc()).limit(fetch_cap)).all():
+            results.append({
+                'document_type': 'REPAIR_PAYMENT',
+                'document_id': str(p.id),
+                'document_no': p.proof_no or str(p.id),
+                'document_datetime': p.payment_datetime,
+                'status': p.payment_type,
+            })
+
+    # ---- SETTLEMENTS (admin only, matching /search behavior) ----
+    if (not wanted or wanted == 'SETTLEMENT') and is_admin:
+        stmt = select(CreditSettlement).where(CreditSettlement.branch_id == user.branch_id)
+        for c in rng(CreditSettlement.settlement_datetime):
+            stmt = stmt.where(c)
+        if like:
+            stmt = stmt.where(
+                or_(
+                    CreditSettlement.proof_no.ilike(like),
+                    CreditSettlement.reference.ilike(like),
+                )
+            )
+        for s in db.scalars(stmt.order_by(CreditSettlement.settlement_datetime.desc()).limit(fetch_cap)).all():
+            results.append({
+                'document_type': 'SETTLEMENT',
+                'document_id': str(s.id),
+                'document_no': s.proof_no or str(s.id),
+                'document_datetime': s.settlement_datetime,
+                'status': 'COMPLETED',
+            })
+
+    results.sort(key=lambda x: x['document_datetime'], reverse=True)
+    total = len(results)
+    paged = results[offset:offset + limit]
+
+    return {
+        'items': paged,
+        'total': total,
+        'has_more': offset + limit < total,
+    }
 def search(q:str,user:User=Depends(require_permission('DOCUMENT_REPRINT')),db:Session=Depends(db_session)):
     q=q.strip()
     if not q: return []

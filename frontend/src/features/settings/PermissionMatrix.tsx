@@ -23,6 +23,7 @@ const TAB_PERMISSIONS: Permission[] = [
   'returns.view',
   'expenses.view',
   'documents.view',
+  'theme.accent.change',
 ];
 
 const ADMIN_ONLY_PERMISSIONS: Permission[] = [

@@ -16,6 +16,10 @@ class Branch(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     email: Mapped[str | None] = mapped_column(String(120))
     logo_base64: Mapped[str | None] = mapped_column(Text)
     logo_mime: Mapped[str | None] = mapped_column(String(50))
+    logo_base64_light: Mapped[str | None] = mapped_column(Text)
+    logo_mime_light: Mapped[str | None] = mapped_column(String(50))
+    logo_base64_dark: Mapped[str | None] = mapped_column(Text)
+    logo_mime_dark: Mapped[str | None] = mapped_column(String(50))
     invoice_prefix: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default='INV', default='INV'
     )

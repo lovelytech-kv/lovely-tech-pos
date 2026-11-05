@@ -14,7 +14,8 @@ export type Permission =
   | 'documents.view'
   | 'settings.view'
   | 'admin.view'
-  | 'backup.view';
+  | 'backup.view'
+  | 'theme.accent.change';
 
 export const DEFAULT_CASHIER_PERMISSIONS: Permission[] = [
   'dashboard.view',
@@ -49,6 +50,7 @@ export const DEFAULT_ADMIN_PERMISSIONS: Permission[] = [
   'settings.view',
   'admin.view',
   'backup.view',
+  'theme.accent.change',
 ];
 
 export function getDefaultPermissions(role: 'ADMIN' | 'CASHIER'): Permission[] {
@@ -80,6 +82,11 @@ export const PERMISSION_LABELS: Record<Permission, PermissionMeta> = {
   'settings.view': { label: 'Settings', description: 'Change device preferences and permissions', adminOnly: true },
   'admin.view': { label: 'Admin', description: 'Access admin tools and system controls', adminOnly: true },
   'backup.view': { label: 'Backup', description: 'Run and restore system backups', adminOnly: true },
+  'theme.accent.change': {
+    label: 'Accent color',
+    description: 'Change the primary accent color of the UI',
+    adminOnly: false,
+  },
 };
 
 export interface PermissionsStore {
@@ -104,7 +111,6 @@ function normalizeStore(raw: unknown): PermissionsStore {
   const cashier = (value.CASHIER as unknown[])
     .filter((p): p is Permission => typeof p === 'string' && allowed.has(p as Permission))
     .filter((p) => p !== 'settings.view' && p !== 'admin.view' && p !== 'backup.view');
-  // ADMIN list is read-only per chunk spec — always normalize to the full default set.
   return {
     ADMIN: [...DEFAULT_ADMIN_PERMISSIONS],
     CASHIER: cashier,

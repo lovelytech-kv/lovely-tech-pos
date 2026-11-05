@@ -55,26 +55,62 @@ function getDefaultDocType(): DocType {
   }
   return 'SYSTEM_PRINTED';
 }
+function buildGenericReprintHTML(r: any): string {
+  const title = String(r.document_type || 'Document');
+  const no = String(r.document_no || '—');
+  const dateStr = r.document_datetime ? new Date(r.document_datetime).toLocaleString() : '—';
+  const status = String(r.status || '—');
+  return `<!DOCTYPE html><html><head><title>Reprint ${no}</title>
+    <style>
+      body{font-family:'Consolas','Menlo',monospace;padding:20px;font-size:13px;color:#000;}
+      h1{font-size:16px;text-align:center;margin:0 0 12px;}
+      .label{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.05em;margin-top:8px;}
+      .value{font-size:14px;font-weight:700;}
+      .divider{border-top:1px dashed #000;margin:12px 0;}
+      .foot{text-align:center;font-size:10px;color:#888;margin-top:16px;line-height:1.4;}
+    </style></head><body>
+    <h1>Reprint — ${title}</h1>
+    <div class="divider"></div>
+    <div class="label">Document No</div>
+    <div class="value">${no}</div>
+    <div class="label">Type</div>
+    <div class="value">${title}</div>
+    <div class="label">Date</div>
+    <div class="value">${dateStr}</div>
+    <div class="label">Status</div>
+    <div class="value">${status}</div>
+    <div class="divider"></div>
+    <div class="foot">This is a reprint record.<br/>For full document copy, please contact admin.</div>
+    <script>window.onload = function(){ window.print(); };</script>
+    </body></html>`;
+}
 
-function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoDataUrl: () => string | null }): string {
+function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }, fullShop?: any): string {
   const lines = Array.isArray(sale?.lines) ? sale.lines : [];
   const shopName = shop.getShopName();
-  const logoUrl = shop.getLogoDataUrl();
-  return `<!DOCTYPE html><html><head><title>Receipt ${sale?.invoice_no || ''}</title>
+  const logoUrl = shop.getLogoDataUrl('light');
+  const address = fullShop?.address || '';
+  const phone = fullShop?.phone || '';
+  const email = fullShop?.email || '';
+  const invoiceNo = sale?.invoice_no || '-';
+  return `<!DOCTYPE html><html><head><title>Receipt ${invoiceNo}</title>
     <style>
       body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
       h1{font-size:16px;text-align:center;margin:0 0 4px;}
-      .meta{text-align:center;font-size:11px;color:#333;margin-bottom:8px;}
+      .meta{text-align:center;font-size:11px;color:#333;margin-bottom:4px;}
+      .contact{text-align:center;font-size:10px;color:#555;margin-bottom:8px;line-height:1.35;}
       .divider{border-top:1px dashed #000;margin:8px 0;}
       .row{display:flex;justify-content:space-between;gap:8px;}
       .line{padding:2px 0;}
       .total{font-size:15px;font-weight:700;}
       .foot{text-align:center;font-size:11px;margin-top:8px;}
+      .vendor{text-align:center;font-size:9px;color:#888;margin-top:6px;letter-spacing:0.02em;}
       .logo{display:block;margin:0 auto 4px;max-width:80px;max-height:80px;object-fit:contain;}
     </style></head><body>
     ${logoUrl ? `<img src="${logoUrl}" class="logo" />` : ''}
     <h1>${shopName}</h1>
-    <div class="meta">Invoice: ${sale?.invoice_no || '-'}<br/>${new Date().toLocaleString()}</div>
+    ${(address || phone || email) ? `<div class="contact">${address ? address + '<br/>' : ''}${phone ? 'Tel: ' + phone : ''}${phone && email ? ' · ' : ''}${email || ''}</div>` : ''}
+    <div class="meta">Invoice: ${invoiceNo}<br/>${new Date().toLocaleString()}</div>
     <div class="divider"></div>
     ${lines.map((l: any) => `
       <div class="line">
@@ -86,6 +122,7 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
     <div class="row total"><span>TOTAL</span><span>Rs. ${sale?.grand_total || '0'}</span></div>
     <div class="divider"></div>
     <div class="foot">Thank you for shopping at ${shopName}!</div>
+    <div class="vendor">Software by Lovely Tech</div>
     <script>window.onload = function(){ window.print(); };</script>
     </body></html>`;
 }
@@ -122,6 +159,12 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
   const pendingFocusRef = useRef<string | null>(null);
   const checkoutGuardRef = useRef(false);
   const shop = useShopProfile();
+const [fullShop, setFullShop] = useState<any>(null);
+useEffect(() => {
+  (async () => {
+    try { setFullShop(await api('/branch/profile')); } catch { /* ignore */ }
+  })();
+}, []);
   useEffect(() => { cartRef.current = cart; }, [cart]);
   useEffect(() => { itemsRef.current = items; }, [items]);
   useEffect(() => {
@@ -301,26 +344,25 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
   function edit(id:string,k:'quantity'|'price'|'discount',v:string){setCart(c=>c.map(x=>x.line_id===id?{...x,[k]:v}:x))}
   function setWarrantyOverride(id:string, value:string){setCart(c=>c.map(x=>x.line_id===id?{...x,warranty_override:value==='DEFAULT'?null:{...(x.warranty_default||{warranty_type:'NONE'}),warranty_type:value,duration_value:value==='DAYS'||value==='MONTHS'?(x.warranty_override?.duration_value||x.warranty_default?.duration_value||null):null,custom_rule:value==='CUSTOM'?(x.warranty_override?.custom_rule||x.warranty_default?.custom_rule||''):null}}:x))}
 
-  function writeReceipt(w: Window, sale: any, shop: { getShopName: () => string; getLogoDataUrl: () => string | null }) {
+  function writeReceipt(w: Window, sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }, fullShop?: any) {
   try {
     if (!w || w.closed) return;
     w.document.open();
-    w.document.write(buildReceiptHTML(sale, shop));
+    w.document.write(buildReceiptHTML(sale, shop, fullShop));
     w.document.close();
   } catch {
     // ignore
   }
 }
 
-  function printReceipt(sale: any, shop: { getShopName: () => string; getLogoDataUrl: () => string | null }) {
+  function printReceipt(sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }) {
   const w = window.open('', '_blank', 'width=420,height=640');
   if (!w) {
     onError('Print popup was blocked. Please allow popups for this site and try again.');
     return;
   }
-  writeReceipt(w, sale, shop);
+  writeReceipt(w, sale, shop, fullShop);
 }
-
   function openPrintWindow(): Window | null {
     try {
       const w = window.open('', '_blank', 'width=420,height=640');
@@ -400,7 +442,7 @@ function SalesTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}){
         setSaleKey(crypto.randomUUID());
         setDoc(getDefaultDocType());
         if (saleDoc === 'SYSTEM_PRINTED' && !saleCredit && preOpenedPrintWindow && !preOpenedPrintWindow.closed) {
-          writeReceipt(preOpenedPrintWindow, result, shop);
+          writeReceipt(preOpenedPrintWindow, result, shop, fullShop);
           printed = true;
         }
       } catch(e) {
@@ -787,10 +829,255 @@ function ReportsTab({isAdmin,onError}:{isAdmin:boolean,onError:(x:string)=>void}
 function ReportRows({title,rows,fields}:{title:string;rows:any[];fields:string[]}){return <div className="glass panel"><div className="section-head"><h3>{title}</h3><span className="muted">{rows.length} rows</span></div>{rows.length===0?<p className="muted">No records for this date range.</p>:rows.map((r,i)=><div className="stock-row" key={r.id||r.purchase_line_id||r.claim_id||r.repair_id||`${title}-${i}`}><span>{fields.slice(0,Math.ceil(fields.length/2)).map(f=><span key={f}>{f.replaceAll('_',' ')}: {String(r[f]??'—')} · </span>)}</span><b>{fields.slice(Math.ceil(fields.length/2)).map(f=>`${f.replaceAll('_',' ')}: ${r[f]??'—'}`).join(' · ')}</b></div>)}</div>}
 
 function DocumentsTab({onError}:{onError:(x:string)=>void}){
-  const [q,setQ]=useState(''),[rows,setRows]=useState<any[]>([]),[busy,setBusy]=useState(false),[last,setLast]=useState('');
-  async function search(){const term=q.trim();if(!term)return onError('Enter an invoice, repair number or payment proof number.');try{setRows(await api<any[]>(`/documents/search?q=${encodeURIComponent(term)}`));setLast('')}catch(e){onError((e as Error).message)}}
-  async function reprint(r:any){try{setBusy(true);const result=await api<any>(`/documents/${r.document_type}/${r.document_id}/reprint`,{method:'POST'});setLast(`Reprint event recorded · ${r.document_no} · Event ${result.reprint_event_id||'saved'}`)}catch(e){onError((e as Error).message)}finally{setBusy(false)}}
-  return <section className="glass panel"><div className="section-head"><div><h2>Documents / Reprint</h2><p className="muted">Search a sale, repair, repair payment proof or credit settlement and record a reprint event.</p></div><button onClick={search}>Search</button></div><div className="search-row"><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&search()} placeholder="Invoice / Repair No / Proof No"/><button onClick={search}>Find Document</button></div>{last&&<div className="success-banner">{last}</div>}{rows.length===0?<p className="muted">No matching documents.</p>:rows.map(r=><div className="claim-row" key={`${r.document_type}-${r.document_id}`}><span><b>{r.document_type}</b> · {r.document_no}<small>{r.document_datetime?` · ${new Date(r.document_datetime).toLocaleString()}`:''} · {r.status}</small></span><button disabled={busy} onClick={()=>reprint(r)}>Reprint</button></div>)}</section>}
+  const shop = useShopProfile();
+  const [fullShop, setFullShop] = useState<any>(null);
+  const [dateFrom,setDateFrom]=useState(today());
+  const [dateTo,setDateTo]=useState(today());
+  const [docType,setDocType]=useState('');
+  const [statusFilter,setStatusFilter]=useState('');
+  const [q,setQ]=useState('');
+  const [rows,setRows]=useState<any[]>([]);
+  const [total,setTotal]=useState(0);
+  const [hasMore,setHasMore]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [loadingMore,setLoadingMore]=useState(false);
+  const [last,setLast]=useState('');
+  const debounceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try { setFullShop(await api('/branch/profile')); } catch { /* ignore */ }
+    })();
+  }, []);
+
+  async function load(append = false) {
+    try {
+      if (append) setLoadingMore(true); else setBusy(true);
+      const params = new URLSearchParams();
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+      if (docType) params.set('document_type', docType);
+      if (statusFilter) params.set('status', statusFilter);
+      if (q.trim()) params.set('q', q.trim());
+      params.set('limit', '50');
+      params.set('offset', String(append ? rows.length : 0));
+      const result = await api<{ items:any[]; total:number; has_more:boolean }>(`/documents?${params.toString()}`);
+      if (append) setRows(prev => [...prev, ...result.items]);
+      else setRows(result.items);
+      setTotal(result.total);
+      setHasMore(result.has_more);
+      if (!append) setLast('');
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+      setLoadingMore(false);
+    }
+  }
+
+  // Auto-load on mount + when filters change (debounced for q)
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    const delay = q !== '' ? 300 : 0;
+    debounceRef.current = window.setTimeout(() => { void load(false); }, delay);
+    return () => { if (debounceRef.current) window.clearTimeout(debounceRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFrom, dateTo, docType, statusFilter, q]);
+
+  function quick(kind: 'today' | 'yesterday' | 'week' | 'month') {
+    const now = new Date();
+    if (kind === 'today') { setDateFrom(today()); setDateTo(today()); }
+    else if (kind === 'yesterday') {
+      const y = new Date(now); y.setDate(y.getDate()-1);
+      const s = y.toISOString().slice(0,10); setDateFrom(s); setDateTo(s);
+    } else if (kind === 'week') {
+      const w = new Date(now); w.setDate(w.getDate()-6);
+      setDateFrom(w.toISOString().slice(0,10)); setDateTo(today());
+    } else {
+      const m = new Date(now); m.setDate(m.getDate()-29);
+      setDateFrom(m.toISOString().slice(0,10)); setDateTo(today());
+    }
+  }
+
+  async function reprint(r:any) {
+    // Pre-open print window synchronously to bypass popup blocker
+    const w = window.open('', '_blank', 'width=420,height=640');
+    if (!w) {
+      onError('Print popup was blocked. Please allow popups for this site and try again.');
+      return;
+    }
+    try {
+      setBusy(true);
+
+      // Record reprint event on backend
+      await api<any>(`/documents/${r.document_type}/${r.document_id}/reprint`, { method:'POST' });
+
+      // Build print HTML
+      let html = '';
+      if (r.document_type === 'SALE') {
+        try {
+          const saleDetail = await api<any>(`/sales/${encodeURIComponent(r.document_no)}`);
+          html = buildReceiptHTML(saleDetail, shop, fullShop);
+        } catch {
+          html = buildGenericReprintHTML(r);
+        }
+      } else {
+        html = buildGenericReprintHTML(r);
+      }
+
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+
+      setLast(String(r.document_no || ''));
+      toast.success(`Reprint opened: ${r.document_no}`);
+    } catch (e) {
+      try { w.close(); } catch { /* ignore */ }
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="glass panel">
+    <div className="section-head">
+      <div>
+        <h2>Documents / History</h2>
+        <p className="muted">Browse all sale, repair, repair-payment and settlement documents. Filter by date/type or search, then reprint.</p>
+      </div>
+      <button onClick={() => void load(false)} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
+    </div>
+
+    <div className="form-grid compact" style={{ marginBottom: '0.5rem' }}>
+      <label>From<input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} /></label>
+      <label>To<input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} /></label>
+      <div className="button-row">
+        <button type="button" onClick={()=>quick('today')}>Today</button>
+        <button type="button" onClick={()=>quick('yesterday')}>Yest</button>
+        <button type="button" onClick={()=>quick('week')}>Week</button>
+        <button type="button" onClick={()=>quick('month')}>Month</button>
+      </div>
+    </div>
+
+    <div className="form-grid compact" style={{ marginBottom: '0.5rem' }}>
+      <label>Type
+        <select value={docType} onChange={e=>setDocType(e.target.value)}>
+          <option value="">All documents</option>
+          <option value="SALE">Sales</option>
+          <option value="REPAIR">Repairs</option>
+          <option value="REPAIR_PAYMENT">Repair payments</option>
+          <option value="SETTLEMENT">Settlements</option>
+        </select>
+      </label>
+      <label>Status
+        <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+          <option value="">All statuses</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="VOIDED">Voided</option>
+          <option value="RECEIVED">Received</option>
+          <option value="REPAIRING">Repairing</option>
+          <option value="READY">Ready</option>
+          <option value="DELIVERED">Delivered</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+      </label>
+    </div>
+
+    <div className="search-row" style={{ marginBottom: '0.5rem' }}>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search invoice / repair no / proof no / customer / item…" />
+    </div>
+
+    {last && (
+      <div
+        className="success-banner"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '0.5rem',
+          marginBottom: '0.5rem',
+        }}
+      >
+        <span>✓ Reprint opened for <b>{last}</b></span>
+        <button
+          type="button"
+          onClick={() => setLast('')}
+          aria-label="Dismiss"
+          style={{
+            background: 'transparent',
+            border: 0,
+            cursor: 'pointer',
+            color: 'inherit',
+            fontSize: 18,
+            lineHeight: 1,
+            padding: '0 4px',
+          }}
+        >
+          ×
+        </button>
+      </div>
+    )}
+
+    {busy && rows.length === 0 ? (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <span className="spinner spinner-lg" />
+        <p className="muted" style={{ marginTop: '0.5rem' }}>Loading documents…</p>
+      </div>
+    ) : rows.length === 0 ? (
+      <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+        <b>No documents found for these filters</b>
+        <span className="muted">Try a wider date range or clear the search.</span>
+      </div>
+    ) : (
+      <>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Document No</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => {
+                const st = String(r.status || '').toUpperCase();
+                const isBad = st === 'VOIDED' || st === 'CANCELLED';
+                return (
+                  <tr key={`${r.document_type}-${r.document_id}`}>
+                    <td>
+                      <span className="sh-status" style={{ background: 'var(--surface-2)', color: 'var(--text)' }}>
+                        {r.document_type}
+                      </span>
+                    </td>
+                    <td><b>{r.document_no}</b></td>
+                    <td>{r.document_datetime ? new Date(r.document_datetime).toLocaleString() : '—'}</td>
+                    <td>
+                      <span className={`sh-status ${isBad ? 'sh-status-void' : 'sh-status-ok'}`}>{r.status}</span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button disabled={busy} onClick={()=>void reprint(r)}>Reprint</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', borderTop: '1px solid var(--line)' }}>
+          <span className="muted" style={{ fontSize: '0.75rem' }}>Showing {rows.length} of {total}</span>
+          {hasMore && (
+            <button className="ghost" onClick={()=>void load(true)} disabled={loadingMore}>
+              {loadingMore ? 'Loading…' : 'Load more'}
+            </button>
+          )}
+        </div>
+      </>
+    )}
+  </section>;
+}
 
 const Metric=({t,v,icon}:{t:string,v:any,icon?:string})=><div className="metric metric-animated"><span><i>{icon||'•'}</i>{t}</span><b>{v}</b></div>;
 function ItemsTab({onError}:{onError:(x:string)=>void}){

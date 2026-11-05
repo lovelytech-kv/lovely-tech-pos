@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.fifo.engine import FifoEngine
-from app.models.master import Item, ItemType, WarrantyDefault
+from app.models.master import Branch, Item, ItemType, WarrantyDefault
 from app.models.sales import Payment, Sale, SaleLine
 from app.models.security import AuditLog, DocumentEvent, IdempotencyKey
 from app.models.warranty import ProductWarranty
@@ -282,7 +282,19 @@ class SaleService:
         self._reserve_idempotency(request, request_hash)
 
         now = request.sale_datetime or datetime.now(timezone.utc)
-        invoice_no = NumberingService.next_number(self.session, "INV", str(request.branch_id))
+        # Invoice number: always use the "INV" counter (proven safe, existing behavior).
+        # If the branch has a custom prefix (e.g. "LT"), replace the display prefix only —
+        # the counter sequence continues unchanged, so INV-000123 → LT-000124.
+        base_invoice = NumberingService.next_number(self.session, "INV", str(request.branch_id))
+        branch_obj = self.session.get(Branch, request.branch_id)
+        custom_prefix = 'INV'
+        if branch_obj is not None and branch_obj.invoice_prefix:
+            custom_prefix = (branch_obj.invoice_prefix or 'INV').strip().upper() or 'INV'
+        if custom_prefix == 'INV' or '-' not in base_invoice:
+            invoice_no = base_invoice
+        else:
+            _, _, numeric_part = base_invoice.partition('-')
+            invoice_no = f"{custom_prefix}-{numeric_part}"
         sale = Sale(
             branch_id=request.branch_id,
             invoice_no=invoice_no,
