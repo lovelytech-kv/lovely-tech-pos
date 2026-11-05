@@ -1000,3 +1000,164 @@ html[data-theme="light"] .sh-status-void { color: #dc2626 !important; }
 html[data-theme="dark"] .sh-status-void { color: #f87171 !important; }
 html[data-theme="light"] .sh-status-ok { color: #16a34a !important; }
 html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
+
+/* ============ CHUNK 9c — SETUP WIZARD ============ */
+.setup-wizard-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  background: var(--page);
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(var(--accent-rgb), 0.06), transparent 40%),
+    radial-gradient(circle at 80% 90%, rgba(var(--accent-rgb), 0.04), transparent 40%);
+}
+
+.setup-wizard-card {
+  width: min(560px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.08);
+  padding: 2rem 1.75rem;
+}
+[data-theme="dark"] .setup-wizard-card {
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
+}
+
+/* Stepper */
+.setup-stepper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1.75rem;
+  position: relative;
+}
+
+.setup-stepper .step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  position: relative;
+  text-align: center;
+}
+
+.setup-stepper .step::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: -50%;
+  right: 50%;
+  height: 2px;
+  background: var(--line);
+  z-index: 0;
+}
+
+.setup-stepper .step:first-child::before {
+  display: none;
+}
+
+.setup-stepper .step.complete::before {
+  background: #16a34a;
+}
+
+.setup-stepper .step-circle {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 2px solid var(--line);
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.setup-stepper .step.active .step-circle {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.15);
+}
+
+.setup-stepper .step.complete .step-circle {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff;
+}
+
+.setup-stepper .step-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: color 0.2s;
+}
+
+.setup-stepper .step.active .step-label {
+  color: var(--accent);
+}
+.setup-stepper .step.complete .step-label {
+  color: #16a34a;
+}
+
+/* Step content */
+.setup-step-content {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.25rem 0 0.5rem;
+}
+
+.setup-form-row {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.setup-form-row label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.setup-form-row input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.setup-form-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
+}
+
+.setup-error {
+  color: #dc2626;
+  font-size: 0.72rem;
+  margin-top: 0.1rem;
+  font-weight: 600;
+}
+
+.setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}

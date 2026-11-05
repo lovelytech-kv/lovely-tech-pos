@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { currentUser, logout, ensureApiBaseResolved, resetApiBaseResolution } from './api/client';
+import { currentUser, logout, ensureApiBaseResolved, resetApiBaseResolution, api } from './api/client';
 import { Login } from './features/auth/Login';
 import { ChangePassword } from './features/auth/ChangePassword';
 import { POSHome } from './features/pos/POSHome';
@@ -27,6 +27,7 @@ import { ThemeProvider } from './theme/ThemeProvider';
 import { ShopProvider } from './features/settings/ShopContext';
 import { ToastContainer } from './ui/ToastContainer';
 import { ModalProvider } from './ui/modals';
+import { SetupWizard } from './features/setup/SetupWizard';
 import './styles.css';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -53,6 +54,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 function App() {
   const [user, setUser] = useState(currentUser());
   const [bootPhase, setBootPhase] = useState<'discovering' | 'failed' | 'ready'>('discovering');
+  const [setupStatus, setSetupStatus] = useState<'checking' | 'required' | 'ready'>('checking');
   const [showManualConfig, setShowManualConfig] = useState(false);
   const [machineRole, setMachineRoleState] = useState<MachineRole | null>(null);
   const [machineConfig, setMachineConfig] = useState<MachineConfig | null>(null);
@@ -118,6 +120,23 @@ function App() {
     return () => { alive = false; };
   }, []);
 
+  // NEW: Check setup status once backend is reachable (bootPhase === 'ready')
+  useEffect(() => {
+    if (bootPhase !== 'ready') return;
+    let alive = true;
+    (async () => {
+      try {
+        const result = await api<{ is_initialized: boolean; reason: string; user_count: number; has_admin: boolean }>('/setup/status');
+        if (!alive) return;
+        setSetupStatus(result.is_initialized ? 'ready' : 'required');
+      } catch {
+        // Backend unreachable → assume initialized (safe for existing installs)
+        if (alive) setSetupStatus('ready');
+      }
+    })();
+    return () => { alive = false; };
+  }, [bootPhase]);
+
   const handleRetryDiscovery = async () => {
     try {
       await resetApiBaseResolution();
@@ -160,6 +179,11 @@ function App() {
   const handleBackToDiscovery = () => {
     setShowManualConfig(false);
     setBootPhase('failed');
+  };
+
+  const handleSetupComplete = () => {
+    // Full reload ensures ShopContext + all providers refetch with new shop data
+    window.location.reload();
   };
 
   if (bootPhase === 'ready' && machineConfig && isTransientSetupState(machineConfig.setup_state)) {
@@ -222,6 +246,30 @@ function App() {
         );
       }
     }
+  }
+
+  // NEW: Block wizard/loading BEFORE login flow
+  if (setupStatus === 'checking') {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'grid',
+          placeItems: 'center',
+          background: 'var(--page)',
+          color: 'var(--muted)',
+        }}
+      >
+        <div style={{ display: 'grid', placeItems: 'center', gap: '0.75rem' }}>
+          <span className="spinner spinner-lg" />
+          <span style={{ fontSize: '0.85rem' }}>Checking setup…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (setupStatus === 'required') {
+    return <SetupWizard onComplete={handleSetupComplete} />;
   }
 
   return user ? (
