@@ -5,6 +5,7 @@ import { ShopProfile } from './ShopProfile';
 import { AccentPicker } from './AccentPicker';
 import { AboutCard } from './AboutCard';
 import { useTheme, type Theme } from '../../theme/ThemeProvider';
+import { SessionTimeoutSettings } from './SessionTimeoutSettings';
 
 const DEFAULT_DOC_KEY = 'ltpos_default_doc_type';
 type DocType = 'SYSTEM_PRINTED' | 'MANUAL' | 'NO_PRINT';
@@ -132,6 +133,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
         </div>
       </div>
       <PermissionMatrix />
+      <SessionTimeoutSettings isAdmin={isAdmin} />
       <AboutCard />
     </div>
   </section>;

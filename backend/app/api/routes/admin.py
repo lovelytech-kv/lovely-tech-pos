@@ -1,17 +1,24 @@
 from datetime import datetime, timezone
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission
 from app.models.master import User, Role, Permission, RolePermission, Target
 from app.models.sales import Expense, OtherIncome
 from app.models.master import ExpenseCategory
-from app.models.security import AuditLog, IdempotencyKey
+from app.models.security import AuditLog, IdempotencyKey, LoginEvent
 from app.schemas.api import ExpenseIn, OtherIncomeIn, TargetIn, RolePermissionUpdateIn, UserRoleUpdateIn, CashierResetIn, UserDiscountLimitIn, ReauthIn
+from app.schemas.user_management import (
+    UserCreateIn,
+    UserManagedListOut,
+    UserListItemOut,
+    UserPasswordResetIn,
+    UserUpdateIn,
+)
+from app.security.passwords import hash_password
 from app.security.reauth import require_admin_reauth
-
 router=APIRouter(prefix='/admin', tags=['admin'])
 
 def admin_user(user: User = Depends(require_permission('ADMIN_PANEL'))): return user
@@ -251,3 +258,305 @@ def suppliers(user:User=Depends(admin_user),db:Session=Depends(db_session)):
     from app.models.master import Supplier
     rows=db.scalars(select(Supplier).where(Supplier.is_active.is_(True)).order_by(Supplier.name)).all()
     return [{'supplier_id':str(x.id),'name':x.name,'contact_no':x.contact_no,'address':x.address} for x in rows]
+
+
+# ============ CHUNK 10 — USER MANAGEMENT ============
+
+def _user_out(u: User, db: Session) -> UserListItemOut:
+    last = db.scalar(
+        select(func.max(LoginEvent.occurred_at))
+        .where(LoginEvent.user_id == u.id, LoginEvent.event_type == 'LOGIN_SUCCESS')
+    )
+    return UserListItemOut(
+        user_id=u.id,
+        username=u.username,
+        display_name=u.display_name,
+        role=u.role.code,
+        role_id=u.role_id,
+        branch_id=u.branch_id,
+        is_active=u.is_active,
+        must_change_password=u.must_change_password,
+        discount_limit_percent=u.discount_limit_percent,
+        version=u.version,
+        created_at=u.created_at,
+        last_login_at=last,
+        failed_login_count=u.failed_login_count,
+        locked_until=u.locked_until,
+    )
+
+
+def _ensure_not_last_admin(db: Session, target: User, current: User) -> None:
+    if target.role.code.upper() != 'ADMIN':
+        return
+    others = db.scalar(
+        select(func.count())
+        .select_from(User)
+        .join(Role, Role.id == User.role_id)
+        .where(
+            User.branch_id == current.branch_id,
+            User.id != target.id,
+            User.is_active.is_(True),
+            func.upper(Role.code) == 'ADMIN',
+        )
+    ) or 0
+    if others == 0:
+        raise HTTPException(400, 'Cannot deactivate the last active admin')
+
+
+@router.get('/users/managed', response_model=UserManagedListOut)
+def list_users_managed(
+    q: str | None = None,
+    role: str | None = None,
+    is_active: bool | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    user: User = Depends(admin_user),
+    db: Session = Depends(db_session),
+):
+    limit = max(1, min(int(limit), 200))
+    offset = max(0, int(offset))
+
+    stmt = select(User).where(User.branch_id == user.branch_id)
+    if q and q.strip():
+        like = f'%{q.strip()}%'
+        stmt = stmt.where((User.username.ilike(like)) | (User.display_name.ilike(like)))
+    if role:
+        r_upper = role.strip().upper()
+        stmt = stmt.where(User.role_id.in_(select(Role.id).where(func.upper(Role.code) == r_upper)))
+    if is_active is not None:
+        stmt = stmt.where(User.is_active.is_(is_active))
+
+    total = int(db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = db.scalars(stmt.order_by(User.username).limit(limit).offset(offset)).all()
+
+    user_ids = [r.id for r in rows]
+    last_login_map: dict = {}
+    if user_ids:
+        last_login_sq = (
+            select(LoginEvent.user_id, func.max(LoginEvent.occurred_at).label('last_login'))
+            .where(
+                LoginEvent.event_type == 'LOGIN_SUCCESS',
+                LoginEvent.user_id.in_(user_ids),
+            )
+            .group_by(LoginEvent.user_id)
+            .subquery()
+        )
+        ll_rows = db.execute(
+            select(last_login_sq.c.user_id, last_login_sq.c.last_login)
+        ).all()
+        last_login_map = {uid_: last for uid_, last in ll_rows}
+
+    items = [
+        UserListItemOut(
+            user_id=r.id,
+            username=r.username,
+            display_name=r.display_name,
+            role=r.role.code,
+            role_id=r.role_id,
+            branch_id=r.branch_id,
+            is_active=r.is_active,
+            must_change_password=r.must_change_password,
+            discount_limit_percent=r.discount_limit_percent,
+            version=r.version,
+            created_at=r.created_at,
+            last_login_at=last_login_map.get(r.id),
+            failed_login_count=r.failed_login_count,
+            locked_until=r.locked_until,
+        )
+        for r in rows
+    ]
+    return UserManagedListOut(items=items, total=total)
+
+
+@router.post('/users', response_model=UserListItemOut)
+def create_user(
+    payload: UserCreateIn,
+    admin_password: str | None = None,
+    user: User = Depends(admin_user),
+    db: Session = Depends(db_session),
+):
+    require_admin_reauth(user=user, password=admin_password, db=db, action='user creation')
+
+    username = payload.username.strip()
+    if not username:
+        raise HTTPException(400, 'Username is required')
+
+    existing = db.scalar(select(User).where(User.username == username))
+    if existing is not None:
+        raise HTTPException(400, 'Username already taken')
+
+    role_code = payload.role.upper()
+    if role_code not in ('ADMIN', 'CASHIER'):
+        raise HTTPException(400, 'Invalid role')
+
+    role_obj = db.scalar(select(Role).where(func.upper(Role.code) == role_code))
+    if role_obj is None:
+        raise HTTPException(400, f'Role {role_code} not configured')
+
+    branch_id = payload.branch_id or user.branch_id
+
+    new_user = User(
+        username=username,
+        password_hash=hash_password(payload.password),
+        display_name=payload.display_name.strip(),
+        role_id=role_obj.id,
+        branch_id=branch_id,
+        is_active=True,
+        must_change_password=payload.must_change_password,
+        discount_limit_percent=payload.discount_limit_percent if role_code == 'CASHIER' else 0,
+    )
+    db.add(new_user)
+    db.flush()
+
+    db.add(AuditLog(
+        branch_id=user.branch_id,
+        actor_user_id=user.id,
+        action_type='USER_CREATED',
+        entity_type='USER',
+        entity_id=new_user.id,
+        timestamp=datetime.now(timezone.utc),
+        after_json={
+            'username': new_user.username,
+            'display_name': new_user.display_name,
+            'role': role_code,
+        },
+        source_transaction_id=new_user.id,
+    ))
+    db.commit()
+    return _user_out(new_user, db)
+
+
+@router.put('/users/{user_id}', response_model=UserListItemOut)
+def update_user(
+    user_id: str,
+    payload: UserUpdateIn,
+    admin_password: str | None = None,
+    user: User = Depends(admin_user),
+    db: Session = Depends(db_session),
+):
+    require_admin_reauth(user=user, password=admin_password, db=db, action='user update')
+
+    target = db.scalar(
+        select(User).where(User.id == user_id, User.branch_id == user.branch_id).with_for_update()
+    )
+    if target is None:
+        raise HTTPException(404, 'User not found')
+
+    if payload.version is None or target.version != payload.version:
+        raise HTTPException(409, 'This user was modified elsewhere, refresh and try again')
+
+    before = {
+        'display_name': target.display_name,
+        'discount_limit_percent': str(target.discount_limit_percent),
+        'is_active': target.is_active,
+        'must_change_password': target.must_change_password,
+    }
+
+    if payload.display_name is not None:
+        target.display_name = payload.display_name.strip()
+    if payload.discount_limit_percent is not None:
+        target.discount_limit_percent = payload.discount_limit_percent
+    if payload.must_change_password is not None:
+        target.must_change_password = payload.must_change_password
+    if payload.is_active is not None:
+        if target.id == user.id and not payload.is_active:
+            raise HTTPException(400, 'Cannot deactivate yourself')
+        if not payload.is_active:
+            _ensure_not_last_admin(db, target, user)
+        target.is_active = payload.is_active
+
+    target.version += 1
+
+    db.add(AuditLog(
+        branch_id=user.branch_id,
+        actor_user_id=user.id,
+        action_type='USER_UPDATED',
+        entity_type='USER',
+        entity_id=target.id,
+        timestamp=datetime.now(timezone.utc),
+        before_json=before,
+        after_json={
+            'display_name': target.display_name,
+            'discount_limit_percent': str(target.discount_limit_percent),
+            'is_active': target.is_active,
+            'must_change_password': target.must_change_password,
+        },
+        source_transaction_id=target.id,
+    ))
+    db.commit()
+    return _user_out(target, db)
+
+
+@router.delete('/users/{user_id}')
+def deactivate_user(
+    user_id: str,
+    admin_password: str | None = None,
+    user: User = Depends(admin_user),
+    db: Session = Depends(db_session),
+):
+    require_admin_reauth(user=user, password=admin_password, db=db, action='user deactivation')
+
+    target = db.scalar(
+        select(User).where(User.id == user_id, User.branch_id == user.branch_id).with_for_update()
+    )
+    if target is None:
+        raise HTTPException(404, 'User not found')
+    if target.id == user.id:
+        raise HTTPException(400, 'Cannot deactivate yourself')
+    if not target.is_active:
+        return {'success': True, 'is_active': False}
+
+    _ensure_not_last_admin(db, target, user)
+    target.is_active = False
+    target.version += 1
+
+    db.add(AuditLog(
+        branch_id=user.branch_id,
+        actor_user_id=user.id,
+        action_type='USER_DEACTIVATED',
+        entity_type='USER',
+        entity_id=target.id,
+        timestamp=datetime.now(timezone.utc),
+        after_json={'is_active': False},
+        source_transaction_id=target.id,
+    ))
+    db.commit()
+    return {'success': True, 'is_active': False}
+
+
+@router.post('/users/{user_id}/reset-password')
+def reset_user_password_by_id(
+    user_id: str,
+    payload: UserPasswordResetIn,
+    admin_password: str | None = None,
+    user: User = Depends(admin_user),
+    db: Session = Depends(db_session),
+):
+    require_admin_reauth(user=user, password=admin_password, db=db, action='password reset')
+
+    target = db.scalar(
+        select(User).where(User.id == user_id, User.branch_id == user.branch_id).with_for_update()
+    )
+    if target is None:
+        raise HTTPException(404, 'User not found')
+    if target.id == user.id:
+        raise HTTPException(400, 'Cannot reset your own password via this endpoint. Use Settings → Change Password.')
+
+    target.password_hash = hash_password(payload.new_password)
+    target.must_change_password = True
+    target.failed_login_count = 0
+    target.locked_until = None
+    target.version += 1
+
+    db.add(AuditLog(
+        branch_id=user.branch_id,
+        actor_user_id=user.id,
+        action_type='USER_PASSWORD_RESET',
+        entity_type='USER',
+        entity_id=target.id,
+        timestamp=datetime.now(timezone.utc),
+        after_json={'username': target.username},
+        source_transaction_id=target.id,
+    ))
+    db.commit()
+    return {'success': True}

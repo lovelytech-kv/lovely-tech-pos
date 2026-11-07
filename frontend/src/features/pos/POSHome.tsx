@@ -11,6 +11,7 @@ import { WarrantyWorkspace } from '../warranty/WarrantyWorkspace';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { HomeDashboard } from '../home/HomeDashboard';
 import { SalesHistory } from '../sales/SalesHistory';
+import { UserManagement } from '../users/UserManagement';
 import { moneyInputProps, intInputProps, signedIntInputProps } from '../../utils/numberInput';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
@@ -133,7 +134,7 @@ export function POSHome({user,onLogout}:{user:User,onLogout:()=>void}) {
   const isAdmin=user.role.toUpperCase()==='ADMIN';
   return <DashboardLayout user={user} activeKey={tab} onNavigate={key=>{setTab(key);setError('')}} onLogout={()=>{serverLogout().finally(onLogout)}}>
     {error&&<div className="error-banner" role="alert"><span>{error}</span><button className="error-dismiss" aria-label="Dismiss error" onClick={()=>setError('')}>×</button></div>}
-    {tab==='Dashboard'&&<HomeDashboard user={user} onNavigate={setTab}/>} {tab==='Customers'&&<CustomersTab onError={setError}/>} {tab==='Items'&&<ItemsTab onError={setError}/>} {tab==='Sales'&&<SalesTab isAdmin={isAdmin} onError={setError}/>} {tab==='SalesHistory'&&<SalesHistory isAdmin={isAdmin} onError={setError} onNavigate={setTab} user={user}/>} {tab==='Returns'&&<ReturnsWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Repairs'&&<><RepairForm onError={setError} /><RepairWorkspace isAdmin={isAdmin} onError={setError}/></>} {tab==='Warranty'&&<WarrantyWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Stock'&&<StockTab/>} {tab==='Purchases'&&<Purchases isAdmin={isAdmin} onError={setError}/>} {tab==='Expenses'&&<ExpensesTab onError={setError}/>} {tab==='Cash/Day'&&<DayEnd isAdmin={isAdmin} onError={setError}/>} {tab==='Reports'&&<ReportsTab isAdmin={isAdmin} onError={setError}/>} {tab==='Documents'&&<DocumentsTab onError={setError}/>} {tab==='Settings'&&<SettingsPanel isAdmin={isAdmin}/>} {tab==='Admin'&&isAdmin&&<AdminTab onError={setError}/>} {tab==='Backup'&&isAdmin&&<BackupTab onError={setError}/>}
+    {tab==='Dashboard'&&<HomeDashboard user={user} onNavigate={setTab}/>} {tab==='Customers'&&<CustomersTab onError={setError}/>} {tab==='Items'&&<ItemsTab onError={setError}/>} {tab==='Sales'&&<SalesTab isAdmin={isAdmin} onError={setError}/>} {tab==='SalesHistory'&&<SalesHistory isAdmin={isAdmin} onError={setError} onNavigate={setTab} user={user}/>} {tab==='Returns'&&<ReturnsWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Repairs'&&<><RepairForm onError={setError} /><RepairWorkspace isAdmin={isAdmin} onError={setError}/></>} {tab==='Warranty'&&<WarrantyWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Stock'&&<StockTab/>} {tab==='Purchases'&&<Purchases isAdmin={isAdmin} onError={setError}/>} {tab==='Expenses'&&<ExpensesTab onError={setError}/>} {tab==='Cash/Day'&&<DayEnd isAdmin={isAdmin} onError={setError}/>} {tab==='Reports'&&<ReportsTab isAdmin={isAdmin} onError={setError}/>} {tab==='Documents'&&<DocumentsTab onError={setError}/>} {tab==='Settings'&&<SettingsPanel isAdmin={isAdmin}/>} {tab==='Admin'&&isAdmin&&<AdminTab onError={setError}/>} {tab==='Users'&&isAdmin&&<UserManagement isAdmin={isAdmin} onError={setError}/>} {tab==='Backup'&&isAdmin&&<BackupTab onError={setError}/>}
   </DashboardLayout>;
 }
 

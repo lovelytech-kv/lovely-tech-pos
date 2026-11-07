@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.db.session import get_session_factory
 from app.models.auth import UserSession
 from app.models.master import User, Permission, RolePermission
+from app.services.session_settings import get_session_settings
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -24,9 +25,11 @@ def token_hash(token: str) -> str:
 
 def issue_session(db: Session, user: User) -> tuple[str, datetime]:
     now = datetime.now(timezone.utc)
-    minutes = settings.session_timeout_admin_minutes if user.role.code.upper() == "ADMIN" else settings.session_timeout_cashier_minutes
-    absolute_hours = settings.session_absolute_timeout_admin_hours if user.role.code.upper() == "ADMIN" else settings.session_absolute_timeout_cashier_hours
-    expires = now + timedelta(hours=absolute_hours)
+    cfg = get_session_settings(db)
+    is_admin = user.role.code.upper() == "ADMIN"
+    absolute_hours = cfg['admin_hours'] if is_admin else cfg['cashier_hours']
+    # 0 = never expires → far future (100 years)
+    expires = now + timedelta(hours=absolute_hours if absolute_hours > 0 else 876000)
     raw = secrets.token_urlsafe(48)
     db.add(UserSession(user_id=user.id, token_hash=token_hash(raw), created_at=now, expires_at=expires, last_seen_at=now))
     return raw, expires
@@ -41,20 +44,26 @@ def current_user(request: Request, credentials: HTTPAuthorizationCredentials = D
     user = db.get(User, session.user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
-    timeout_minutes = (
-        settings.session_timeout_admin_minutes
-        if user.role.code.upper() == "ADMIN"
-        else settings.session_timeout_cashier_minutes
-    )
-    if session.last_seen_at + timedelta(minutes=timeout_minutes) <= now:
+
+    cfg = get_session_settings(db)
+    is_admin = user.role.code.upper() == "ADMIN"
+    idle_minutes = cfg['admin_minutes'] if is_admin else cfg['cashier_minutes']
+    absolute_hours = cfg['admin_hours'] if is_admin else cfg['cashier_hours']
+
+    # Idle check (0 = disabled)
+    if idle_minutes > 0 and session.last_seen_at + timedelta(minutes=idle_minutes) <= now:
         session.revoked_at = now
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session locked due to inactivity")
-    if user is None or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
+
+    # Absolute sliding window — extend expires_at on every request
+    # (unless absolute_hours == 0 = never expires, keep original far-future)
+    if absolute_hours > 0:
+        session.expires_at = now + timedelta(hours=absolute_hours)
+
     session.last_seen_at = now
     db.commit()
-    # After an Admin password reset the user may do nothing except change the password (or sign out).
+
     if user.must_change_password and not request.url.path.endswith(("/auth/change-password", "/auth/logout", "/auth/me")):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PASSWORD_CHANGE_REQUIRED: change your temporary password first")
     return user
