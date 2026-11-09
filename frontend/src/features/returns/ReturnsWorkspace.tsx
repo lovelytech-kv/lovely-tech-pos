@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { money, moneyPositive } from '../../services/money';
 import { moneyInputProps, intInputProps } from '../../utils/numberInput';
@@ -69,7 +69,20 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
   const [replacementSaleId, setReplacementSaleId] = useState('');
   const [lastResult, setLastResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
-  const [refundKey, setRefundKey] = useState(() => crypto.randomUUID());
+    const [refundKey, setRefundKey] = useState(() => crypto.randomUUID());
+
+  // Pre-fill from Sales History "Return" button
+  useEffect(() => {
+    try {
+      const prefill = localStorage.getItem('ltpos_return_prefill');
+      if (prefill) {
+        setSaleQuery(prefill);
+        localStorage.removeItem('ltpos_return_prefill');
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
 
   const selectedTotal = useMemo(
     () => lines.reduce((sum, line) => {

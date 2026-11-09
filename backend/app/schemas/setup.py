@@ -36,3 +36,4 @@ class SetupInitializeOut(BaseModel):
     branch_id: UUID
     admin_user_id: UUID
     username: str
+    recovery_codes: list[str] = []

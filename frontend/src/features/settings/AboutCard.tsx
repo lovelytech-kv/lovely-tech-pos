@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
+import { api } from '../../api/client';
 
 // Auto-detect vendor logo files placed in frontend/src/assets/vendor/.
-// Expected names (case-insensitive): logo-light.* and logo-dark.*
-// Supported extensions: png, jpg, jpeg, svg, webp
 const vendorLogos = import.meta.glob('../../assets/vendor/logo-*.{png,jpg,jpeg,svg,webp}', {
   eager: true,
   query: '?url',
@@ -41,17 +40,12 @@ function VendorLogoFallback({ size }: { size: number }) {
   return (
     <div
       style={{
-        width: size,
-        height: size,
+        width: size, height: size,
         borderRadius: Math.round(size * 0.23),
         background: 'linear-gradient(135deg, #e5493d, #a82820)',
-        color: '#fff',
-        display: 'grid',
-        placeItems: 'center',
-        fontSize: Math.round(size * 0.34),
-        fontWeight: 800,
-        letterSpacing: '-0.03em',
-        flexShrink: 0,
+        color: '#fff', display: 'grid', placeItems: 'center',
+        fontSize: Math.round(size * 0.34), fontWeight: 800,
+        letterSpacing: '-0.03em', flexShrink: 0,
       }}
     >
       LT
@@ -59,9 +53,28 @@ function VendorLogoFallback({ size }: { size: number }) {
   );
 }
 
+type ShopIdentity = { shop_uuid: string; shop_name: string | null; schema_version: number; created_at: string };
+
 export function AboutCard() {
   const theme = useCurrentTheme();
   const logo = pickVendorLogo(theme);
+  const [shopId, setShopId] = useState<string | null>(null);
+  const [shopIdLoading, setShopIdLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const id = await api<ShopIdentity>('/shop/identity');
+        if (alive) setShopId(id.shop_uuid);
+      } catch {
+        if (alive) setShopId(null);
+      } finally {
+        if (alive) setShopIdLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   return (
     <div className="glass-panel settings-card" style={{ gridColumn: '1 / -1' }}>
@@ -74,49 +87,16 @@ export function AboutCard() {
       </div>
 
       <div style={{ display: 'grid', gap: '1rem' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem',
-            padding: '1rem',
-            background: 'var(--surface-2)',
-            borderRadius: 12,
-            border: '1px solid var(--line)',
-          }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'var(--surface-2)', borderRadius: 12, border: '1px solid var(--line)' }}>
           {logo ? (
-            <img
-              src={logo}
-              alt="Vendor logo"
-              style={{
-                width: 64,
-                height: 64,
-                objectFit: 'contain',
-                display: 'block',
-                flexShrink: 0,
-              }}
-            />
+            <img src={logo} alt="Vendor logo" style={{ width: 64, height: 64, objectFit: 'contain', display: 'block', flexShrink: 0 }} />
           ) : (
             <VendorLogoFallback size={64} />
           )}
           <div>
-            <div
-              style={{
-                fontSize: '1.15rem',
-                fontWeight: 700,
-                color: 'var(--text)',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              Lovely Tech
-            </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-              Mobile Phone Repair &amp; Accessories POS
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
-              Version <b style={{ color: 'var(--text)' }}>v0.4.0</b>
-            </div>
+            <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em' }}>Lovely Tech</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Mobile Phone Repair &amp; Accessories POS</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '0.25rem' }}>Version <b style={{ color: 'var(--text)' }}>v0.4.0</b></div>
           </div>
         </div>
 
@@ -133,9 +113,15 @@ export function AboutCard() {
             <span className="muted">Built with</span>
             <b style={{ color: 'var(--text)' }}>React + FastAPI + Tauri</b>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--line)' }}>
             <span className="muted">Support</span>
             <b style={{ color: 'var(--text)' }}>Lovely Tech Support</b>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0' }}>
+            <span className="muted">Installation ID</span>
+            <b style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
+              {shopIdLoading ? '…' : shopId ? shopId.slice(0, 8) : '—'}
+            </b>
           </div>
         </div>
 

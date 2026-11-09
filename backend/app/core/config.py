@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     psql_bin: str = "psql"
     google_drive_rclone_remote: str = ""
     google_drive_backup_path: str = "Lovely-Tech-POS"
+    pos_emergency_key: str = ""
     rclone_bin: str = "rclone"
     require_verified_backup_for_close: bool = True
     # Automatic backup at Shift End / Day End (the close runs only after a backup is verified).

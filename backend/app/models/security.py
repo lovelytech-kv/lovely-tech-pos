@@ -77,3 +77,12 @@ class AdminRecoveryCode(UUIDPrimaryKeyMixin, Base):
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     used_by: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+class PasswordResetToken(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "password_reset_tokens"
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

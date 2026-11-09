@@ -402,11 +402,12 @@ function RepairDetailPanel({
   }
 
   async function approveDamageReview(part: RepairPart) {
-    const pw = await modal.prompt({
+        const pw = await modal.prompt({
       title: 'Admin re-authentication',
       message: 'Enter admin password to approve damage/loss write-off',
       placeholder: 'Password',
       confirmText: 'Approve',
+      type: 'password',
     });
     if (!pw) return;
     await onAction(
@@ -422,11 +423,12 @@ function RepairDetailPanel({
       placeholder: 'Reason',
     });
     if (!reason?.trim()) return;
-    const pw = await modal.prompt({
+        const pw = await modal.prompt({
       title: 'Admin re-authentication',
       message: 'Enter admin password to reverse this payment',
       placeholder: 'Password',
       confirmText: 'Reverse',
+      type: 'password',
     });
     if (!pw) return;
     try {

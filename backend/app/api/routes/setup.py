@@ -27,11 +27,7 @@ router = APIRouter(prefix='/setup', tags=['setup'])
 
 @router.get('/status', response_model=SetupStatusOut)
 def setup_status(db: Session = Depends(db_session)):
-    """Return whether the shop has been initialized.
-
-    Tolerates any DB state. Never raises for missing tables — if the DB
-    is truly empty (post-migration), counts return 0.
-    """
+    """Return whether the shop has been initialized."""
     try:
         user_count = int(db.scalar(select(func.count()).select_from(User)) or 0)
     except Exception:
@@ -88,11 +84,7 @@ def setup_initialize(
     payload: SetupInitializeIn,
     db: Session = Depends(db_session),
 ):
-    """One-time bootstrap.
-
-    Idempotent-safety: if ANY user exists, return 409 immediately.
-    All work happens in a single DB transaction (rollback on any failure).
-    """
+    """One-time bootstrap. 409 if any user exists."""
     existing_users = int(db.scalar(select(func.count()).select_from(User)) or 0)
     if existing_users > 0:
         raise HTTPException(
@@ -116,7 +108,6 @@ def setup_initialize(
             db.add(branch)
             db.flush()
         else:
-            # No users exist → safe to update this orphan branch
             branch.name = payload.shop.name.strip()
             branch.address = (payload.shop.address or '').strip() or None
             branch.phone = (payload.shop.phone or '').strip() or None
@@ -129,7 +120,7 @@ def setup_initialize(
             db.add(admin_role)
             db.flush()
 
-        # --- 3. Username uniqueness (defensive — no users exist per check above) ---
+        # --- 3. Username uniqueness ---
         existing_user = db.scalar(
             select(User).where(User.username == payload.admin.username.strip())
         )
@@ -167,6 +158,24 @@ def setup_initialize(
             )
         )
 
+        # --- 6. Generate 8 one-time recovery codes (Chunk 11) ---
+        from app.services.recovery import RecoveryService
+        recovery_codes = RecoveryService(db).generate_recovery_codes(
+            user_id=admin_user.id,
+            actor_user_id=admin_user.id,
+            count=8,
+        )
+
+        # --- 7. Sync shop_identity.shop_name (Chunk 12a) ---
+        try:
+            from app.models.shop_identity import ShopIdentity
+            shop_identity = db.scalar(select(ShopIdentity).limit(1))
+            if shop_identity is not None:
+                shop_identity.shop_name = payload.shop.name.strip()
+        except Exception:
+            # Table may not exist if migration 0040 not applied — safe to skip
+            pass
+
         db.commit()
 
         return SetupInitializeOut(
@@ -174,6 +183,7 @@ def setup_initialize(
             branch_id=branch.id,
             admin_user_id=admin_user.id,
             username=admin_user.username,
+            recovery_codes=recovery_codes,
         )
     except HTTPException:
         db.rollback()

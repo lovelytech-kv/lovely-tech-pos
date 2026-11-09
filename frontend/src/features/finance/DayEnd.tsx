@@ -113,11 +113,12 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     if (!correctionCash || Number(correctionCash)<0 || Math.abs(denomTotal-Number(correctionCash))>0.0001) return onError?.('Opening cash must equal the denomination total.');
     if (!correctionReason.trim()) return onError?.('Opening correction reason is required.');
     if (status.version == null) return onError?.('Day version is missing; refresh before correcting opening cash.');
-    const password = await modal.prompt({
+        const password = await modal.prompt({
       title: 'Admin re-authentication',
       message: 'Enter admin password to correct opening cash',
       placeholder: 'Password',
       confirmText: 'Correct',
+      type: 'password',
     });
     if (!password) return;
     try { setBusy(true); await api(`/day/opening-correction?admin_password=${encodeURIComponent(password)}`, { method:'POST', body:JSON.stringify({day_session_id:status.day_session_id,opening_cash:correctionCash,denominations:Object.fromEntries(DENOMS.map(d=>[String(d),Number(correctionDenoms[String(d)]||0)])),reason:correctionReason.trim(),version:status.version}) }); setCorrectionCash(''); setCorrectionReason(''); setCorrectionDenoms({}); await load(); } catch(e){ onError?.((e as Error).message); } finally { setBusy(false); }
@@ -125,11 +126,12 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
 
   async function reopen() {
     if (!isAdmin || !status?.business_date || busy) return;
-    const password = await modal.prompt({
+        const password = await modal.prompt({
       title: 'Admin re-authentication',
       message: 'Enter admin password to reopen the closed business day',
       placeholder: 'Password',
       confirmText: 'Reopen',
+      type: 'password',
     });
     if (!password) return;
     try { setBusy(true); await api(`/day/reopen?admin_password=${encodeURIComponent(password)}`, { method: 'POST', body: JSON.stringify({ start: status.business_date, end: status.business_date }) }); await load(); }

@@ -438,3 +438,29 @@ class BranchProfileUpdateIn(BaseModel):
     logo_base64_dark: str | None = None
     logo_mime_dark: str | None = None
     invoice_prefix: str = Field(default='INV', max_length=20)
+
+# ============ CHUNK 12a — SHOP IDENTITY + MACHINE ROLE ============
+
+class ShopIdentityOut(BaseModel):
+    shop_uuid: UUID
+    shop_name: str | None = None
+    schema_version: int
+    created_at: datetime
+
+
+class ShopNameUpdateIn(BaseModel):
+    shop_name: str = Field(min_length=1, max_length=150)
+
+
+class MachineIdentityOut(BaseModel):
+    machine_role: str
+    machine_name: str | None = None
+    server_url: str | None = None
+    registered_at: datetime
+    last_seen_at: datetime | None = None
+
+
+class MachineIdentityUpdateIn(BaseModel):
+    machine_role: Literal['SERVER', 'CLIENT']
+    machine_name: str | None = Field(default=None, max_length=100)
+    server_url: str | None = Field(default=None, max_length=255)

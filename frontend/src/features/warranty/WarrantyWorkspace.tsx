@@ -141,11 +141,12 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
     const writeOff = path === 'damage' || (path === 'supplier-outcome' && String(body.outcome || '').includes('DAMAGE'));
     let pw = '';
     if (writeOff) {
-      const result = await modal.prompt({
+            const result = await modal.prompt({
         title: 'Admin re-authentication',
         message: 'Enter admin password to approve damage/loss write-off',
         placeholder: 'Password',
         confirmText: 'Approve',
+        type: 'password',
       });
       if (result == null) return;
       pw = result;

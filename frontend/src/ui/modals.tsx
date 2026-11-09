@@ -1,7 +1,15 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
 
 type ConfirmOpts = { title?: string; message: string; confirmText?: string; cancelText?: string };
-type PromptOpts = { title?: string; message: string; defaultValue?: string; placeholder?: string; confirmText?: string; cancelText?: string };
+type PromptOpts = {
+  title?: string;
+  message: string;
+  defaultValue?: string;
+  placeholder?: string;
+  confirmText?: string;
+  cancelText?: string;
+  type?: 'text' | 'password';
+};
 
 type ModalContextValue = {
   confirm: (opts: ConfirmOpts) => Promise<boolean>;
@@ -17,6 +25,7 @@ type Pending = PendingConfirm | PendingPrompt;
 export function ModalProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [input, setInput] = useState('');
+  const [revealed, setRevealed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const confirm = useCallback((opts: ConfirmOpts) => {
@@ -28,6 +37,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   const prompt = useCallback((opts: PromptOpts) => {
     return new Promise<string | null>((resolve) => {
       setInput(opts.defaultValue ?? '');
+      setRevealed(false);
       setPending({ kind: 'prompt', opts, resolve });
       window.setTimeout(() => inputRef.current?.focus(), 50);
     });
@@ -38,7 +48,10 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     if (pending.kind === 'confirm') pending.resolve(result as boolean);
     else pending.resolve(typeof result === 'string' ? result : null);
     setPending(null);
+    setRevealed(false);
   };
+
+  const isPassword = pending?.kind === 'prompt' && pending.opts.type === 'password';
 
   return (
     <ModalContext.Provider value={{ confirm, prompt }}>
@@ -71,21 +84,43 @@ export function ModalProvider({ children }: { children: ReactNode }) {
               {pending.opts.message}
             </p>
             {pending.kind === 'prompt' && (
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={pending.opts.placeholder}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') close(input);
-                  if (e.key === 'Escape') close(null);
-                }}
-                style={{
-                  width: '100%', padding: '0.5rem 0.75rem', marginBottom: '1rem',
-                  border: '1px solid var(--line)', borderRadius: 8,
-                  background: 'var(--surface-2)', color: 'var(--text)',
-                }}
-              />
+              <div style={{ position: 'relative', marginBottom: '1rem' }}>
+                <input
+                  ref={inputRef}
+                  type={isPassword && !revealed ? 'password' : 'text'}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={pending.opts.placeholder}
+                  autoComplete={isPassword ? 'current-password' : 'off'}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') close(input);
+                    if (e.key === 'Escape') close(null);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: isPassword ? '0.5rem 2.5rem 0.5rem 0.75rem' : '0.5rem 0.75rem',
+                    border: '1px solid var(--line)', borderRadius: 8,
+                    background: 'var(--surface-2)', color: 'var(--text)',
+                    fontSize: '0.9rem',
+                  }}
+                />
+                {isPassword && (
+                  <button
+                    type='button'
+                    onClick={() => setRevealed((v) => !v)}
+                    aria-label={revealed ? 'Hide password' : 'Show password'}
+                    title={revealed ? 'Hide password' : 'Show password'}
+                    style={{
+                      position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                      background: 'transparent', border: 0, cursor: 'pointer',
+                      padding: '4px 6px', fontSize: '1rem', lineHeight: 1,
+                      color: 'var(--muted)',
+                    }}
+                  >
+                    {revealed ? '🙈' : '👁'}
+                  </button>
+                )}
+              </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button

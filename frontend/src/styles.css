@@ -1456,3 +1456,299 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   text-transform: none;
   letter-spacing: 0;
 }
+/* ============ CHUNK 11 — RECOVERY CODES ============ */
+.recovery-codes-container {
+  display: grid;
+  gap: 1rem;
+}
+.recovery-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.recovery-subtitle {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+.recovery-warning {
+  padding: 0.85rem 1rem;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 10px;
+  color: #a16207;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  margin-bottom: 0.75rem;
+}
+[data-theme="dark"] .recovery-warning {
+  background: rgba(234, 179, 8, 0.14);
+  border-color: rgba(234, 179, 8, 0.4);
+  color: #facc15;
+}
+.recovery-codes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+}
+@media (max-width: 520px) {
+  .recovery-codes-grid { grid-template-columns: 1fr; }
+}
+.recovery-code-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: var(--font-mono, 'Consolas', monospace);
+  user-select: all;
+}
+.recovery-code-index {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  min-width: 20px;
+}
+.recovery-code-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+.recovery-codes-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+.forgot-password-link {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+.forgot-password-link:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* Print — hide everything except the recovery codes area */
+@media print {
+  body * { visibility: hidden; }
+  .recovery-print-area,
+  .recovery-print-area * { visibility: visible; }
+  .recovery-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 1.5rem;
+    background: #fff;
+    color: #000;
+  }
+  .recovery-print-area .recovery-warning {
+    background: #fffbe6;
+    border-color: #facc15;
+    color: #713f12;
+  }
+  .recovery-print-area .recovery-code-item {
+    background: #f9fafb;
+    border-color: #e5e7eb;
+  }
+  .recovery-print-area .recovery-code-value,
+  .recovery-print-area .recovery-title { color: #000; }
+}
+/* ============ CHUNK 12b — SHOP IDENTITY + MACHINE ROLE ============ */
+
+/* Machine role badge */
+.machine-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.machine-role-badge.role-server {
+  background: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.25);
+}
+.machine-role-badge.role-client {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+}
+[data-theme="dark"] .machine-role-badge.role-server {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+[data-theme="dark"] .machine-role-badge.role-client {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+/* Machine info grid */
+.machine-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+.machine-info-grid > div {
+  display: grid;
+  gap: 0.2rem;
+}
+.machine-info-grid small {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Server URL input + test button row */
+.server-url-input-wrap {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.server-url-input-wrap input {
+  flex: 1;
+  min-width: 180px;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: var(--font-mono);
+}
+.server-url-input-wrap input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
+}
+.server-url-input-wrap button {
+  flex-shrink: 0;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.8rem;
+}
+
+/* Connection status (inline test result) */
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-top: 0.35rem;
+}
+.connection-status.ok {
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.25);
+}
+.connection-status.fail {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+[data-theme="dark"] .connection-status.ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+[data-theme="dark"] .connection-status.fail {
+  background: rgba(220, 38, 38, 0.18);
+  color: #fca5a5;
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+/* Setup wizard — role options */
+.setup-role-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+@media (min-width: 560px) {
+  .setup-role-options { grid-template-columns: 1fr 1fr; }
+}
+.setup-role-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+}
+.setup-role-option:hover {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.04);
+}
+.setup-role-option.selected {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
+}
+.setup-role-option .role-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+.setup-role-option.selected .role-icon {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.setup-role-option b {
+  font-size: 0.85rem;
+  color: var(--text);
+  display: block;
+  margin-bottom: 0.15rem;
+}
+.setup-role-option p {
+  margin: 0 !important;
+}
+
+/* Input error for setup wizard inputs (matches .modal-body) */
+.setup-form-row input.input-error,
+.server-url-input-wrap input.input-error {
+  border-color: #dc2626 !important;
+  background: rgba(220, 38, 38, 0.05) !important;
+}
+.setup-form-row input.input-error:focus,
+.server-url-input-wrap input.input-error:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15) !important;
+}

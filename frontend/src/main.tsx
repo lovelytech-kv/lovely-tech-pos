@@ -14,14 +14,16 @@ import {
   setSetupState,
   clearTransientSetupState,
   loadMachineConfig,
-  type MachineRole,
-  type MachineConfig,
-  type SetupState,
   computeClientSetupState,
   computeServerSetupState,
   isReadySetupState,
   requiresAdminSetup,
   isTransientSetupState,
+  fetchMachineIdentityFromBackend,
+  syncLocalFromBackend,
+  type MachineRole,
+  type MachineConfig,
+  type SetupState,
 } from './services/machine-config';
 import { ThemeProvider } from './theme/ThemeProvider';
 import { ShopProvider } from './features/settings/ShopContext';
@@ -51,10 +53,43 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
   }
 }
 
+async function testServerUrlClient(url: string): Promise<boolean> {
+  const clean = url.replace(/\/$/, '');
+  const apiBase = clean.endsWith('/api/v1') ? clean : `${clean}/api/v1`;
+  const candidates = [`${apiBase}/health`, `${clean}/health`];
+
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 5000);
+
+  try {
+    for (const u of candidates) {
+      try {
+        const res = await fetch(u, { signal: controller.signal, cache: 'no-store' });
+        if (res.ok) {
+          try {
+            const body = await res.json();
+            if (body?.status === 'ok') return true;
+          } catch {
+            /* try next */
+          }
+        }
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return false;
+      }
+    }
+    return false;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 function App() {
   const [user, setUser] = useState(currentUser());
   const [bootPhase, setBootPhase] = useState<'discovering' | 'failed' | 'ready'>('discovering');
   const [setupStatus, setSetupStatus] = useState<'checking' | 'required' | 'ready'>('checking');
+  const [machineStatus, setMachineStatus] = useState<'idle' | 'checking' | 'ready' | 'client-error'>('idle');
+  const [machineCheckTrigger, setMachineCheckTrigger] = useState(0);
+  const [machineError, setMachineError] = useState<string | null>(null);
   const [showManualConfig, setShowManualConfig] = useState(false);
   const [machineRole, setMachineRoleState] = useState<MachineRole | null>(null);
   const [machineConfig, setMachineConfig] = useState<MachineConfig | null>(null);
@@ -120,7 +155,6 @@ function App() {
     return () => { alive = false; };
   }, []);
 
-  // NEW: Check setup status once backend is reachable (bootPhase === 'ready')
   useEffect(() => {
     if (bootPhase !== 'ready') return;
     let alive = true;
@@ -130,12 +164,50 @@ function App() {
         if (!alive) return;
         setSetupStatus(result.is_initialized ? 'ready' : 'required');
       } catch {
-        // Backend unreachable → assume initialized (safe for existing installs)
         if (alive) setSetupStatus('ready');
       }
     })();
     return () => { alive = false; };
   }, [bootPhase]);
+
+  // Chunk 12b — Machine identity check after setup is ready
+  useEffect(() => {
+    if (setupStatus !== 'ready') return;
+    let alive = true;
+    (async () => {
+      setMachineStatus('checking');
+      setMachineError(null);
+      try {
+        const identity = await fetchMachineIdentityFromBackend();
+        if (!alive) return;
+        if (!identity) {
+          // Backend unreachable → assume SERVER (safe default for existing installs)
+          setMachineStatus('ready');
+          return;
+        }
+        try { syncLocalFromBackend(identity); } catch { /* ignore */ }
+        if (identity.machine_role === 'CLIENT') {
+          if (!identity.server_url) {
+            setMachineError('This machine is configured as a CLIENT but no server URL is set. Contact your administrator.');
+            setMachineStatus('client-error');
+            return;
+          }
+          const ok = await testServerUrlClient(identity.server_url);
+          if (!alive) return;
+          if (!ok) {
+            setMachineError(`Cannot reach server at ${identity.server_url}. Check that the server laptop is on and connected to the same network.`);
+            setMachineStatus('client-error');
+            return;
+          }
+        }
+        setMachineStatus('ready');
+      } catch {
+        if (alive) setMachineStatus('ready');
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupStatus, machineCheckTrigger]);
 
   const handleRetryDiscovery = async () => {
     try {
@@ -182,8 +254,13 @@ function App() {
   };
 
   const handleSetupComplete = () => {
-    // Full reload ensures ShopContext + all providers refetch with new shop data
     window.location.reload();
+  };
+
+  const handleRetryMachineCheck = () => {
+    setMachineError(null);
+    setMachineStatus('idle');
+    setMachineCheckTrigger((t) => t + 1);
   };
 
   if (bootPhase === 'ready' && machineConfig && isTransientSetupState(machineConfig.setup_state)) {
@@ -248,18 +325,9 @@ function App() {
     }
   }
 
-  // NEW: Block wizard/loading BEFORE login flow
   if (setupStatus === 'checking') {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'grid',
-          placeItems: 'center',
-          background: 'var(--page)',
-          color: 'var(--muted)',
-        }}
-      >
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--page)', color: 'var(--muted)' }}>
         <div style={{ display: 'grid', placeItems: 'center', gap: '0.75rem' }}>
           <span className="spinner spinner-lg" />
           <span style={{ fontSize: '0.85rem' }}>Checking setup…</span>
@@ -270,6 +338,42 @@ function App() {
 
   if (setupStatus === 'required') {
     return <SetupWizard onComplete={handleSetupComplete} />;
+  }
+
+  if (machineStatus === 'checking' || machineStatus === 'idle') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--page)', color: 'var(--muted)' }}>
+        <div style={{ display: 'grid', placeItems: 'center', gap: '0.75rem' }}>
+          <span className="spinner spinner-lg" />
+          <span style={{ fontSize: '0.85rem' }}>Verifying machine…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (machineStatus === 'client-error') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--page)', padding: '2rem' }}>
+        <div style={{ maxWidth: 520, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '1.5rem', boxShadow: '0 20px 48px rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+            <span style={{ fontSize: '1.8rem' }}>⚠</span>
+            <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#dc2626' }}>Server Connection Issue</h2>
+          </div>
+          <p className="muted" style={{ margin: '0 0 1rem', lineHeight: 1.6, fontSize: '0.9rem' }}>
+            {machineError || 'This machine cannot reach its configured server.'}
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button type="button" className="primary" onClick={handleRetryMachineCheck}>Retry</button>
+            <button type="button" className="btn-secondary" onClick={() => { logout(); setUser(null); setMachineStatus('ready'); }}>
+              Skip and Go to Login
+            </button>
+          </div>
+          <p className="muted" style={{ margin: '0.75rem 0 0', fontSize: '0.72rem' }}>
+            If the server is unreachable, contact your administrator to verify the server URL in Settings → Machine Role.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return user ? (

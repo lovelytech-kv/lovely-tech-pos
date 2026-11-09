@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { AdminManualServerPanel } from '../../components/AdminManualServerPanel';
 import { PermissionMatrix } from './PermissionMatrix';
 import { ShopProfile } from './ShopProfile';
+import { MachineSettings } from './MachineSettings';
 import { AccentPicker } from './AccentPicker';
+import { SessionTimeoutSettings } from './SessionTimeoutSettings';
+import { RecoveryCodesPanel } from '../users/RecoveryCodesPanel';
 import { AboutCard } from './AboutCard';
 import { useTheme, type Theme } from '../../theme/ThemeProvider';
-import { SessionTimeoutSettings } from './SessionTimeoutSettings';
 
 const DEFAULT_DOC_KEY = 'ltpos_default_doc_type';
 type DocType = 'SYSTEM_PRINTED' | 'MANUAL' | 'NO_PRINT';
@@ -14,9 +16,7 @@ function getDefaultDocType(): DocType {
   try {
     const v = localStorage.getItem(DEFAULT_DOC_KEY);
     if (v === 'SYSTEM_PRINTED' || v === 'MANUAL' || v === 'NO_PRINT') return v;
-  } catch {
-    // ignore
-  }
+  } catch { /* ignore */ }
   return 'SYSTEM_PRINTED';
 }
 
@@ -62,6 +62,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
 
     <div className="settings-grid">
       <ShopProfile isAdmin={isAdmin} />
+      <MachineSettings isAdmin={isAdmin} />
       <AccentPicker />
       <div className="glass-panel settings-card">
         <div className="settings-card-title">
@@ -134,6 +135,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
       </div>
       <PermissionMatrix />
       <SessionTimeoutSettings isAdmin={isAdmin} />
+      <RecoveryCodesPanel isAdmin={isAdmin} />
       <AboutCard />
     </div>
   </section>;

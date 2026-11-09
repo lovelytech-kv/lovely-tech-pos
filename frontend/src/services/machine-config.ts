@@ -284,3 +284,44 @@ export function requiresAdminSetup(state: SetupState | null): boolean {
 export function isSetupErrorState(state: SetupState | null): boolean {
   return state === 'SETUP_ERROR';
 }
+
+// --- Backend-backed machine identity (source of truth) ---
+// localStorage remains a fast-boot hint only; the backend is authoritative.
+
+export interface BackendMachineIdentity {
+  machine_role: 'SERVER' | 'CLIENT';
+  machine_name: string | null;
+  server_url: string | null;
+  registered_at: string | null;
+  last_seen_at: string | null;
+}
+
+/**
+ * Fetch machine identity from the backend.
+ * Returns null if the backend is unreachable or identity is not initialized.
+ */
+export async function fetchMachineIdentityFromBackend(): Promise<BackendMachineIdentity | null> {
+  try {
+    const { api } = await import('../api/client');
+    const result = await api<BackendMachineIdentity>('/machine/identity');
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sync localStorage with backend identity.
+ * Backend is source of truth; localStorage is only a fast-boot hint.
+ */
+export function syncLocalFromBackend(identity: BackendMachineIdentity): MachineConfig {
+  const existing = loadMachineConfig();
+  const base: MachineConfig = existing ?? createInitialMachineConfig(identity.machine_role);
+  const updated: MachineConfig = {
+    ...base,
+    machine_role: identity.machine_role,
+    server_reference: identity.server_url ?? null,
+  };
+  saveMachineConfig(updated);
+  return updated;
+}
