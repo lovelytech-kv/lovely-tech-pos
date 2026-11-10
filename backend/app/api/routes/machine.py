@@ -93,10 +93,9 @@ def _verify_admin_on_server(server_url: str, username: str, password: str) -> di
 
     health_status, health_body = _http_get_json(f"{base}/api/v1/health", timeout=5)
     if health_status != 200:
-        err = health_body.get('_network_error') if isinstance(health_body, dict) else None
         if health_status == 0:
-            return {'valid': False, 'reason': 'unreachable', 'reason_message': f'Cannot reach server: {err or "connection failed"}'}
-        return {'valid': False, 'reason': 'unreachable', 'reason_message': f'Server returned HTTP {health_status}'}
+            return {'valid': False, 'reason': 'unreachable', 'reason_message': 'Cannot reach server. Check that the server laptop is on and connected to the same network.'}
+        return {'valid': False, 'reason': 'unreachable', 'reason_message': 'Server returned an unexpected response. Contact your administrator.'}
 
     login_status, login_body = _http_post_json(
         f"{base}/api/v1/auth/login",
@@ -116,9 +115,8 @@ def _verify_admin_on_server(server_url: str, username: str, password: str) -> di
     if login_status == 401:
         return {'valid': False, 'reason': 'invalid_credentials', 'reason_message': 'Invalid username or password'}
     if login_status == 0:
-        err = login_body.get('_network_error') if isinstance(login_body, dict) else None
-        return {'valid': False, 'reason': 'unreachable', 'reason_message': f'Cannot reach server: {err or "connection failed"}'}
-    return {'valid': False, 'reason': 'error', 'reason_message': f'Server returned HTTP {login_status}'}
+        return {'valid': False, 'reason': 'unreachable', 'reason_message': 'Cannot reach server. Check that the server laptop is on and connected to the same network.'}
+    return {'valid': False, 'reason': 'error', 'reason_message': 'Server error during verification. Try again in a moment.'}
 
 
 class MachineVerifyAdminIn(BaseModel):
