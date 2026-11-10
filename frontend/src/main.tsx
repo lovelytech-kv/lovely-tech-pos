@@ -160,9 +160,13 @@ function App() {
     let alive = true;
     (async () => {
       try {
-        const result = await api<{ is_initialized: boolean; reason: string; user_count: number; has_admin: boolean }>('/setup/status');
+        const result = await api<{ is_initialized: boolean; reason: string; user_count: number; has_admin: boolean; join_mode?: string }>('/setup/status');
         if (!alive) return;
-        setSetupStatus(result.is_initialized ? 'ready' : 'required');
+        if (!result.is_initialized) {
+          setSetupStatus('required');
+        } else {
+          setSetupStatus('ready');
+        }
       } catch {
         if (alive) setSetupStatus('ready');
       }

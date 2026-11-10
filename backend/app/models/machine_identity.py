@@ -14,3 +14,6 @@ class MachineIdentity(UUIDPrimaryKeyMixin, Base):
     server_url: Mapped[str | None] = mapped_column(String(255))
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Chunk 13 — join audit
+    server_shop_uuid: Mapped[str | None] = mapped_column(String(36))
+    last_join_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

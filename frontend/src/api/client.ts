@@ -4,6 +4,31 @@ let _resolvedBaseUrl: string | null = null;
 let _initPromise: Promise<string> | null = null;
 let _initError: Error | null = null;
 
+// Chunk 13b — CLIENT mode: business APIs must go to remote server
+let _machineInfoCache: { role: string; serverUrl: string | null } | null = null;
+
+export function invalidateMachineInfoCache() {
+  _machineInfoCache = null;
+}
+
+async function getLocalMachineInfo(): Promise<{ role: string; serverUrl: string | null }> {
+  if (_machineInfoCache) return _machineInfoCache;
+  const localBase = await resolveBaseUrl();
+  try {
+    const res = await fetch(`${localBase}/machine/identity`, { cache: 'no-store' });
+    if (res.ok) {
+      const data: any = await res.json();
+      _machineInfoCache = {
+        role: String(data.machine_role || data.role || 'SERVER').toUpperCase(),
+        serverUrl: data.server_url ? String(data.server_url).replace(/\/$/, '') : null,
+      };
+      return _machineInfoCache;
+    }
+  } catch { /* fallback to SERVER */ }
+  _machineInfoCache = { role: 'SERVER', serverUrl: null };
+  return _machineInfoCache;
+}
+
 function assertServerConfigured(baseUrl: string) {
   const relative = baseUrl.startsWith('/');
   const desktopShell = typeof window !== 'undefined' &&
@@ -41,6 +66,32 @@ async function resolveBaseUrl(): Promise<string> {
   return _initPromise;
 }
 
+// Chunk 13b — route business APIs to remote server when this machine is CLIENT
+async function resolveBaseUrlForPath(path: string): Promise<string> {
+  const localBase = await resolveBaseUrl();
+
+  // Local-only endpoints (must hit the local backend)
+  const isLocalOnly =
+    path.startsWith('/setup/') ||
+    path.startsWith('/machine/');
+
+  if (isLocalOnly) return localBase;
+
+  // All other paths → if CLIENT, send to remote server URL
+  try {
+    const info = await getLocalMachineInfo();
+    if (info.role === 'CLIENT' && info.serverUrl) {
+      const remote = info.serverUrl.replace(/\/$/, '');
+      // DB stores server_url WITHOUT /api/v1 (e.g. http://host:8001)
+      // Local base uses /api/v1 (dev proxy or http://host:8000/api/v1)
+      // So we must append it for the remote path too.
+      return remote.endsWith('/api/v1') ? remote : `${remote}/api/v1`;
+    }
+  } catch { /* fallback */ }
+
+  return localBase;
+}
+
 export function getApiBaseUrlSync(): string | null {
   return _resolvedBaseUrl;
 }
@@ -58,12 +109,12 @@ export async function ensureApiBaseResolved(): Promise<string> {
 export async function resetApiBaseResolution(): Promise<void> {
   _resolvedBaseUrl = null;
   _initError = null;
+  _machineInfoCache = null;
   if (_initPromise) {
     await _initPromise.catch(() => {});
   }
   await resolveBaseUrl();
 }
-
 /**
  * Verifies a manually entered server candidate through /discovery/info and
  * persists it as the Admin manual override. The candidate must expose the
@@ -91,7 +142,7 @@ export type LoginResponse = {
 };
 
 export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
-  const baseUrl = await resolveBaseUrl();
+  const baseUrl = await resolveBaseUrlForPath(path);
   assertServerConfigured(baseUrl);
   const token = localStorage.getItem('ltpos_token');
   const headers = new Headers(options.headers);

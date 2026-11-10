@@ -1,14 +1,16 @@
-import { useState } from 'react';
-import { api, login } from '../../api/client';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '../../api/client';
 import { toast } from '../../ui/toast';
 import { RecoveryCodesDisplay } from '../users/RecoveryCodesDisplay';
 
 type Props = { onComplete: () => void };
 
 type MachineRole = 'SERVER' | 'CLIENT';
-type Step = 0 | 1 | 2 | 3 | 4 | 5;
+type JoinMode = 'SERVER_READY' | 'CLIENT_REQUIRES_AUTH' | 'SERVER_REQUIRES_SETUP';
+type Step = -1 | 0 | 1 | 2 | 3 | 4 | 5;
+type ConnResult = { ok: boolean; message: string; shopName?: string };
 
-const STEP_LABELS: Record<Step, string> = {
+const STEP_LABELS: Record<0 | 1 | 2 | 3 | 4 | 5, string> = {
   0: 'Role',
   1: 'Welcome',
   2: 'Shop',
@@ -19,114 +21,164 @@ const STEP_LABELS: Record<Step, string> = {
 
 const URL_REGEX = /^https?:\/\/.+:\d+$/;
 
-type ConnResult = { ok: boolean; message: string; shopName?: string };
-
-async function testServerUrl(url: string): Promise<ConnResult> {
-  const clean = url.replace(/\/$/, '');
-  const apiBase = clean.endsWith('/api/v1') ? clean : `${clean}/api/v1`;
-  const candidates = [`${apiBase}/health`, `${clean}/health`];
-
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 5000);
-
+async function verifyAdmin(serverUrl: string, username: string, password: string): Promise<{ valid: boolean; shopName?: string; message?: string }> {
   try {
-    let health: { status?: string } | null = null;
-    let lastStatus: number | null = null;
-
-    for (const u of candidates) {
-      try {
-        const res = await fetch(u, { signal: controller.signal, cache: 'no-store' });
-        if (res.ok) {
-          try { health = await res.json(); } catch { health = null; }
-          if (health?.status === 'ok') break;
-          health = null;
-        } else {
-          lastStatus = res.status;
-        }
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') throw e;
-      }
-    }
-
-    if (!health || health.status !== 'ok') {
-      if (lastStatus !== null) return { ok: false, message: `HTTP ${lastStatus}` };
-      return { ok: false, message: 'Cannot reach server' };
-    }
-
-    let shopName: string | undefined;
-    try {
-      const shop = await fetch(`${apiBase}/branch/public`, { signal: controller.signal, cache: 'no-store' });
-      if (shop.ok) {
-        const s = await shop.json();
-        if (typeof s?.name === 'string') shopName = s.name;
-      }
-    } catch { /* optional */ }
-    return { ok: true, message: 'Connected', shopName };
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') return { ok: false, message: 'Timeout (5s)' };
-    return { ok: false, message: 'Cannot reach server' };
-  } finally {
-    window.clearTimeout(timer);
+    const result = await api<{ valid: boolean; shop_name?: string; admin_display_name?: string; reason?: string; reason_message?: string }>('/machine/verify-admin', {
+      method: 'POST',
+      body: JSON.stringify({
+        server_url: serverUrl,
+        admin_username: username,
+        admin_password: password,
+      }),
+    });
+    if (result.valid) return { valid: true, shopName: result.shop_name || undefined };
+    return { valid: false, message: result.reason_message || result.reason || 'Verification failed' };
+  } catch (e) {
+    return { valid: false, message: (e as Error).message || 'Verification failed' };
   }
 }
 
 export function SetupWizard({ onComplete }: Props) {
   const [step, setStep] = useState<Step>(0);
+  const [joinMode, setJoinMode] = useState<JoinMode | null>(null);
+  const [loadingMode, setLoadingMode] = useState(true);
 
-  // Step 0 state
+  // Mode-select
   const [machineRole, setMachineRole] = useState<MachineRole>('SERVER');
-  const [serverUrl, setServerUrl] = useState('');
-  const [serverUrlTouched, setServerUrlTouched] = useState(false);
-  const [testingConn, setTestingConn] = useState(false);
-  const [connResult, setConnResult] = useState<ConnResult | null>(null);
 
-  // Shop state
+  // Client connect
+  const [clientServerUrl, setClientServerUrl] = useState('');
+  const [clientUsername, setClientUsername] = useState('');
+  const [clientPassword, setClientPassword] = useState('');
+  const [clientMachineName, setClientMachineName] = useState('');
+  const [showClientPassword, setShowClientPassword] = useState(false);
+  const [clientTouched, setClientTouched] = useState<Record<string, boolean>>({});
+  const [testingClient, setTestingClient] = useState(false);
+  const [joiningClient, setJoiningClient] = useState(false);
+  const [clientConn, setClientConn] = useState<ConnResult | null>(null);
+  const [clientSubmitted, setClientSubmitted] = useState(false);
+
+  // Server flow
   const [shop, setShop] = useState({ name: '', address: '', phone: '', email: '' });
-
-  // Admin state
   const [admin, setAdmin] = useState({ username: '', password: '', confirm: '', display_name: '' });
   const [showPassword, setShowPassword] = useState(false);
-
-  // Recovery state
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [doneMode, setDoneMode] = useState<'SERVER' | 'CLIENT'>('SERVER');
+  const [doneShopName, setDoneShopName] = useState('');
+  const [doneAdminUsername, setDoneAdminUsername] = useState('');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  const urlErr = (() => {
-    if (machineRole !== 'CLIENT') return null;
-    const trimmed = serverUrl.trim();
-    if (!trimmed) return 'Server URL is required for CLIENT mode';
-    if (!URL_REGEX.test(trimmed)) return 'Format: http://host:port (e.g. http://192.168.1.10:8000)';
+  // Load join_mode from backend
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const status = await api<{ join_mode?: string }>('/setup/status');
+        if (!alive) return;
+        const jm = (status.join_mode || 'SERVER_REQUIRES_SETUP') as JoinMode;
+        setJoinMode(jm);
+        if (jm === 'CLIENT_REQUIRES_AUTH') {
+          setStep(-1);
+        } else {
+          setStep(0);
+        }
+      } catch {
+        if (alive) {
+          setJoinMode('SERVER_REQUIRES_SETUP');
+          setStep(0);
+        }
+      } finally {
+        if (alive) setLoadingMode(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // Client form validation
+  const clientUrlErr = useMemo(() => {
+    const v = clientServerUrl.trim();
+    if (!v) return 'Server URL is required';
+    if (v.length > 255) return `Too long (${v.length}/255)`;
+    if (!URL_REGEX.test(v)) return 'Format: http://host:port (e.g. http://192.168.1.10:8000)';
     return null;
-  })();
+  }, [clientServerUrl]);
 
-  const canProceed0 = (() => {
-    if (machineRole === 'SERVER') return true;
-    if (urlErr) return false;
-    if (!connResult?.ok) return false;
-    return true;
-  })();
+  const clientUserErr = useMemo(() => {
+    const v = clientUsername.trim();
+    if (!v) return 'Username is required';
+    if (v.length < 3) return 'At least 3 characters';
+    if (v.length > 80) return 'Too long (max 80)';
+    return null;
+  }, [clientUsername]);
 
-  async function testConn() {
-    if (urlErr || !serverUrl.trim()) {
-      setConnResult({ ok: false, message: urlErr ?? 'Enter a URL first' });
+  const clientPwdErr = useMemo(() => {
+    if (!clientPassword) return 'Password is required';
+    if (clientPassword.length < 8) return 'At least 8 characters';
+    if (clientPassword.length > 200) return 'Too long (max 200)';
+    return null;
+  }, [clientPassword]);
+
+  const clientNameErr = useMemo(() => {
+    if (clientMachineName.length > 100) return 'Too long (max 100)';
+    return null;
+  }, [clientMachineName]);
+
+  const canClientTest = !clientUrlErr && !clientUserErr && !clientPwdErr && !testingClient && !joiningClient;
+  const canClientJoin = canClientTest && clientConn?.ok === true && !joiningClient;
+
+  async function testClientConn() {
+    if (!canClientTest) return;
+    setTestingClient(true);
+    setClientConn(null);
+    try {
+      const result = await verifyAdmin(clientServerUrl.trim(), clientUsername.trim(), clientPassword);
+      if (result.valid) {
+        setClientConn({ ok: true, message: 'Connected', shopName: result.shopName });
+      } else {
+        setClientConn({ ok: false, message: result.message || 'Verification failed' });
+      }
+    } finally {
+      setTestingClient(false);
+    }
+  }
+
+  async function submitClientJoin() {
+    setClientSubmitted(true);
+    setClientTouched({ url: true, username: true, password: true, name: true });
+    if (!canClientJoin) {
+      toast.error('Please fix the highlighted fields and test the connection');
       return;
     }
-    setTestingConn(true);
-    setConnResult(null);
+    setJoiningClient(true);
     try {
-      const result = await testServerUrl(serverUrl.trim());
-      setConnResult(result);
+      const result = await api<{ success: boolean; machine_role: string; server_url: string; shop_uuid: string }>('/machine/join', {
+        method: 'POST',
+        body: JSON.stringify({
+          server_url: clientServerUrl.trim(),
+          admin_username: clientUsername.trim(),
+          admin_password: clientPassword,
+          machine_name: clientMachineName.trim() || null,
+        }),
+      });
+      setDoneMode('CLIENT');
+      setDoneShopName(clientConn?.shopName || 'your shop server');
+      setDoneAdminUsername(clientUsername.trim());
+      setStep(5);
+      toast.success(`Joined ${clientConn?.shopName || 'server'} successfully`);
+    } catch (e) {
+      toast.error((e as Error).message || 'Join failed');
+      setClientConn({ ok: false, message: (e as Error).message || 'Join failed' });
     } finally {
-      setTestingConn(false);
+      setJoiningClient(false);
     }
   }
 
   function validateShop(): boolean {
     const e: Record<string, string> = {};
     if (!shop.name.trim()) e.name = 'Shop name is required';
-    if (shop.name.trim().length > 150) e.name = `Too long (${shop.name.trim().length}/150)`;
+    else if (shop.name.trim().length > 150) e.name = `Too long (${shop.name.trim().length}/150)`;
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -134,6 +186,7 @@ export function SetupWizard({ onComplete }: Props) {
   function validateAdmin(): boolean {
     const e: Record<string, string> = {};
     if (admin.username.trim().length < 3) e.username = 'At least 3 characters';
+    else if (admin.username.trim().length > 80) e.username = 'Too long (max 80)';
     if (!admin.display_name.trim()) e.display_name = 'Display name is required';
     if (admin.password.length < 8) e.password = 'At least 8 characters';
     if (admin.password !== admin.confirm) e.confirm = 'Passwords do not match';
@@ -141,7 +194,7 @@ export function SetupWizard({ onComplete }: Props) {
     return Object.keys(e).length === 0;
   }
 
-  async function submit() {
+  async function submitServer() {
     if (!validateAdmin()) return;
     setSubmitting(true);
     try {
@@ -161,28 +214,13 @@ export function SetupWizard({ onComplete }: Props) {
           },
         }),
       });
-
-      // Save machine role (Chunk 12b) — requires auth, so use temporary auto-login
       try {
-        await login(admin.username.trim(), admin.password);
-        await api('/machine/identity', {
-          method: 'PUT',
-          body: JSON.stringify({
-            machine_role: machineRole,
-            machine_name: null,
-            server_url: machineRole === 'CLIENT' ? serverUrl.trim() : null,
-          }),
-        });
-      } catch (putErr) {
-        toast.error('Setup complete, but machine role could not be saved. You can change it in Settings later.');
-        console.warn('[SetupWizard] machine identity PUT failed:', putErr);
-      } finally {
-        try {
-          localStorage.removeItem('ltpos_token');
-          localStorage.removeItem('ltpos_user');
-        } catch { /* ignore */ }
-      }
-
+        localStorage.removeItem('ltpos_token');
+        localStorage.removeItem('ltpos_user');
+      } catch { /* ignore */ }
+      setDoneMode('SERVER');
+      setDoneShopName(shop.name.trim());
+      setDoneAdminUsername(admin.username.trim());
       setRecoveryCodes(result.recovery_codes || []);
       setStep(4);
     } catch (err) {
@@ -199,7 +237,17 @@ export function SetupWizard({ onComplete }: Props) {
   }
 
   function Stepper() {
-    const steps: Step[] = [0, 1, 2, 3, 4, 5];
+    if (step === -1) {
+      return (
+        <div className="setup-stepper" style={{ gridTemplateColumns: '1fr' }}>
+          <div className="step active">
+            <div className="step-circle">🔗</div>
+            <span className="step-label">Connect to Server</span>
+          </div>
+        </div>
+      );
+    }
+    const steps: (0 | 1 | 2 | 3 | 4 | 5)[] = [0, 1, 2, 3, 4, 5];
     return (
       <div className="setup-stepper" style={{ gridTemplateColumns: `repeat(${steps.length}, 1fr)` }}>
         {steps.map((n) => {
@@ -217,18 +265,143 @@ export function SetupWizard({ onComplete }: Props) {
     );
   }
 
+  if (loadingMode) {
+    return (
+      <div className="setup-wizard-page">
+        <div className="setup-wizard-card" style={{ width: 'min(620px, 100%)', textAlign: 'center', padding: '2rem' }}>
+          <span className="spinner spinner-lg" />
+          <p className="muted" style={{ marginTop: '0.75rem' }}>Checking setup status…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="setup-wizard-page">
       <div className="setup-wizard-card" style={{ width: 'min(620px, 100%)' }}>
         <Stepper />
 
+        {/* Step -1: CLIENT connect (standalone or chosen via step 0) */}
+        {step === -1 && (
+          <>
+            <div className="setup-step-content">
+              <h2 style={{ fontSize: '1.2rem', margin: '0 0 0.5rem' }}>Connect to your shop server</h2>
+              <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>
+                Enter the server URL and an existing admin account from that server. This laptop will be configured as a CLIENT.
+              </p>
+
+              {clientSubmitted && (clientUrlErr || clientUserErr || clientPwdErr) && (
+                <div className="modal-error-banner">
+                  <div className="modal-error-banner-title"><span>⚠</span> Please fix:</div>
+                  <ul className="modal-error-banner-list">
+                    {clientUrlErr && <li>{clientUrlErr}</li>}
+                    {clientUserErr && <li>Username: {clientUserErr}</li>}
+                    {clientPwdErr && <li>Password: {clientPwdErr}</li>}
+                  </ul>
+                </div>
+              )}
+
+              <div className="setup-form-row">
+                <label>Server URL *</label>
+                <div className="server-url-input-wrap">
+                  <input
+                    type="text"
+                    value={clientServerUrl}
+                    onChange={(e) => { setClientServerUrl(e.target.value); setClientConn(null); }}
+                    onBlur={() => setClientTouched((t) => ({ ...t, url: true }))}
+                    placeholder="http://192.168.1.10:8000"
+                    maxLength={255}
+                    className={(clientTouched.url || clientSubmitted) && clientUrlErr ? 'input-error' : ''}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => void testClientConn()}
+                    disabled={!canClientTest}
+                  >
+                    {testingClient ? 'Testing…' : 'Test'}
+                  </button>
+                </div>
+                <small className="muted" style={{ fontSize: '0.7rem' }}>{clientServerUrl.length}/255 · Format: http://host:port</small>
+                {(clientTouched.url || clientSubmitted) && clientUrlErr && <span className="setup-error">{clientUrlErr}</span>}
+              </div>
+
+              <div className="setup-form-row">
+                <label>Admin Username *</label>
+                <input
+                  type="text"
+                  value={clientUsername}
+                  onChange={(e) => { setClientUsername(e.target.value); setClientConn(null); }}
+                  onBlur={() => setClientTouched((t) => ({ ...t, username: true }))}
+                  placeholder="admin"
+                  maxLength={80}
+                  autoComplete="off"
+                  className={(clientTouched.username || clientSubmitted) && clientUserErr ? 'input-error' : ''}
+                />
+                <small className="muted" style={{ fontSize: '0.7rem' }}>{clientUsername.length}/80 · min 3</small>
+                {(clientTouched.username || clientSubmitted) && clientUserErr && <span className="setup-error">{clientUserErr}</span>}
+              </div>
+
+              <div className="setup-form-row">
+                <label>Admin Password *</label>
+                <div className="pwd-wrapper">
+                  <input
+                    type={showClientPassword ? 'text' : 'password'}
+                    value={clientPassword}
+                    onChange={(e) => { setClientPassword(e.target.value); setClientConn(null); }}
+                    onBlur={() => setClientTouched((t) => ({ ...t, password: true }))}
+                    placeholder="Password"
+                    maxLength={200}
+                    autoComplete="off"
+                    className={(clientTouched.password || clientSubmitted) && clientPwdErr ? 'input-error' : ''}
+                  />
+                  <button type="button" className="pwd-toggle-btn" onClick={() => setShowClientPassword((v) => !v)} aria-label={showClientPassword ? 'Hide password' : 'Show password'}>
+                    {showClientPassword ? '🙈' : '👁'}
+                  </button>
+                </div>
+                <small className="muted" style={{ fontSize: '0.7rem' }}>min 8 · from your server</small>
+                {(clientTouched.password || clientSubmitted) && clientPwdErr && <span className="setup-error">{clientPwdErr}</span>}
+              </div>
+
+              <div className="setup-form-row">
+                <label>Machine Name (optional)</label>
+                <input
+                  type="text"
+                  value={clientMachineName}
+                  onChange={(e) => setClientMachineName(e.target.value)}
+                  onBlur={() => setClientTouched((t) => ({ ...t, name: true }))}
+                  placeholder="e.g. Cashier Desk 2"
+                  maxLength={100}
+                  className={(clientTouched.name || clientSubmitted) && clientNameErr ? 'input-error' : ''}
+                />
+                <small className="muted" style={{ fontSize: '0.7rem' }}>{clientMachineName.length}/100</small>
+                {clientNameErr && <span className="setup-error">{clientNameErr}</span>}
+              </div>
+
+              {clientConn && (
+                <div className={`connection-status ${clientConn.ok ? 'ok' : 'fail'}`}>
+                  {clientConn.ok ? '✓' : '✕'} {clientConn.message}
+                  {clientConn.shopName && ` — ${clientConn.shopName}`}
+                </div>
+              )}
+            </div>
+            <div className="setup-actions">
+              {joinMode === 'SERVER_REQUIRES_SETUP' && (
+                <button className="btn-secondary" onClick={() => setStep(0)} disabled={joiningClient}>← Back</button>
+              )}
+              <button className="primary" onClick={() => void submitClientJoin()} disabled={!canClientJoin || joiningClient}>
+                {joiningClient ? 'Joining…' : 'Join as Client'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Step 0: mode selection */}
         {step === 0 && (
           <>
             <div className="setup-step-content">
               <h2 style={{ fontSize: '1.2rem', margin: '0 0 0.5rem' }}>Is this the main POS server for your shop?</h2>
-              <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>
-                Choose how this machine will participate on your shop's network.
-              </p>
+              <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>Choose how this machine will participate on your shop's network.</p>
 
               <div className="setup-role-options">
                 <label className={`setup-role-option ${machineRole === 'SERVER' ? 'selected' : ''}`}>
@@ -248,42 +421,14 @@ export function SetupWizard({ onComplete }: Props) {
                   <div>
                     <b>No, this connects to an existing server</b>
                     <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', lineHeight: 1.4 }}>
-                      This laptop will connect to a server laptop already running on your shop's network.
+                      This laptop will connect to a server laptop already running on your shop's network. You need an existing admin account.
                     </p>
                   </div>
                 </label>
               </div>
-
-              {machineRole === 'CLIENT' && (
-                <div className="setup-form-row" style={{ marginTop: '0.75rem' }}>
-                  <label>Server URL *</label>
-                  <div className="server-url-input-wrap">
-                    <input
-                      type="text"
-                      value={serverUrl}
-                      onChange={(e) => { setServerUrl(e.target.value); setConnResult(null); }}
-                      onBlur={() => setServerUrlTouched(true)}
-                      placeholder="http://192.168.1.10:8000"
-                      maxLength={255}
-                      className={(serverUrlTouched || serverUrl) && urlErr ? 'input-error' : ''}
-                    />
-                    <button type="button" className="btn-secondary" onClick={() => void testConn()} disabled={testingConn || !serverUrl.trim()}>
-                      {testingConn ? 'Testing…' : 'Test'}
-                    </button>
-                  </div>
-                  <small className="muted" style={{ fontSize: '0.7rem' }}>Format: http://host:port · must test successfully before continuing</small>
-                  {(serverUrlTouched || serverUrl) && urlErr && <span className="setup-error">{urlErr}</span>}
-                  {connResult && (
-                    <div className={`connection-status ${connResult.ok ? 'ok' : 'fail'}`}>
-                      {connResult.ok ? '✓' : '✕'} {connResult.message}
-                      {connResult.shopName && ` — ${connResult.shopName}`}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
             <div className="setup-actions">
-              <button className="primary" onClick={() => setStep(1)} disabled={!canProceed0}>
+              <button className="primary" onClick={() => setStep(machineRole === 'SERVER' ? 1 : -1)}>
                 Continue →
               </button>
             </div>
@@ -297,9 +442,7 @@ export function SetupWizard({ onComplete }: Props) {
                 Welcome to <span style={{ color: 'var(--accent)' }}>Lovely Tech POS</span>
               </h1>
               <p className="muted" style={{ margin: 0, lineHeight: 1.6 }}>
-                {machineRole === 'SERVER'
-                  ? "Let's set up your shop server. You'll create your shop and admin account."
-                  : `This machine will connect to ${serverUrl || 'the server'}. Set up local admin details.`}
+                Let's set up your shop server. You'll create your shop and admin account.
               </p>
             </div>
             <div className="setup-actions" style={{ justifyContent: 'center' }}>
@@ -388,7 +531,7 @@ export function SetupWizard({ onComplete }: Props) {
             </div>
             <div className="setup-actions">
               <button className="btn-secondary" onClick={() => setStep(2)} disabled={submitting}>← Back</button>
-              <button className="primary" onClick={submit} disabled={submitting}>{submitting ? 'Creating account…' : 'Create Account & Continue'}</button>
+              <button className="primary" onClick={submitServer} disabled={submitting}>{submitting ? 'Creating account…' : 'Create Account & Continue'}</button>
             </div>
           </>
         )}
@@ -410,13 +553,26 @@ export function SetupWizard({ onComplete }: Props) {
           <>
             <div className="setup-step-content" style={{ textAlign: 'center', padding: '1rem 0' }}>
               <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(22, 163, 74, 0.15)', color: '#16a34a', display: 'grid', placeItems: 'center', fontSize: '2rem', margin: '0 auto 1rem' }}>✓</div>
-              <h2 style={{ fontSize: '1.35rem', margin: '0 0 0.5rem' }}>You're all set!</h2>
-              <p className="muted" style={{ margin: '0 0 0.5rem', lineHeight: 1.6 }}>
-                <b style={{ color: 'var(--text)' }}>{shop.name}</b> has been created with admin account <b style={{ color: 'var(--text)' }}>{admin.username}</b>.
-              </p>
-              <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-                Machine role: <b style={{ color: 'var(--text)' }}>{machineRole}</b>. Log in with your admin credentials.
-              </p>
+              <h2 style={{ fontSize: '1.35rem', margin: '0 0 0.5rem' }}>{doneMode === 'CLIENT' ? 'Connected!' : "You're all set!"}</h2>
+              {doneMode === 'CLIENT' ? (
+                <>
+                  <p className="muted" style={{ margin: '0 0 0.5rem', lineHeight: 1.6 }}>
+                    This laptop is now connected to <b style={{ color: 'var(--text)' }}>{doneShopName}</b> as a CLIENT.
+                  </p>
+                  <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                    Log in with your server admin credentials (<b style={{ color: 'var(--text)' }}>{doneAdminUsername}</b>).
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="muted" style={{ margin: '0 0 0.5rem', lineHeight: 1.6 }}>
+                    <b style={{ color: 'var(--text)' }}>{doneShopName}</b> has been created with admin account <b style={{ color: 'var(--text)' }}>{doneAdminUsername}</b>.
+                  </p>
+                  <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                    Machine role: <b style={{ color: 'var(--text)' }}>SERVER</b>. Log in with your admin credentials.
+                  </p>
+                </>
+              )}
             </div>
             <div className="setup-actions" style={{ justifyContent: 'center' }}>
               <button className="primary" onClick={onComplete}>Go to Login →</button>
