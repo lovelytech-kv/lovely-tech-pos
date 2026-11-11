@@ -46,3 +46,10 @@ htmlcov/
 # Windows-style paths created when tests run on Linux
 C:/
 backend/C:/
+
+# Chunk 14a — backup files
+*.ltbak
+backups/
+backend/backups/
+*/backups/
+

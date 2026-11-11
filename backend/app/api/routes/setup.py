@@ -2,10 +2,12 @@
 
 Public, one-time bootstrap for fresh installs.
 Chunk 13: adds `join_mode` to /setup/status to distinguish SERVER vs CLIENT flow.
+Chunk 14a: pre-login restore from .ltbak file.
 """
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -62,12 +64,15 @@ def setup_status(db: Session = Depends(db_session)):
     if is_client:
         # CLIENT mode — setup complete via join. No local admin/branch needed.
         return {
-            'is_initialized': True,           # ← KEY FIX
-            'reason': 'client_ready',         # ← KEY FIX
+            'is_initialized': True,
+            'reason': 'client_ready',
             'user_count': user_count,
             'has_admin': has_admin,
-            'join_mode': 'CLIENT_REQUIRES_AUTH',  # keep stable string
+            'join_mode': 'CLIENT_REQUIRES_AUTH',
             'server_url': machine.server_url,
+            'can_restore_from_file': False,
+            'can_restore_from_cloud': False,
+            'available_local_backups': 0,
         }
 
     # ─── SERVER mode logic ───
@@ -86,13 +91,146 @@ def setup_status(db: Session = Depends(db_session)):
 
     is_initialized = user_count > 0 and has_admin and branch_count > 0
 
+    # Chunk 14a — backup restore hints
+    try:
+        from app.models.backup import BackupPoint
+        available_local_backups = int(db.scalar(
+            select(func.count()).select_from(BackupPoint).where(
+                BackupPoint.state.in_(['VERIFIED', 'IMPORTED'])
+            )
+        ) or 0)
+    except Exception:
+        available_local_backups = 0
+
     return {
         'is_initialized': is_initialized,
         'reason': reason,
         'user_count': user_count,
         'has_admin': has_admin,
         'join_mode': join_mode,
+        'can_restore_from_file': True,
+        'can_restore_from_cloud': False,
+        'available_local_backups': available_local_backups,
     }
+
+
+@router.post('/restore-from-file')
+async def restore_from_file(
+    file: UploadFile = File(...),
+    confirm_replace: bool = Form(False),
+    emergency_key: str = Form(""),
+    db: Session = Depends(db_session),
+):
+    """Pre-login restore from a .ltbak file.
+
+    Only allowed when setup is NOT initialized, OR with valid POS_EMERGENCY_KEY
+    (bypass). Requires confirm_replace=true.
+    """
+    from app.backup.service import BackupError, restore_postgres_backup
+    from app.backup.backup_import import (
+        validate_upload, read_and_hash, inspect_metadata, save_import_file, detect_format,
+    )
+    from app.core.config import settings
+    from app.db.session import get_session_factory
+
+    # ── 1. Authorization ──
+    current = setup_status(db)
+    if current.get('is_initialized'):
+        if not settings.pos_emergency_key or emergency_key != settings.pos_emergency_key:
+            raise HTTPException(
+                403,
+                'Setup already complete. Provide valid emergency_key or use admin restore.',
+            )
+
+    if not confirm_replace:
+        raise HTTPException(400, 'confirm_replace must be true to proceed')
+
+    # ── 2. Validate + inspect file ──
+    try:
+        validate_upload(file)
+        data, sha256 = read_and_hash(file)
+        if detect_format(data) != 'LTPOS-BACKUP-V1':
+            raise HTTPException(
+                400,
+                'Only .ltbak files can be restored here. Plain SQL not supported by this endpoint.',
+            )
+        metadata = inspect_metadata(data, secret=settings.secret_key)
+        dest = save_import_file(data, file.filename or 'backup.ltbak', backup_root=settings.backup_root)
+    except BackupError as exc:
+        raise HTTPException(400, str(exc))
+
+    safety = Path(settings.backup_root) / f"pre-login-safety-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.ltbak"
+    journal = Path(settings.backup_root) / "restore-journal.log"
+    journal.parent.mkdir(parents=True, exist_ok=True)
+
+    # ── 3. Close session before in-place restore ──
+    db.close()
+
+    # ── 4. Run restore (in-place, safety backup taken inside) ──
+    try:
+        restore_postgres_backup(
+            pg_dump=settings.pg_dump_bin,
+            pg_restore=settings.pg_restore_bin,
+            psql=settings.psql_bin,
+            database_url=settings.database_url,
+            encrypted_backup=dest,
+            safety_output=safety,
+            secret=settings.secret_key,
+        )
+    except Exception as exc:
+        with journal.open('a', encoding='utf-8') as f:
+            f.write(
+                f"{datetime.now(timezone.utc).isoformat()} PRE_LOGIN_RESTORE_FAILED "
+                f"file={file.filename} sha={sha256[:16]} error={str(exc)[:400]}\n"
+            )
+        raise HTTPException(
+            500,
+            f'Restore failed: {exc}. Safety backup kept at {safety}',
+        )
+
+    # ── 5. Verify + audit (fresh session on restored DB) ──
+    new_db = get_session_factory()()
+    try:
+        user_count = int(new_db.scalar(select(func.count()).select_from(User)) or 0)
+        branch_count = int(new_db.scalar(select(func.count()).select_from(Branch)) or 0)
+        shop = new_db.scalar(select(ShopIdentity).limit(1))
+
+        try:
+            new_db.add(AuditLog(
+                action_type='PRE_LOGIN_RESTORE_SUCCEEDED',
+                entity_type='SYSTEM',
+                timestamp=datetime.now(timezone.utc),
+                after_json={
+                    'filename': file.filename,
+                    'sha256': sha256,
+                    'size': len(data),
+                    'metadata': metadata,
+                    'user_count': user_count,
+                    'branch_count': branch_count,
+                    'shop_uuid': str(shop.shop_uuid) if shop else None,
+                },
+            ))
+            new_db.commit()
+        except Exception:
+            new_db.rollback()
+
+        with journal.open('a', encoding='utf-8') as f:
+            f.write(
+                f"{datetime.now(timezone.utc).isoformat()} PRE_LOGIN_RESTORE_SUCCEEDED "
+                f"file={file.filename} sha={sha256[:16]} users={user_count}\n"
+            )
+
+        return {
+            'success': True,
+            'shop_uuid': str(shop.shop_uuid) if shop else None,
+            'shop_name': shop.shop_name if shop else None,
+            'user_count': user_count,
+            'branch_count': branch_count,
+            'requires_relogin': True,
+            'safety_backup': str(safety),
+        }
+    finally:
+        new_db.close()
 
 
 @router.post('/initialize', response_model=SetupInitializeOut)

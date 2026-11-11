@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import re
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission, current_user
@@ -52,6 +52,73 @@ def verify(backup_id:str,user:User=Depends(require_permission('BACKUP_MANAGE')),
     point.state='VERIFIED'; point.sha256=meta['sha256']; point.verified_at=datetime.now(timezone.utc); point.failure_reason=None; db.commit()
     return {'backup_id':str(point.id),'state':point.state,'sha256':point.sha256}
 
+@router.post('/import-file')
+def import_file(
+    file: UploadFile = File(...),
+    user: User = Depends(require_permission('BACKUP_MANAGE')),
+    db: Session = Depends(db_session),
+):
+    """Import a .ltbak/.sql file. State='IMPORTED'. Use /backup/verify then /backup/restore."""
+    from app.backup.backup_import import (
+        validate_upload, read_and_hash, inspect_metadata, save_import_file,
+    )
+    from app.core.config import settings
+
+    try:
+        validate_upload(file)
+        data, sha256 = read_and_hash(file)
+        metadata = inspect_metadata(data, secret=settings.secret_key)
+        dest = save_import_file(data, file.filename or "backup.ltbak", backup_root=settings.backup_root)
+
+        point = BackupPoint(
+            branch_id=user.branch_id,
+            state='IMPORTED',
+            storage_target=str(dest.parent),
+            filename=dest.name,
+            sha256=sha256,
+            created_by=user.id,
+            sync_state='LOCAL_ONLY',
+            imported_at=datetime.now(timezone.utc),
+            imported_by=user.id,
+            source_filename=file.filename,
+            source_metadata=metadata,
+        )
+        db.add(point)
+        db.flush()
+
+        db.add(AuditLog(
+            branch_id=user.branch_id,
+            actor_user_id=user.id,
+            action_type='BACKUP_IMPORTED',
+            entity_type='BACKUP_POINT',
+            entity_id=point.id,
+            timestamp=datetime.now(timezone.utc),
+            after_json={
+                'filename': file.filename,
+                'sha256': sha256,
+                'size': len(data),
+                'format': metadata.get('format'),
+            },
+            source_transaction_id=point.id,
+        ))
+        db.commit()
+
+        return {
+            'backup_id': str(point.id),
+            'filename': dest.name,
+            'original_filename': file.filename,
+            'sha256': sha256,
+            'size': len(data),
+            'imported_at': point.imported_at.isoformat(),
+            'metadata': metadata,
+        }
+    except BackupError as exc:
+        db.rollback()
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(500, f'Import failed: {exc}')
+
 @router.post('/restore/{backup_id}')
 def restore(backup_id:str, confirm:bool=False, admin_password:str|None=None, user:User=Depends(require_permission('BACKUP_MANAGE')), db:Session=Depends(db_session)):
     require_admin_reauth(user=user,password=admin_password,db=db,action='database restore')
@@ -71,8 +138,6 @@ def restore(backup_id:str, confirm:bool=False, admin_password:str|None=None, use
     except Exception as exc:
         journal=Path(settings.backup_root)/'restore-journal.log'; journal.parent.mkdir(parents=True,exist_ok=True); journal.open('a',encoding='utf-8').write(f"{datetime.now(timezone.utc).isoformat()} RESTORE_FAILED backup={backup_id} actor={user.id} error={str(exc)[:500]}\n")
         raise HTTPException(500,f'Restore failed and was not reported successful: {exc}')
-
-
 
 @router.post('/sync/{backup_id}')
 def sync_backup(backup_id:str,user:User=Depends(require_permission('BACKUP_MANAGE')),db:Session=Depends(db_session)):

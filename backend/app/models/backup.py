@@ -2,6 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.session import Base
 from app.models.common import UUIDPrimaryKeyMixin, TimestampMixin
@@ -18,6 +19,11 @@ class BackupPoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     failure_reason: Mapped[str | None] = mapped_column(Text)
     sync_state: Mapped[str] = mapped_column(String(30), nullable=False, default='LOCAL_ONLY')
     remote_path: Mapped[str | None] = mapped_column(String(500))
+    # Chunk 14a — import metadata
+    imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    imported_by: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey('users.id', ondelete='RESTRICT'))
+    source_filename: Mapped[str | None] = mapped_column(String(300))
+    source_metadata: Mapped[dict | None] = mapped_column(JSONB)
     __table_args__ = (Index('ix_backup_points_state', 'state', 'verified_at'), Index('ix_backup_points_sync_state','branch_id','sync_state','verified_at'),)
 
 class RestoreEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
