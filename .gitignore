@@ -53,3 +53,10 @@ backups/
 backend/backups/
 */backups/
 
+
+# Python build artifacts
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+
