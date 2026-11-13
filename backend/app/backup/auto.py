@@ -100,11 +100,17 @@ def create_verified_backup(
             from app.models.master import Branch as _Branch, User as _User
 
             _shop = db.scalar(_sel(_ShopIdentity).limit(1))
+            _shop_name = (_shop.shop_name if _shop else None) or None
+            # Read fallback: if shop_name NULL, use first branch name (no persist)
+            if not _shop_name or not _shop_name.strip():
+                _first_branch = db.scalar(_sel(_Branch).order_by(_Branch.created_at).limit(1))
+                if _first_branch and _first_branch.name and _first_branch.name.strip():
+                    _shop_name = _first_branch.name.strip()
             _user_count = int(db.scalar(_sel(_func.count()).select_from(_User)) or 0)
             _branch_count = int(db.scalar(_sel(_func.count()).select_from(_Branch)) or 0)
             metadata_for_backup.update({
                 "shop_uuid": str(_shop.shop_uuid) if _shop else None,
-                "shop_name": _shop.shop_name if _shop else None,
+                "shop_name": _shop_name,
                 "schema_version": _shop.schema_version if _shop else None,
                 "user_count": _user_count,
                 "branch_count": _branch_count,

@@ -457,7 +457,8 @@ class MachineIdentityOut(BaseModel):
     machine_name: str | None = None
     server_url: str | None = None
     registered_at: datetime
-    last_seen_at: datetime | None = None
+    last_seen_at: datetime | None
+    server_shop_uuid: str | None = None
 
 
 class MachineIdentityUpdateIn(BaseModel):

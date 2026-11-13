@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { toast } from '../../ui/toast';
+import { discoverServersFromBackend } from '../../services/discovery';
 
 type MachineRole = 'SERVER' | 'CLIENT';
 
@@ -10,6 +11,7 @@ interface MachineIdentity {
   server_url: string | null;
   registered_at: string;
   last_seen_at: string | null;
+  server_shop_uuid?: string | null;
 }
 
 type ConnResult = { ok: boolean; message: string; shopName?: string };
@@ -66,6 +68,9 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
   const [reconnectJoining, setReconnectJoining] = useState(false);
   const [reconnectConn, setReconnectConn] = useState<ConnResult | null>(null);
   const [reconnectSubmitted, setReconnectSubmitted] = useState(false);
+
+  // Chunk 14c — Rediscover Server (CLIENT only)
+  const [rediscovering, setRediscovering] = useState(false);
 
   async function load() {
     try {
@@ -286,13 +291,50 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  async function rediscover() {
+    if (rediscovering) return;
+    setRediscovering(true);
+    try {
+      const servers = await discoverServersFromBackend(10000);
+      if (servers.length === 0) {
+        toast.error('No POS server found on the LAN. Check that the server laptop is ON and on the same network.');
+        return;
+      }
+      const currentUuid = identity?.server_shop_uuid || null;
+      const matches = currentUuid ? servers.filter(s => s.shop_uuid === currentUuid) : servers;
+      if (matches.length === 0) {
+        toast.error('Discovered server(s), but none match this shop. Manual reconnect required.');
+        return;
+      }
+      const target = matches[0];
+      const targetUrl = `http://${target.ip}:${target.port}`;
+      if (targetUrl === identity?.server_url) {
+        toast.success('Already connected to the correct server.');
+        return;
+      }
+      // Pre-fill reconnect modal with discovered URL
+      setReconnectUrl(targetUrl);
+      setReconnectUser('');
+      setReconnectPwd('');
+      setReconnectConn(null);
+      setReconnectTouched({});
+      setReconnectSubmitted(false);
+      setShowReconnectModal(true);
+      toast.info(`Found server at ${target.ip}:${target.port}. Enter admin credentials to reconnect.`);
+    } catch (e) {
+      toast.error((e as Error).message || 'Discovery failed');
+    } finally {
+      setRediscovering(false);
+    }
+  }
+
   async function submitReconnect() {
     setReconnectSubmitted(true);
     setReconnectTouched({ url: true, username: true, password: true });
     if (!canReconnectJoin) { toast.error('Please fix the highlighted fields and test connection'); return; }
     try {
       setReconnectJoining(true);
-      await api('/machine/join', {
+      const joinResult = await api<{ success: boolean; shop_identity_match?: boolean; warning?: string | null }>('/machine/join', {
         method: 'POST',
         body: JSON.stringify({
           server_url: reconnectUrl.trim(),
@@ -301,6 +343,9 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
           machine_name: identity?.machine_name || null,
         }),
       });
+      if (joinResult.warning) {
+        toast.info(joinResult.warning);
+      }
       toast.success('Reconnected. Reloading…');
       window.setTimeout(() => window.location.reload(), 1200);
     } catch (e) {
@@ -382,7 +427,12 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
               <button type="button" className="primary" onClick={() => void saveName()} disabled={!canSaveName}>{savingName ? 'Saving…' : 'Save Machine Name'}</button>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {!isServer && (
-                  <button type="button" className="btn-secondary" onClick={openReconnectModal}>Reconnect to Server…</button>
+                  <>
+                    <button type="button" className="btn-secondary" onClick={() => void rediscover()} disabled={rediscovering || reconnectJoining}>
+                      {rediscovering ? '🔍 Searching…' : '🔍 Rediscover Server'}
+                    </button>
+                    <button type="button" className="btn-secondary" onClick={openReconnectModal}>Reconnect to Server…</button>
+                  </>
                 )}
                 <button type="button" className="btn-secondary" onClick={openRoleModal} style={{ color: '#dc2626', borderColor: 'rgba(220, 38, 38, 0.3)' }}>Change Role…</button>
               </div>

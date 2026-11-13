@@ -12,7 +12,7 @@ from app.core.config import validate_production_settings
 from app.backup.auto import run_pending_sync_once
 from app.core.mdns import start_mdns_advertisement, stop_mdns_advertisement
 from app.db.session import get_engine
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 validate_production_settings()
 
@@ -24,24 +24,45 @@ async def _pending_backup_sync_loop() -> None:
         await asyncio.to_thread(run_pending_sync_once)
 
 
+def _should_advertise_mdns() -> bool:
+    """Only SERVER machines broadcast mDNS.
+    CLIENT machines must not create phantom server entries on the LAN."""
+    try:
+        from app.db.session import get_session_factory
+        from app.models.machine_identity import MachineIdentity
+        db = get_session_factory()()
+        try:
+            machine = db.scalar(select(MachineIdentity).limit(1))
+            if machine is None:
+                return True  # no identity row yet (fresh install): default SERVER
+            return machine.machine_role == 'SERVER'
+        finally:
+            db.close()
+    except Exception:
+        return True  # DB unavailable: default to advertise (defensive)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # zeroconf's synchronous register/unregister API must NOT run on the event-loop thread:
-    # it raises EventLoopBlocked after a long timeout, so LAN discovery silently never worked
-    # and startup stalled ~25s. Run it in a worker thread, in the background, so the API is
-    # reachable immediately.
-    mdns_task = asyncio.create_task(asyncio.to_thread(start_mdns_advertisement))
+    # Only SERVER machines advertise. CLIENT must not broadcast phantom
+    # server entries that confuse discovery on the LAN.
+    mdns_task = (
+        asyncio.create_task(asyncio.to_thread(start_mdns_advertisement))
+        if _should_advertise_mdns()
+        else None
+    )
     sync_task = asyncio.create_task(_pending_backup_sync_loop()) if settings.google_drive_rclone_remote else None
     try:
         yield
     finally:
         if sync_task is not None:
             sync_task.cancel()
-        try:
-            await mdns_task
-        except Exception:  # pragma: no cover - start_mdns_advertisement already logs failures
-            pass
-        await asyncio.to_thread(stop_mdns_advertisement)
+        if mdns_task is not None:
+            try:
+                await mdns_task
+            except Exception:
+                pass
+            await asyncio.to_thread(stop_mdns_advertisement)
 
 
 app = FastAPI(
@@ -77,8 +98,22 @@ app.include_router(discovery_router)
 # The web/desktop client probes `${API base}/health` (i.e. /api/v1/health); /health stays for scripts.
 @app.get("/api/v1/health", tags=["system"], include_in_schema=False)
 @app.get("/health", tags=["system"])
-def health() -> dict[str, str]:
-    return {"status": "ok", "service": settings.app_name, "version": app.version}
+def health() -> dict:
+    result: dict = {"status": "ok", "service": settings.app_name, "version": app.version}
+    try:
+        from app.models.shop_identity import ShopIdentity
+        from app.db.session import get_session_factory
+        db = get_session_factory()()
+        try:
+            shop = db.scalar(select(ShopIdentity).limit(1))
+            if shop:
+                result["shop_uuid"] = str(shop.shop_uuid)
+                result["shop_name"] = shop.shop_name
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return result
 
 @app.get("/health/readiness", tags=["system"])
 def readiness() -> dict[str, str]:

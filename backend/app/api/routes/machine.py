@@ -145,6 +145,8 @@ class MachineJoinOut(BaseModel):
     machine_role: str
     server_url: str
     shop_uuid: str
+    shop_identity_match: bool = True
+    warning: str | None = None
 
 
 @router.post('/verify-admin', response_model=MachineVerifyAdminOut)
@@ -258,6 +260,18 @@ def machine_join(
     if shop is not None:
         shop.shop_name = '(client — see server)'
 
+    # Chunk 14c — detect shop identity mismatch
+    previous_server_shop_uuid = before.get('server_shop_uuid')
+    shop_identity_match = True
+    warning_message = None
+    if previous_server_shop_uuid and previous_server_shop_uuid != server_shop_uuid:
+        shop_identity_match = False
+        warning_message = (
+            f'This laptop was previously connected to a different shop '
+            f'(UUID {previous_server_shop_uuid[:8]}…). Now joining {server_shop_uuid[:8]}…. '
+            f'Local client config has been switched.'
+        )
+
     db.add(
         AuditLog(
             branch_id=None,
@@ -286,7 +300,94 @@ def machine_join(
         machine_role='CLIENT',
         server_url=payload.server_url,
         shop_uuid=server_shop_uuid,
+        shop_identity_match=shop_identity_match,
+        warning=warning_message,
     )
+
+
+# ============ Chunk 14c — LAN discovery (backend-side scan) ============
+
+@router.post('/discover-servers')
+def machine_discover_servers():
+    """Scan the LAN via mDNS for Lovely Tech POS servers.
+
+    Public endpoint (used during CLIENT setup). Returns discovered servers
+    with their LAN IP + shop identity so the frontend can match by shop_uuid.
+    """
+    import socket
+    import time as _time
+    from zeroconf import ServiceBrowser, Zeroconf
+
+    results: list[dict] = []
+
+    class _Listener:
+        def add_service(self, zc, type_, name):
+            try:
+                info = zc.get_service_info(type_, name)
+                if not info:
+                    return
+                ips: list[str] = []
+                for addr in (info.addresses or []):
+                    try:
+                        ips.append(socket.inet_ntoa(addr))
+                    except Exception:
+                        continue
+                if not ips:
+                    return
+                props: dict[str, str] = {}
+                for k, v in (info.properties or {}).items():
+                    kk = k.decode('utf-8') if isinstance(k, bytes) else str(k)
+                    vv = v.decode('utf-8') if isinstance(v, bytes) else (str(v) if v is not None else '')
+                    props[kk] = vv
+                for ip in ips:
+                    results.append({
+                        'name': name,
+                        'ip': ip,
+                        'port': info.port or 8000,
+                        'shop_uuid': props.get('shop_uuid'),
+                        'shop_name': props.get('shop_name'),
+                        'version': props.get('app_version'),
+                        'instance_id': props.get('instance_id'),
+                    })
+            except Exception:
+                pass
+
+        def update_service(self, *args, **kwargs):
+            pass
+
+        def remove_service(self, *args, **kwargs):
+            pass
+
+    zc = None
+    try:
+        zc = Zeroconf()
+        browser = ServiceBrowser(zc, "_lovely-tech-pos._tcp.local.", _Listener())
+        _time.sleep(3.0)
+        browser.cancel()
+    except Exception as exc:
+        if zc is not None:
+            try:
+                zc.close()
+            except Exception:
+                pass
+        raise HTTPException(503, f'Discovery failed: {type(exc).__name__}: {exc}')
+    finally:
+        if zc is not None:
+            try:
+                zc.close()
+            except Exception:
+                pass
+
+    seen: set = set()
+    unique: list[dict] = []
+    for r in results:
+        key = (r['ip'], r['port'])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(r)
+
+    return {'servers': unique}
 
 
 # ============ Existing endpoints (Chunk 12a) ============
@@ -303,6 +404,7 @@ def get_machine_identity(db: Session = Depends(db_session)):
         server_url=machine.server_url,
         registered_at=machine.registered_at,
         last_seen_at=machine.last_seen_at,
+        server_shop_uuid=machine.server_shop_uuid,
     )
 
 
@@ -364,4 +466,5 @@ def update_machine_identity(
         server_url=machine.server_url,
         registered_at=machine.registered_at,
         last_seen_at=machine.last_seen_at,
+        server_shop_uuid=machine.server_shop_uuid,
     )

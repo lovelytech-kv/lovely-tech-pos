@@ -274,3 +274,41 @@ export async function verifyManualServer(input: string): Promise<ResolvedServer>
 
   return { baseUrl, identity: info };
 }
+// ============ Chunk 14c — Backend HTTP discovery ============
+
+export interface DiscoveredServerFromBackend {
+  name: string;
+  ip: string;
+  port: number;
+  shop_uuid: string | null;
+  shop_name: string | null;
+  version: string | null;
+  instance_id: string | null;
+}
+
+/**
+ * Scan the LAN via the backend Python zeroconf service.
+ * Works in browser dev mode (no Tauri required).
+ */
+export async function discoverServersFromBackend(timeoutMs = 10000): Promise<DiscoveredServerFromBackend[]> {
+  const { api } = await import('../api/client');
+  const result = await api<{ servers: DiscoveredServerFromBackend[] }>('/machine/discover-servers', {
+    method: 'POST',
+    timeoutMs,
+  });
+  return result.servers || [];
+}
+
+/**
+ * Discover servers, filter to those matching the local shop's UUID.
+ * Returns the first match, or null if none found.
+ */
+export async function findMatchingServer(
+  localShopUuid: string | null,
+  timeoutMs = 10000,
+): Promise<DiscoveredServerFromBackend | null> {
+  const servers = await discoverServersFromBackend(timeoutMs);
+  if (servers.length === 0) return null;
+  if (!localShopUuid) return servers[0];  // no filter available
+  return servers.find(s => s.shop_uuid === localShopUuid) || null;
+}

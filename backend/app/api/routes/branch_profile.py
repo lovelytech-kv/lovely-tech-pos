@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission
 from app.models.master import Branch, User
 from app.models.security import AuditLog
+from app.models.shop_identity import ShopIdentity
 from app.schemas.api import BranchProfileOut, BranchProfileUpdateIn, BranchPublicOut
 
 router = APIRouter(prefix='/branch', tags=['branch'])
@@ -123,6 +124,12 @@ def update_branch_profile(
     branch.email = (payload.email or '').strip() or None
     branch.invoice_prefix = (payload.invoice_prefix or 'INV').strip() or 'INV'
 
+    # Chunk 14c polish — write-layer sync: keep shop_identity.shop_name in lockstep
+    # so /health, /setup/status, mDNS TXT, and backup metadata see the same name.
+    # Same transaction; rolls back together with the branch update if commit fails.
+    shop_identity = db.scalar(select(ShopIdentity).limit(1).with_for_update())
+    if shop_identity is not None and shop_identity.shop_name != name:
+        shop_identity.shop_name = name
     # Update light logo
     if light_b64_sent:
         if payload.logo_base64_light == '':
