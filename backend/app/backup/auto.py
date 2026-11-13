@@ -92,8 +92,28 @@ def create_verified_backup(
     db.commit()  # persist the CREATING row so a failure can always be recorded against it
     point_id = point.id
     try:
+        # Chunk 14b — capture shop metadata for /setup/inspect-backup
+        metadata_for_backup = {"backup_point_id": str(point.id)}
+        try:
+            from sqlalchemy import func as _func, select as _sel
+            from app.models.shop_identity import ShopIdentity as _ShopIdentity
+            from app.models.master import Branch as _Branch, User as _User
+
+            _shop = db.scalar(_sel(_ShopIdentity).limit(1))
+            _user_count = int(db.scalar(_sel(_func.count()).select_from(_User)) or 0)
+            _branch_count = int(db.scalar(_sel(_func.count()).select_from(_Branch)) or 0)
+            metadata_for_backup.update({
+                "shop_uuid": str(_shop.shop_uuid) if _shop else None,
+                "shop_name": _shop.shop_name if _shop else None,
+                "schema_version": _shop.schema_version if _shop else None,
+                "user_count": _user_count,
+                "branch_count": _branch_count,
+            })
+        except Exception:
+            pass  # fall back to minimal metadata if shop tables unavailable
+
         blob = dump_fn(pg_dump=cfg.pg_dump_bin, database_url=cfg.database_url, destination=dest,
-                       secret=cfg.secret_key, metadata={"backup_point_id": str(point.id)})
+                       secret=cfg.secret_key, metadata=metadata_for_backup)
         meta, _ = decrypt_backup(Path(blob).read_bytes(), secret=cfg.secret_key)
         point.state = "VERIFIED"
         point.sha256 = meta["sha256"]

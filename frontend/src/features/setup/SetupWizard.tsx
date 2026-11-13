@@ -2,16 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { toast } from '../../ui/toast';
 import { RecoveryCodesDisplay } from '../users/RecoveryCodesDisplay';
+import { RestoreFlow } from './RestoreFlow';
 
 type Props = { onComplete: () => void };
 
 type MachineRole = 'SERVER' | 'CLIENT';
 type JoinMode = 'SERVER_READY' | 'CLIENT_REQUIRES_AUTH' | 'SERVER_REQUIRES_SETUP';
-type Step = -1 | 0 | 1 | 2 | 3 | 4 | 5;
+type Step = -1 | 0 | 0.5 | 1 | 2 | 3 | 4 | 5;
 type ConnResult = { ok: boolean; message: string; shopName?: string };
 
-const STEP_LABELS: Record<0 | 1 | 2 | 3 | 4 | 5, string> = {
+const STEP_LABELS: Record<0 | 0.5 | 1 | 2 | 3 | 4 | 5, string> = {
   0: 'Role',
+  0.5: 'Mode',
   1: 'Welcome',
   2: 'Shop',
   3: 'Admin',
@@ -69,6 +71,7 @@ export function SetupWizard({ onComplete }: Props) {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [showRestore, setShowRestore] = useState(false);
 
   // Load join_mode from backend
   useEffect(() => {
@@ -247,16 +250,16 @@ export function SetupWizard({ onComplete }: Props) {
         </div>
       );
     }
-    const steps: (0 | 1 | 2 | 3 | 4 | 5)[] = [0, 1, 2, 3, 4, 5];
+    const steps: (0 | 0.5 | 1 | 2 | 3 | 4 | 5)[] = [0, 0.5, 1, 2, 3, 4, 5];
     return (
       <div className="setup-stepper" style={{ gridTemplateColumns: `repeat(${steps.length}, 1fr)` }}>
         {steps.map((n) => {
           const isActive = step === n;
-          const isComplete = step > n;
+          const isComplete = typeof step === 'number' && step > n;
           const cls = `step${isActive ? ' active' : ''}${isComplete ? ' complete' : ''}`;
           return (
             <div key={n} className={cls}>
-              <div className="step-circle">{isComplete ? '✓' : n === 0 ? '⚙' : n}</div>
+              <div className="step-circle">{isComplete ? '✓' : (n === 0 || n === 0.5) ? '⚙' : n}</div>
               <span className="step-label">{STEP_LABELS[n]}</span>
             </div>
           );
@@ -428,11 +431,54 @@ export function SetupWizard({ onComplete }: Props) {
               </div>
             </div>
             <div className="setup-actions">
-              <button className="primary" onClick={() => setStep(machineRole === 'SERVER' ? 1 : -1)}>
+              <button className="primary" onClick={() => setStep(machineRole === 'SERVER' ? 0.5 : -1)}>
                 Continue →
               </button>
             </div>
           </>
+        )}
+
+        {step === 0.5 && !showRestore && (
+          <>
+            <div className="setup-step-content">
+              <h2 style={{ fontSize: '1.2rem', margin: '0 0 0.5rem' }}>What would you like to do?</h2>
+              <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>Choose how to set up this server machine.</p>
+
+              <div className="setup-choice-cards">
+                <button type="button" className="setup-choice-card" onClick={() => setStep(1)}>
+                  <div className="choice-icon">🆕</div>
+                  <div>
+                    <b>Start a new shop</b>
+                    <p className="muted">Create a fresh setup with admin account and shop details.</p>
+                  </div>
+                </button>
+                <button type="button" className="setup-choice-card" onClick={() => setShowRestore(true)}>
+                  <div className="choice-icon">♻</div>
+                  <div>
+                    <b>Restore from backup</b>
+                    <p className="muted">Restore an existing shop from a .ltbak backup file.</p>
+                  </div>
+                </button>
+                <button type="button" className="setup-choice-card" onClick={() => setStep(-1)}>
+                  <div className="choice-icon">🔗</div>
+                  <div>
+                    <b>Connect to existing server</b>
+                    <p className="muted">This laptop will connect to a POS server already on the network.</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+            <div className="setup-actions">
+              <button className="btn-secondary" onClick={() => setStep(0)}>← Back</button>
+            </div>
+          </>
+        )}
+
+        {step === 0.5 && showRestore && (
+          <RestoreFlow
+            onComplete={onComplete}
+            onCancel={() => setShowRestore(false)}
+          />
         )}
 
         {step === 1 && (
@@ -446,7 +492,7 @@ export function SetupWizard({ onComplete }: Props) {
               </p>
             </div>
             <div className="setup-actions" style={{ justifyContent: 'center' }}>
-              <button className="btn-secondary" onClick={() => setStep(0)}>← Back</button>
+              <button className="btn-secondary" onClick={() => setStep(0.5)}>← Back</button>
               <button className="primary" onClick={() => setStep(2)}>Get Started →</button>
             </div>
           </>

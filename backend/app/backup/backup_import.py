@@ -58,6 +58,10 @@ def inspect_metadata(data: bytes, secret: str) -> dict:
             "source": meta.get("source"),
             "backup_point_id": meta.get("backup_point_id"),
             "shop_uuid": meta.get("shop_uuid"),
+            "shop_name": meta.get("shop_name"),
+            "schema_version": meta.get("schema_version"),
+            "user_count": meta.get("user_count"),
+            "branch_count": meta.get("branch_count"),
         }
     return {
         "format": "SQL",

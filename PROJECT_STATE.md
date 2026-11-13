@@ -1,7 +1,7 @@
 # LOVELY TECH POS — MASTER PROJECT STATE
-**Last Updated:** 2026-11-11 (after Chunk 14a backend)
+**Last Updated:** 2026-11-13 (after Chunk 14b frontend)
 **Version:** Backend 0.5.0 | Migrations: 0043_backup_import (head)
-**Status:** Phase 2 in progress (14a of ~26 chunks done)
+**Status:** Phase 2 in progress (14a+14b of ~26 chunks done)
 
 ---
 
@@ -86,6 +86,7 @@ curl.exe http://127.0.0.1:8000/api/v1/health
 12b	Shop Identity + Machine Role (frontend)	✅	MachineSettings, SetupWizard Step 0
 13	Client Join Authorization	✅	Rate-limited, no local admin
 | 14a | Pre-Login Restore + Backup Import (backend) | ✅ | /setup/restore-from-file + /backup/import-file + migration 0043 |
+| 14b | Frontend Restore Flow (RestoreFlow + Step 0.5) | ✅ | E2E verified on test10 — inspect → restore → login → dashboard |
 5. REMAINING ROADMAP (14-26)
 #	Chunk	Scope	Time	Priority
 14	Disaster Recovery + mDNS	Pre-login restore, backup import, mDNS discovery	3-4 days	🔴 CRITICAL
@@ -324,18 +325,20 @@ Confirm every test manually — don't trust "assumed OK"
 
 ## 17. NEXT IMMEDIATE ACTION
 
-**Chunk 14a backend COMPLETE (2026-11-11)** — pre-login restore + backup import verified on test9.
+**Chunk 14a+14b COMPLETE (2026-11-13)** — pre-login restore + frontend UI, E2E verified on test10:
+- Wizard Step 0.5 → RestoreFlow R1-R4
+- File upload → inspect-backup → metadata preview → confirm → restore
+- Login with production creds on test10 → dashboard works
+- shop_uuid aad14246-... preserved
+- Production DB untouched, SERVER_READY, 352 users
 
-**Chunk 14a frontend** (next session):
-- `RestoreFlow.tsx` component (R1-R4 steps)
-- `SetupWizard.tsx` Step 0.5 (Start new / Restore / Connect)
-- `POSHome.tsx` BackupTab — "Import .ltbak File" button
-- `styles.css` — restore flow styles
-
-**Chunk 14b** (after 14a frontend):
-- mDNS auto-discovery
+**Chunk 14c** (next):
+- mDNS auto-discovery (server advertises, clients find)
 - Client auto-reconnect after server IP change
 - Google Drive import (cloud backup)
+
+**Pending separate task:**
+- Branch cleanup — 430 branches (13 users-attached, 417 orphan) — see Section 15
 
 Prerequisites:
 

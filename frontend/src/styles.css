@@ -1786,3 +1786,204 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   background: rgba(220, 38, 38, 0.18);
   color: #fca5a5;
 }
+/* ============ CHUNK 14b — RESTORE FLOW ============ */
+.restore-flow {
+  display: grid;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+.restore-step {
+  display: grid;
+  gap: 0.85rem;
+}
+.restore-source-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+@media (min-width: 560px) {
+  .restore-source-cards { grid-template-columns: 1fr 1fr; }
+}
+.restore-source-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+}
+.restore-source-card:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.04);
+}
+.restore-source-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.restore-source-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.restore-source-card b {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 0.15rem;
+}
+.restore-file-drop {
+  display: grid;
+  place-items: center;
+  gap: 0.4rem;
+  padding: 2rem 1rem;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  text-align: center;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.restore-file-drop:hover:not(.has-file) {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.04);
+}
+.restore-file-drop.has-file {
+  border-style: solid;
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.06);
+}
+.restore-file-info {
+  display: grid;
+  gap: 0.25rem;
+  text-align: center;
+}
+.restore-file-info b {
+  font-size: 0.9rem;
+  color: var(--text);
+  word-break: break-all;
+}
+.restore-file-info span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.restore-metadata {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.6rem;
+  padding: 0.85rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.restore-metadata > div {
+  display: grid;
+  gap: 0.15rem;
+}
+.restore-metadata small {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+.restore-metadata b {
+  font-size: 0.85rem;
+  color: var(--text);
+  word-break: break-word;
+}
+.restore-warning {
+  padding: 0.85rem 1rem;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  border-radius: 10px;
+  color: #b91c1c;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.restore-warning b {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.2rem;
+}
+[data-theme="dark"] .restore-warning {
+  background: rgba(220, 38, 38, 0.18);
+  border-color: rgba(220, 38, 38, 0.5);
+  color: #fca5a5;
+}
+.restore-confirm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+.restore-confirm-check input[type="checkbox"] {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+.restore-success {
+  text-align: center;
+  padding: 1rem 0;
+}
+.restore-success h2 {
+  color: var(--text);
+}
+.setup-choice-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+.setup-choice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+.setup-choice-card:hover {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.05);
+}
+.setup-choice-card .choice-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 0.15rem;
+}
+.setup-choice-card b {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 0.2rem;
+}
+.setup-choice-card p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--muted);
+}

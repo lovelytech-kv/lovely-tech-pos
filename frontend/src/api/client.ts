@@ -141,17 +141,21 @@ export type LoginResponse = {
   username: string; display_name: string; role: string; branch_id: string; must_change_password: boolean;
 };
 
-export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+export type ApiOptions = RequestInit & { timeoutMs?: number };
+
+export async function api<T = any>(path: string, options: ApiOptions = {}): Promise<T> {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, ...fetchOptions } = options;
   const baseUrl = await resolveBaseUrlForPath(path);
   assertServerConfigured(baseUrl);
   const token = localStorage.getItem('ltpos_token');
-  const headers = new Headers(options.headers);
-  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const headers = new Headers(fetchOptions.headers);
+  const isFormData = fetchOptions.body instanceof FormData;
+  if (fetchOptions.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  const controller = options.signal ? null : new AbortController();
-  const timer = controller ? window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : null;
+  const controller = fetchOptions.signal ? null : new AbortController();
+  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    const res = await fetch(`${baseUrl}${path}`, {...options, headers, signal: options.signal ?? controller?.signal});
+    const res = await fetch(`${baseUrl}${path}`, {...fetchOptions, headers, signal: fetchOptions.signal ?? controller?.signal});
     const text = await res.text();
     let body: any = {};
     if (text) {

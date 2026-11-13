@@ -113,6 +113,67 @@ def setup_status(db: Session = Depends(db_session)):
         'available_local_backups': available_local_backups,
     }
 
+@router.post('/inspect-backup')
+async def inspect_backup(
+    file: UploadFile = File(...),
+    db: Session = Depends(db_session),
+):
+    """Inspect a .ltbak file (no restore). Returns metadata for UI preview.
+
+    Public — used during pre-login restore flow. Old backups (pre-Chunk 14b)
+    may lack shop_uuid / shop_name / user_count in metadata.
+    """
+    from app.backup.service import BackupError
+    from app.backup.backup_import import read_and_hash, inspect_metadata, detect_format
+    from app.core.config import settings
+
+    try:
+        data, sha256 = read_and_hash(file)
+        fmt = detect_format(data)
+        if fmt != 'LTPOS-BACKUP-V1':
+            if data.startswith(b'PGDMP'):
+                raise HTTPException(400, 'Only .ltbak files are supported here. Plain PostgreSQL dumps must be imported via /backup/import-file.')
+            raise HTTPException(400, 'Invalid or corrupted backup file. Select a valid .ltbak exported from Lovely Tech POS.')
+        metadata = inspect_metadata(data, secret=settings.secret_key)
+    except BackupError as exc:
+        raise HTTPException(400, f'Invalid backup: {exc}')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f'Inspect failed: {exc}')
+
+    # Best-effort audit log (fresh install may have no branch/user)
+    try:
+        db.add(AuditLog(
+            action_type='BACKUP_INSPECTED',
+            entity_type='SYSTEM',
+            timestamp=datetime.now(timezone.utc),
+            after_json={
+                'filename': file.filename,
+                'sha256': sha256,
+                'size': len(data),
+                'shop_uuid': metadata.get('shop_uuid'),
+            },
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return {
+        'valid': True,
+        'format': metadata.get('format'),
+        'backup_date': metadata.get('created_at'),
+        'sha256': sha256,
+        'size_bytes': len(data),
+        'shop_uuid': metadata.get('shop_uuid'),
+        'shop_name': metadata.get('shop_name'),
+        'schema_version': metadata.get('schema_version'),
+        'user_count': metadata.get('user_count'),
+        'branch_count': metadata.get('branch_count'),
+        'source': metadata.get('source'),
+        'backup_point_id': metadata.get('backup_point_id'),
+    }
+
 
 @router.post('/restore-from-file')
 async def restore_from_file(
@@ -149,11 +210,11 @@ async def restore_from_file(
     try:
         validate_upload(file)
         data, sha256 = read_and_hash(file)
-        if detect_format(data) != 'LTPOS-BACKUP-V1':
-            raise HTTPException(
-                400,
-                'Only .ltbak files can be restored here. Plain SQL not supported by this endpoint.',
-            )
+        fmt = detect_format(data)
+        if fmt != 'LTPOS-BACKUP-V1':
+            if data.startswith(b'PGDMP'):
+                raise HTTPException(400, 'Plain PostgreSQL dumps are not supported here. Use a .ltbak file exported from Lovely Tech POS.')
+            raise HTTPException(400, 'Invalid or corrupted backup file. Select a valid .ltbak exported from Lovely Tech POS.')
         metadata = inspect_metadata(data, secret=settings.secret_key)
         dest = save_import_file(data, file.filename or 'backup.ltbak', backup_root=settings.backup_root)
     except BackupError as exc:
