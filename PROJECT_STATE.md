@@ -1,8 +1,7 @@
 # LOVELY TECH POS — MASTER PROJECT STATE
-**Last Updated:** 2026-11-13 (after Chunk 14b frontend)
-**Version:** Backend 0.5.0 | Migrations: 0043_backup_import (head)
-**Status:** Phase 2 in progress (14a+14b of ~26 chunks done)
-
+**Last Updated:** 2026-11-13 (after Chunk 14c-1 mDNS + shop name fix)
+**Version:** Backend 0.5.0 | Migrations: 0044_shop_name_backfill (head)
+**Status:** Phase 2 in progress (14a+14b+14c-1 of ~26 chunks done)
 ---
 
 ## 1. PROJECT OVERVIEW
@@ -87,6 +86,7 @@ curl.exe http://127.0.0.1:8000/api/v1/health
 13	Client Join Authorization	✅	Rate-limited, no local admin
 | 14a | Pre-Login Restore + Backup Import (backend) | ✅ | /setup/restore-from-file + /backup/import-file + migration 0043 |
 | 14b | Frontend Restore Flow (RestoreFlow + Step 0.5) | ✅ | E2E verified on test10 — inspect → restore → login → dashboard |
+| 14c-1 | mDNS Auto-Discovery + Reconnect + Shop Name Fix | ✅ | 3 root causes fixed: mDNS ServiceInfo addresses, shop_name write-path drift, CLIENT advertise collision. Migration 0044. T1-T8 + R1-R4 pass. 429 branches deactivated |
 5. REMAINING ROADMAP (14-26)
 #	Chunk	Scope	Time	Priority
 14	Disaster Recovery + mDNS	Pre-login restore, backup import, mDNS discovery	3-4 days	🔴 CRITICAL
@@ -161,7 +161,7 @@ These are non-negotiable. Worker bypass = chunk rejected.
 8. CRITICAL FILE MAP
 Backend entry: backend/app/main.py
 Backend router: backend/app/api/router.py
-Migrations: backend/alembic/versions/ (0001 → 0042)
+Migrations: backend/alembic/versions/ (0001 → 0044)
 Models: backend/app/models/master.py, shop_identity.py, machine_identity.py
 Auth: backend/app/api/routes/auth.py
 Setup: backend/app/api/routes/setup.py
@@ -298,7 +298,9 @@ Admin reauth via query string — some endpoints use admin_password in URL (Phas
 
 GATE 11 (theme) — Chunk 13 CLIENT form not explicitly tested in dark mode
 
-- Test branches in DB — **430 branches** (Chunk 14a verify revealed 10x more than expected). Needs dedicated cleanup task. shop_identity.shop_name also NULL in production (cosmetic — frontend fallback works)
+- ~~Test branches in DB — 430 branches~~ **FIXED in Chunk 14c-1**: 429 test branches deactivated (`is_active=false`), MAIN active. CSV snapshot: `C:\ProgramData\LovelyTechPOS\backups\branches-before-cleanup-*.csv`
+- ~~shop_identity.shop_name NULL~~ **FIXED in Chunk 14c-1**: write-layer sync (`branch_profile.py`) + migration 0044 backfill + read fallback (`mdns.py`, `auto.py`)
+- mDNS does not auto-refresh on shop name change — requires backend restart (deferred to Chunk 14c-2 / 15)
 
 rclone optional — cloud backup requires rclone installed (bundle in Chunk 24)
 
@@ -325,43 +327,33 @@ Confirm every test manually — don't trust "assumed OK"
 
 ## 17. NEXT IMMEDIATE ACTION
 
-**Chunk 14a+14b COMPLETE (2026-11-13)** — pre-login restore + frontend UI, E2E verified on test10:
-- Wizard Step 0.5 → RestoreFlow R1-R4
-- File upload → inspect-backup → metadata preview → confirm → restore
-- Login with production creds on test10 → dashboard works
-- shop_uuid aad14246-... preserved
-- Production DB untouched, SERVER_READY, 352 users
+**Chunk 14c-1 COMPLETE (2026-11-13)** — mDNS + shop name fix, E2E verified:
+- 3 root causes: mDNS ServiceInfo missing addresses, shop_name write-path drift, CLIENT advertise collision
+- 7 files fixed: mdns.py, main.py, machine.py, schemas/api.py, branch_profile.py, auto.py, migration 0044
+- Frontend: discovery.ts (backend discovery), MachineSettings (Rediscover button)
+- Tests: T1-T8 + R1-R4 pass
+- Branch cleanup: 429 deactivated, 1 active (MAIN)
+- Commit: 892b254 (pushed to GitHub)
 
-**Chunk 14c** (next):
-- mDNS auto-discovery (server advertises, clients find)
-- Client auto-reconnect after server IP change
-- Google Drive import (cloud backup)
+**Chunk 14c-2** (next):
+- mDNS auto-refresh on shop name change (no backend restart required)
+- Google Drive import (cloud restore via rclone)
+- Google Drive sync queue visible in UI
 
-**Pending separate task:**
-- Branch cleanup — 430 branches (13 users-attached, 417 orphan) — see Section 15
+**Chunk 15** (after 14c-2):
+- Backup integrity validation (corrupted backup detection)
+- Point-in-time recovery (PITR)
+- Rate limits on /setup/* endpoints
 
-Prerequisites:
 
-Chunk 13 verified (theme + CLIENT flow test)
+## 18. VERSION HISTORY
 
-Test DB ready: lovely_tech_test6
-
-rclone available (or graceful fallback)
-
-When ready: Paste this file + "Send Chunk 14 prompt" to manager chat.
-
-18. VERSION HISTORY
-v0.1.0 — Initial backend (Chunks 1-3)
-
-v0.2.0 — UI foundation (Chunks 4-6)
-
-v0.3.0 — Bug sweep + redesign (Chunks 7a-7c)
-
-v0.4.0 — Full feature set (Chunks 8-11)
-
-v0.5.0 (target) — Phase 2: Disaster recovery (Chunks 12-14) ← CURRENT
-
-v1.0.0 (target) — Production ready (Chunks 24-26)
+- v0.1.0 — Initial backend (Chunks 1-3)
+- v0.2.0 — UI foundation (Chunks 4-6)
+- v0.3.0 — Bug sweep + redesign (Chunks 7a-7c)
+- v0.4.0 — Full feature set (Chunks 8-11)
+- v0.5.0 (target) — Phase 2: Disaster recovery (Chunks 12-14) ← CURRENT
+- v1.0.0 (target) — Production ready (Chunks 24-26)
 
 END OF PROJECT STATE
 Save this file. Update after every chunk. Never lose project context again.
