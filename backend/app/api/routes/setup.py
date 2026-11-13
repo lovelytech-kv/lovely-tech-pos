@@ -73,6 +73,8 @@ def setup_status(db: Session = Depends(db_session)):
             'can_restore_from_file': False,
             'can_restore_from_cloud': False,
             'available_local_backups': 0,
+            'shop_uuid': None,
+            'shop_name': None,
         }
 
     # ─── SERVER mode logic ───
@@ -102,6 +104,17 @@ def setup_status(db: Session = Depends(db_session)):
     except Exception:
         available_local_backups = 0
 
+    # Chunk 14b polish — expose shop identity for wrong-shop detection
+    shop_uuid_val = None
+    shop_name_val = None
+    try:
+        shop_row = db.scalar(select(ShopIdentity).limit(1))
+        if shop_row is not None:
+            shop_uuid_val = str(shop_row.shop_uuid)
+            shop_name_val = shop_row.shop_name
+    except Exception:
+        pass
+
     return {
         'is_initialized': is_initialized,
         'reason': reason,
@@ -111,6 +124,8 @@ def setup_status(db: Session = Depends(db_session)):
         'can_restore_from_file': True,
         'can_restore_from_cloud': False,
         'available_local_backups': available_local_backups,
+        'shop_uuid': shop_uuid_val,
+        'shop_name': shop_name_val,
     }
 
 @router.post('/inspect-backup')

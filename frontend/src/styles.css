@@ -1987,3 +1987,24 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   line-height: 1.4;
   color: var(--muted);
 }
+
+/* Chunk 14b polish — same-shop info banner */
+.restore-info-ok {
+  padding: 0.85rem 1rem;
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid rgba(22, 163, 74, 0.35);
+  border-radius: 10px;
+  color: #16a34a;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.restore-info-ok b {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.2rem;
+}
+[data-theme="dark"] .restore-info-ok {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+}

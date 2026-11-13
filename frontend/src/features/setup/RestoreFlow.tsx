@@ -34,6 +34,13 @@ type RestoreResult = {
   safety_backup?: string;
 };
 
+type CurrentStatus = {
+  is_initialized: boolean;
+  shop_uuid: string | null;
+  shop_name: string | null;
+  user_count: number;
+};
+
 const MAX_FILE_BYTES = 500 * 1024 * 1024;
 const ALLOWED_EXT = '.ltbak';
 
@@ -60,6 +67,8 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
   const [restoring, setRestoring] = useState(false);
   const [metadata, setMetadata] = useState<InspectResult | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState<CurrentStatus | null>(null);
+  const [replaceText, setReplaceText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<RestoreResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -77,6 +86,16 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
   const fileError = validateFile(file);
   const canInspect = !fileError && !inspecting && !restoring;
 
+  // Chunk 14b polish — wrong-shop detection
+  const currentUuid = currentStatus?.shop_uuid || null;
+  const backupUuid = metadata?.shop_uuid || null;
+  const isInitialized = currentStatus?.is_initialized === true;
+  const isDifferentShop = Boolean(isInitialized && currentUuid && backupUuid && currentUuid !== backupUuid);
+  const isSameShop = Boolean(isInitialized && currentUuid && backupUuid && currentUuid === backupUuid);
+  const isUnknownShop = Boolean(isInitialized && (!currentUuid || !backupUuid));
+  const requiresTypeReplace = isDifferentShop;
+  const canConfirmRestore = confirmed && (!requiresTypeReplace || replaceText === 'REPLACE');
+
   async function handleInspect() {
     if (!canInspect || !file) return;
     setError(null);
@@ -90,6 +109,12 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
         timeoutMs: 60000,
       });
       setMetadata(result);
+      try {
+        const status = await api<CurrentStatus>('/setup/status');
+        setCurrentStatus(status);
+      } catch {
+        setCurrentStatus(null);
+      }
       setStep('R3');
     } catch (e) {
       setError((e as Error).message || 'Failed to inspect backup');
@@ -99,7 +124,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
   }
 
   async function handleRestore() {
-    if (!file || !confirmed || restoring) return;
+    if (!file || !canConfirmRestore || restoring) return;
     setError(null);
     setRestoring(true);
     try {
@@ -270,6 +295,27 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
             <div><small>Shop UUID</small><b title={metadata?.shop_uuid || ''}>{metadata?.shop_uuid ? metadata.shop_uuid.slice(0, 8) + '…' : 'Not available'}</b></div>
           </div>
 
+          {isSameShop && (
+            <div className="restore-info-ok">
+              <b>✓ Same shop detected</b>
+              <p style={{ margin: '0.3rem 0 0' }}>This backup is from the same shop{currentStatus?.shop_name ? ` (${currentStatus.shop_name})` : ''}. Safe to restore.</p>
+            </div>
+          )}
+
+          {isDifferentShop && (
+            <div className="restore-warning" style={{ borderWidth: 3 }}>
+              <b>⚠ DIFFERENT SHOP DETECTED</b>
+              <p style={{ margin: '0.3rem 0 0' }}>This backup is from a DIFFERENT shop{metadata?.shop_name ? ` (${metadata.shop_name})` : ''}. The current shop's data will be completely replaced with another shop's data. This is IRREVERSIBLE.</p>
+            </div>
+          )}
+
+          {isUnknownShop && (
+            <div className="restore-warning" style={{ background: 'rgba(234, 179, 8, 0.1)', borderColor: 'rgba(234, 179, 8, 0.5)', color: '#a16207' }}>
+              <b>⚠ Cannot verify backup identity</b>
+              <p style={{ margin: '0.3rem 0 0' }}>{!backupUuid ? 'This backup was created before Chunk 14b — no shop UUID in metadata.' : 'Current shop identity not available.'} Proceed with caution.</p>
+            </div>
+          )}
+
           <div className="restore-warning">
             <b>⚠ This will REPLACE the current database</b>
             <p style={{ margin: '0.3rem 0 0' }}>A safety backup is created automatically, but the current data on this machine will be replaced by the backup file.</p>
@@ -285,11 +331,26 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
             <span>I understand this will replace the current database</span>
           </label>
 
+          {requiresTypeReplace && (
+            <div className="setup-form-row">
+              <label>Type <b>REPLACE</b> to confirm (different shop)</label>
+              <input
+                type="text"
+                value={replaceText}
+                onChange={(e) => setReplaceText(e.target.value)}
+                placeholder="Type REPLACE (all caps)"
+                disabled={restoring}
+                autoComplete="off"
+              />
+              <small className="muted" style={{ fontSize: '0.7rem' }}>{replaceText === 'REPLACE' ? '✓ Matches — confirmation enabled' : 'Must type exactly: REPLACE'}</small>
+            </div>
+          )}
+
           {error && <div className="modal-error-banner">{error}</div>}
         </div>
         <div className="setup-actions">
           <button type="button" className="btn-secondary" onClick={handleBackToR2} disabled={restoring}>← Back</button>
-          <button type="button" className="primary danger-button" onClick={handleRestore} disabled={!confirmed || restoring}>
+          <button type="button" className="primary danger-button" onClick={handleRestore} disabled={!canConfirmRestore || restoring}>
             {restoring ? 'Restoring… do not close' : 'Restore Now'}
           </button>
         </div>
