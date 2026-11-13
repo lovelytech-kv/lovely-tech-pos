@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import db_session, require_permission
+from app.core.mdns import _resolve_lan_ip
 from app.models.master import User
 from app.models.machine_identity import MachineIdentity
 from app.models.shop_identity import ShopIdentity
@@ -360,7 +361,15 @@ def machine_discover_servers():
 
     zc = None
     try:
-        zc = Zeroconf()
+        # Chunk 14c-1 followup: bind explicit LAN interface to coexist with Chrome.
+        _lan_ip = _resolve_lan_ip()
+        if _lan_ip:
+            try:
+                zc = Zeroconf(interfaces=[_lan_ip])
+            except Exception:
+                zc = Zeroconf()
+        else:
+            zc = Zeroconf()
         browser = ServiceBrowser(zc, "_lovely-tech-pos._tcp.local.", _Listener())
         _time.sleep(3.0)
         browser.cancel()

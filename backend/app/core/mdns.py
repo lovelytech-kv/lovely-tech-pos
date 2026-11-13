@@ -110,7 +110,19 @@ def start_mdns_advertisement() -> None:
         return
 
     try:
-        _zeroconf = Zeroconf()
+        # Chunk 14c-1 followup: bind only the LAN IP, not the wildcard.
+        # Chrome (and other mDNS apps) grab 0.0.0.0:5353 and intercept
+        # multicast. Explicit interface binding lets Python coexist.
+        try:
+            _zeroconf = Zeroconf(interfaces=[lan_ip])
+            logger.info("Zeroconf bound to explicit interface %s", lan_ip)
+        except Exception as bind_exc:
+            logger.warning(
+                "Zeroconf explicit-interface bind failed (%s: %s); falling back to default",
+                type(bind_exc).__name__, bind_exc,
+            )
+            _zeroconf = Zeroconf()
+
         txt = _build_txt_record()
         _service_info = ServiceInfo(
             _SERVICE_TYPE,
