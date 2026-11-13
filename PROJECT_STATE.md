@@ -300,7 +300,10 @@ GATE 11 (theme) — Chunk 13 CLIENT form not explicitly tested in dark mode
 
 - ~~Test branches in DB — 430 branches~~ **FIXED in Chunk 14c-1**: 429 test branches deactivated (`is_active=false`), MAIN active. CSV snapshot: `C:\ProgramData\LovelyTechPOS\backups\branches-before-cleanup-*.csv`
 - ~~shop_identity.shop_name NULL~~ **FIXED in Chunk 14c-1**: write-layer sync (`branch_profile.py`) + migration 0044 backfill + read fallback (`mdns.py`, `auto.py`)
-- mDNS does not auto-refresh on shop name change — requires backend restart (deferred to Chunk 14c-2 / 15)
+- ~~mDNS does not auto-refresh on shop name change~~ (deferred to Chunk 14c-2)
+- **mDNS Chrome coexistence FIXED (Chunk 14c-1 followup)**: explicit
+  Zeroconf(interfaces=[lan_ip]) binding; external discovery works with
+  Chrome open (24 processes) → Found 1 server with full TXT props
 
 rclone optional — cloud backup requires rclone installed (bundle in Chunk 24)
 
