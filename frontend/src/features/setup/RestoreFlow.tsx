@@ -14,6 +14,7 @@ type InspectResult = {
   format?: string;
   backup_date?: string | null;
   sha256?: string;
+  outer_sha256?: string | null;
   size_bytes?: number;
   shop_uuid?: string | null;
   shop_name?: string | null;
@@ -22,6 +23,8 @@ type InspectResult = {
   branch_count?: number | null;
   source?: string | null;
   backup_point_id?: string | null;
+  legacy?: boolean;
+  needs_ack?: boolean;
 };
 
 type RestoreResult = {
@@ -32,6 +35,7 @@ type RestoreResult = {
   branch_count?: number;
   requires_relogin?: boolean;
   safety_backup?: string;
+  legacy?: boolean;
 };
 
 type CurrentStatus = {
@@ -67,6 +71,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
   const [restoring, setRestoring] = useState(false);
   const [metadata, setMetadata] = useState<InspectResult | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [acknowledgedLegacy, setAcknowledgedLegacy] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<CurrentStatus | null>(null);
   const [replaceText, setReplaceText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +99,11 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
   const isSameShop = Boolean(isInitialized && currentUuid && backupUuid && currentUuid === backupUuid);
   const isUnknownShop = Boolean(isInitialized && (!currentUuid || !backupUuid));
   const requiresTypeReplace = isDifferentShop;
-  const canConfirmRestore = confirmed && (!requiresTypeReplace || replaceText === 'REPLACE');
+  const requiresLegacyAck = Boolean(metadata?.legacy);
+  const canConfirmRestore =
+    confirmed
+    && (!requiresTypeReplace || replaceText === 'REPLACE')
+    && (!requiresLegacyAck || acknowledgedLegacy);
 
   async function handleInspect() {
     if (!canInspect || !file) return;
@@ -132,6 +141,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
       form.append('file', file);
       form.append('confirm_replace', 'true');
       form.append('emergency_key', emergencyKey || '');
+      form.append('acknowledge_legacy', acknowledgedLegacy ? 'true' : 'false');
       const result = await api<RestoreResult>('/setup/restore-from-file', {
         method: 'POST',
         body: form,
@@ -166,6 +176,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
     if (restoring) return;
     setStep('R2');
     setConfirmed(false);
+    setAcknowledgedLegacy(false);
     setError(null);
   }
 
@@ -316,6 +327,22 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
             </div>
           )}
 
+          {metadata?.legacy && (
+            <div
+              className="restore-warning"
+              style={{
+                background: 'rgba(234, 179, 8, 0.1)',
+                borderColor: 'rgba(234, 179, 8, 0.5)',
+                color: '#a16207',
+              }}
+            >
+              <b>⚠ Legacy backup — integrity cannot be verified</b>
+              <p style={{ margin: '0.3rem 0 0' }}>
+                This backup was created before integrity checking (Chunk 15a). SHA-256 cannot be verified. Proceed only if you trust this file.
+              </p>
+            </div>
+          )}
+
           <div className="restore-warning">
             <b>⚠ This will REPLACE the current database</b>
             <p style={{ margin: '0.3rem 0 0' }}>A safety backup is created automatically, but the current data on this machine will be replaced by the backup file.</p>
@@ -330,6 +357,24 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
             />
             <span>I understand this will replace the current database</span>
           </label>
+
+          {metadata?.legacy && (
+            <label
+              className="restore-confirm-check"
+              style={{
+                background: 'rgba(234, 179, 8, 0.05)',
+                borderColor: 'rgba(234, 179, 8, 0.5)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={acknowledgedLegacy}
+                onChange={(e) => setAcknowledgedLegacy(e.target.checked)}
+                disabled={restoring}
+              />
+              <span>I acknowledge this legacy backup cannot be verified (SHA-256 missing)</span>
+            </label>
+          )}
 
           {requiresTypeReplace && (
             <div className="setup-form-row">

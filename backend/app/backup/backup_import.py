@@ -1,4 +1,10 @@
-"""Backup file import helpers (Chunk 14a)."""
+"""Backup file import helpers (Chunk 14a + 15a).
+
+Chunk 15a:
+  - detect_format distinguishes LTPOS-BACKUP-V2 / LTPOS-BACKUP-V1 / SQL
+  - inspect_metadata returns outer_sha256 (None for V1) and legacy flag
+  - uses streaming hash from app.backup.service._stream_sha256
+"""
 from __future__ import annotations
 
 import hashlib
@@ -7,24 +13,33 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
-from app.backup.service import BackupError, decrypt_backup
+from app.backup.service import (
+    BackupError,
+    MAGIC_V1,
+    MAGIC_V2,
+    _stream_sha256,
+    decrypt_backup,
+    get_outer_sha256_hex,
+)
 
 MAX_IMPORT_SIZE = 500 * 1024 * 1024  # 500 MB
 ALLOWED_EXTENSIONS = (".ltbak", ".sql")
-MAGIC = b"LTPOS-BACKUP-V1\n"
 
 
 def validate_upload(upload: UploadFile) -> None:
     """Validate filename extension. File size is checked after reading."""
     name = (upload.filename or "").lower()
     if not name.endswith(ALLOWED_EXTENSIONS):
-        raise BackupError(
-            f"Unsupported file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
-        )
+        raise BackupError("Unsupported file type. Allowed: " + ", ".join(ALLOWED_EXTENSIONS))
 
 
 def read_and_hash(upload: UploadFile, max_size: int = MAX_IMPORT_SIZE) -> tuple[bytes, str]:
-    """Read the whole file, enforce size limit, return (bytes, sha256_hex)."""
+    """Read whole file, enforce size limit, return (bytes, sha256_hex).
+
+    Chunk 15a: hash via streaming helper (64KB chunks). The bytes are
+    still held in memory because Fernet decrypt requires the full
+    payload - that is unavoidable for the V2 encrypted envelope.
+    """
     upload.file.seek(0, 2)
     size = upload.file.tell()
     upload.file.seek(0)
@@ -35,25 +50,38 @@ def read_and_hash(upload: UploadFile, max_size: int = MAX_IMPORT_SIZE) -> tuple[
     data = upload.file.read()
     if not data:
         raise BackupError("Empty file")
-    return data, hashlib.sha256(data).hexdigest()
+    sha256 = _stream_sha256(data)
+    return data, sha256
 
 
 def detect_format(data: bytes) -> str:
-    return "LTPOS-BACKUP-V1" if data.startswith(MAGIC) else "SQL"
+    """Detect .ltbak V2, .ltbak V1, or plain SQL dump."""
+    if data.startswith(MAGIC_V2):
+        return "LTPOS-BACKUP-V2"
+    if data.startswith(MAGIC_V1):
+        return "LTPOS-BACKUP-V1"
+    return "SQL"
 
 
 def inspect_metadata(data: bytes, secret: str) -> dict:
-    """Best-effort metadata extraction. Raises BackupError if .ltbak cannot be decrypted."""
+    """Extract .ltbak metadata. Raises BackupError if unreadable.
+
+    Returns dict with these keys (all may be None for SQL dumps):
+      format, created_at, sha256 (inner), outer_sha256, size, source,
+      backup_point_id, shop_uuid, shop_name, schema_version,
+      user_count, branch_count, legacy (True for V1 files)
+    """
     fmt = detect_format(data)
-    if fmt == "LTPOS-BACKUP-V1":
+    if fmt in ("LTPOS-BACKUP-V1", "LTPOS-BACKUP-V2"):
         try:
             meta, _raw = decrypt_backup(data, secret=secret)
         except BackupError as exc:
             raise BackupError(f"Cannot read backup metadata: {exc}") from exc
         return {
-            "format": "LTPOS-BACKUP-V1",
+            "format": meta.get("format"),
             "created_at": meta.get("created_at"),
             "sha256": meta.get("sha256"),
+            "outer_sha256": get_outer_sha256_hex(data),
             "size": meta.get("size"),
             "source": meta.get("source"),
             "backup_point_id": meta.get("backup_point_id"),
@@ -62,15 +90,22 @@ def inspect_metadata(data: bytes, secret: str) -> dict:
             "schema_version": meta.get("schema_version"),
             "user_count": meta.get("user_count"),
             "branch_count": meta.get("branch_count"),
+            "legacy": bool(meta.get("_legacy")),
         }
     return {
         "format": "SQL",
         "created_at": None,
-        "sha256": hashlib.sha256(data).hexdigest(),
+        "sha256": _stream_sha256(data),
+        "outer_sha256": None,
         "size": len(data),
         "source": None,
         "backup_point_id": None,
         "shop_uuid": None,
+        "shop_name": None,
+        "schema_version": None,
+        "user_count": None,
+        "branch_count": None,
+        "legacy": False,
     }
 
 

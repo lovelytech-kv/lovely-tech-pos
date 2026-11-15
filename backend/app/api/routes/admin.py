@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select, delete, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ from app.models.master import User, Role, Permission, RolePermission, Target
 from app.models.sales import Expense, OtherIncome
 from app.models.master import ExpenseCategory
 from app.models.security import AuditLog, IdempotencyKey, LoginEvent
+from app.models.shop_identity import ShopIdentity
 from app.schemas.api import ExpenseIn, OtherIncomeIn, TargetIn, RolePermissionUpdateIn, UserRoleUpdateIn, CashierResetIn, UserDiscountLimitIn, ReauthIn
 from app.schemas.user_management import (
     UserCreateIn,
@@ -560,3 +561,149 @@ def reset_user_password_by_id(
     ))
     db.commit()
     return {'success': True}
+
+
+# ============ CHUNK 15a — Deep verify (Tier 2 corruption detection) ============
+
+@router.post('/backup/deep-verify')
+async def deep_verify_backup(
+    file: UploadFile = File(...),
+    admin_password: str | None = Form(None),
+    user: User = Depends(admin_user),
+    db: Session = Depends(db_session),
+):
+    """Tier 2 — restore backup into throwaway temp DB to verify integrity.
+
+    Admin reauth required. 5-minute cap. Temp DB prefix:
+    lovely_tech_verify_<uuid> and dropped in finally (guard-checked).
+    """
+    require_admin_reauth(user=user, password=admin_password, db=db, action='backup deep verify')
+
+    import os
+    import subprocess
+    import tempfile
+    import uuid
+
+    from sqlalchemy.engine import make_url
+
+    from app.backup.backup_import import detect_format, read_and_hash
+    from app.backup.service import BackupError, decrypt_backup, libpq_url
+    from app.core.config import settings
+
+    errors: list[str] = []
+    verify_db = 'lovely_tech_verify_' + uuid.uuid4().hex[:12]
+    temp_dump_path: str | None = None
+    verify_db_created = False
+
+    _parsed = make_url(settings.database_url)
+    _postgres_url = libpq_url(_parsed.set(database='postgres').render_as_string(hide_password=False))
+    _verify_url = libpq_url(_parsed.set(database=verify_db).render_as_string(hide_password=False))
+
+    try:
+        data, sha256 = read_and_hash(file)
+        fmt = detect_format(data)
+        if fmt not in ('LTPOS-BACKUP-V1', 'LTPOS-BACKUP-V2'):
+            raise HTTPException(400, 'Only .ltbak files can be deep-verified here.')
+
+        try:
+            meta, raw_dump = decrypt_backup(data, secret=settings.secret_key)
+        except BackupError as exc:
+            return {
+                'ok': False,
+                'tables_restored': 0,
+                'users_count': 0,
+                'shop_uuid_match': False,
+                'errors': ['decrypt: ' + str(exc)],
+            }
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.dump') as tmp:
+            tmp.write(raw_dump)
+            temp_dump_path = tmp.name
+
+        r = subprocess.run(
+            [settings.psql_bin, _postgres_url, '-c', 'CREATE DATABASE ' + verify_db],
+            capture_output=True, text=True, timeout=30,
+        )
+        if r.returncode != 0:
+            return {
+                'ok': False,
+                'tables_restored': 0,
+                'users_count': 0,
+                'shop_uuid_match': False,
+                'errors': ['CREATE DATABASE failed: ' + (r.stderr or 'unknown')[:300]],
+            }
+        verify_db_created = True
+
+        try:
+            r = subprocess.run(
+                [settings.pg_restore_bin, '--no-owner', '--no-privileges',
+                 '--exit-on-error', '--dbname', _verify_url, temp_dump_path],
+                capture_output=True, text=True, timeout=300,
+            )
+            if r.returncode != 0:
+                errors.append('pg_restore: ' + (r.stderr or 'unknown')[:300])
+        except subprocess.TimeoutExpired:
+            raise HTTPException(504, 'Deep verify timed out after 5 minutes (restore too slow).')
+
+        users_count = 0
+        tables_restored = 0
+        restored_shop_uuid: str | None = None
+        try:
+            q = (
+                "SELECT (SELECT COUNT(*) FROM users)::text || '|' || "
+                "(SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE')::text || '|' || "
+                "COALESCE((SELECT shop_uuid::text FROM shop_identity LIMIT 1), '')"
+            )
+            r = subprocess.run(
+                [settings.psql_bin, _verify_url, '-t', '-A', '-c', q],
+                capture_output=True, text=True, timeout=30,
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                parts = r.stdout.strip().split('|')
+                if len(parts) >= 3:
+                    users_count = int(parts[0]) if parts[0].isdigit() else 0
+                    tables_restored = int(parts[1]) if parts[1].isdigit() else 0
+                    restored_shop_uuid = parts[2] if parts[2] else None
+            else:
+                errors.append('query: ' + (r.stderr or 'empty output')[:200])
+        except Exception as exc:
+            errors.append('query: ' + str(exc)[:200])
+
+        current_shop_uuid: str | None = None
+        try:
+            shop_row = db.scalar(select(ShopIdentity).limit(1))
+            if shop_row:
+                current_shop_uuid = str(shop_row.shop_uuid)
+        except Exception:
+            pass
+
+        shop_uuid_match = bool(
+            current_shop_uuid and restored_shop_uuid and current_shop_uuid == restored_shop_uuid
+        )
+
+        return {
+            'ok': users_count > 0 and tables_restored > 0 and not errors,
+            'tables_restored': tables_restored,
+            'users_count': users_count,
+            'shop_uuid_match': shop_uuid_match,
+            'restored_shop_uuid': restored_shop_uuid,
+            'current_shop_uuid': current_shop_uuid,
+            'legacy': bool(meta.get('_legacy')),
+            'errors': errors,
+        }
+    finally:
+        # GUARD: only drop DBs matching our prefix
+        if verify_db_created and verify_db.startswith('lovely_tech_verify_'):
+            try:
+                subprocess.run(
+                    [settings.psql_bin, _postgres_url, '-c',
+                     'DROP DATABASE IF EXISTS ' + verify_db + ' WITH (FORCE)'],
+                    capture_output=True, text=True, timeout=30,
+                )
+            except Exception:
+                pass
+        if temp_dump_path:
+            try:
+                os.unlink(temp_dump_path)
+            except Exception:
+                pass

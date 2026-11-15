@@ -1,7 +1,7 @@
 # LOVELY TECH POS — MASTER PROJECT STATE
-**Last Updated:** 2026-11-13 (after Chunk 14c-1 mDNS + shop name fix)
+**Last Updated:** 2026-11-15 (after Chunk 15a backup integrity)
 **Version:** Backend 0.5.0 | Migrations: 0044_shop_name_backfill (head)
-**Status:** Phase 2 in progress (14a+14b+14c-1 of ~26 chunks done)
+**Status:** Phase 2 in progress (14a+14b+14c-1+15a of ~26 chunks done)
 ---
 
 ## 1. PROJECT OVERVIEW
@@ -87,6 +87,7 @@ curl.exe http://127.0.0.1:8000/api/v1/health
 | 14a | Pre-Login Restore + Backup Import (backend) | ✅ | /setup/restore-from-file + /backup/import-file + migration 0043 |
 | 14b | Frontend Restore Flow (RestoreFlow + Step 0.5) | ✅ | E2E verified on test10 — inspect → restore → login → dashboard |
 | 14c-1 | mDNS Auto-Discovery + Reconnect + Shop Name Fix | ✅ | 3 root causes fixed: mDNS ServiceInfo addresses, shop_name write-path drift, CLIENT advertise collision. Migration 0044. T1-T8 + R1-R4 pass. 429 branches deactivated |
+| 15a | Backup Integrity + Corruption Detection + Rate Limits | ✅ | .ltbak V2 (outer SHA-256) + V1 legacy ack; pg_restore --list Tier 1; deep-verify Tier 2 (temp DB); 5/10min rate limit shared bucket. 20 tests pass |
 5. REMAINING ROADMAP (14-26)
 #	Chunk	Scope	Time	Priority
 14	Disaster Recovery + mDNS	Pre-login restore, backup import, mDNS discovery	3-4 days	🔴 CRITICAL
@@ -330,23 +331,26 @@ Confirm every test manually — don't trust "assumed OK"
 
 ## 17. NEXT IMMEDIATE ACTION
 
-**Chunk 14c-1 COMPLETE (2026-11-13)** — mDNS + shop name fix, E2E verified:
-- 3 root causes: mDNS ServiceInfo missing addresses, shop_name write-path drift, CLIENT advertise collision
-- 7 files fixed: mdns.py, main.py, machine.py, schemas/api.py, branch_profile.py, auto.py, migration 0044
-- Frontend: discovery.ts (backend discovery), MachineSettings (Rediscover button)
-- Tests: T1-T8 + R1-R4 pass
-- Branch cleanup: 429 deactivated, 1 active (MAIN)
-- Commit: 892b254 (pushed to GitHub)
+**Chunk 15a COMPLETE (2026-11-15)** — backup integrity + corruption detection + rate limits:
+- .ltbak V2 format: MAGIC_V2 + 32-byte outer SHA-256 + Fernet payload
+- V1 backward compat forever (legacy=True + UI ack required before restore)
+- Streaming SHA-256 (64KB chunks) — no full-file-in-memory hash
+- Tier 1 corruption: pg_restore --list validation on inspect
+- Tier 2 corruption: /admin/backup/deep-verify (temp DB restore + guard-checked cleanup)
+- Rate limit: 5 attempts / 10 min / IP (shared bucket inspect+restore, reset on success)
+- 6 files: service.py, backup_import.py, setup.py, admin.py, rate_limit.py (new), RestoreFlow.tsx
+- 20 tests pass (A:5 SHA-256, B:6 corruption, C:4 rate limit, R:5 regression)
 
-**Chunk 14c-2** (next):
-- mDNS auto-refresh on shop name change (no backend restart required)
+**Chunk 15b** (next — deferred PITR, needs maintenance window):
+- pg_basebackup + WAL archiving (requires production PostgreSQL restart)
+- Migration 0045: pitr_base_backups table
+- pitr_restore.ps1 (destructive, with safety guards)
+- Frontend PITR restore dialog
+- Test on throwaway cluster (initdb port 5433, separate from production)
+
+**Chunk 14c-2** (parallel option):
+- mDNS auto-refresh on shop name change
 - Google Drive import (cloud restore via rclone)
-- Google Drive sync queue visible in UI
-
-**Chunk 15** (after 14c-2):
-- Backup integrity validation (corrupted backup detection)
-- Point-in-time recovery (PITR)
-- Rate limits on /setup/* endpoints
 
 
 ## 18. VERSION HISTORY
