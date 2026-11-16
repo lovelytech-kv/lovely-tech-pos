@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission
@@ -707,3 +707,77 @@ async def deep_verify_backup(
                 os.unlink(temp_dump_path)
             except Exception:
                 pass
+
+
+
+# ============ CHUNK 15b — PITR endpoints ============
+
+@router.get('/pitr/base-backups')
+def pitr_list_base_backups(
+    admin_password: str | None = None,
+    user: User = Depends(admin_user),
+    db: Session = Depends(db_session),
+):
+    """List PITR base backups. Admin reauth via query param (existing pattern)."""
+    require_admin_reauth(user=user, password=admin_password, db=db, action='view PITR base backups')
+
+    rows = db.execute(text("""
+        SELECT id, base_path, backup_start_time, backup_end_time,
+               wal_min, wal_max, size_bytes, created_at, created_by
+        FROM pitr_base_backups
+        ORDER BY backup_start_time DESC
+        LIMIT 100
+    """)).mappings().all()
+
+    backups = []
+    for r in rows:
+        backups.append({
+            'id': r['id'],
+            'base_path': r['base_path'],
+            'backup_start_time': r['backup_start_time'].isoformat() if r['backup_start_time'] else None,
+            'backup_end_time': r['backup_end_time'].isoformat() if r['backup_end_time'] else None,
+            'wal_min': r['wal_min'],
+            'wal_max': r['wal_max'],
+            'size_bytes': r['size_bytes'],
+            'created_at': r['created_at'].isoformat() if r['created_at'] else None,
+            'created_by': r['created_by'],
+        })
+    return {'backups': backups}
+
+
+@router.get('/pitr/restore-range')
+def pitr_restore_range(
+    admin_password: str | None = None,
+    user: User = Depends(admin_user),
+    db: Session = Depends(db_session),
+):
+    """Compute valid PITR restore window (earliest base -> latest WAL or base end)."""
+    require_admin_reauth(user=user, password=admin_password, db=db, action='view PITR restore range')
+
+    import os
+    from pathlib import Path
+
+    earliest_row = db.execute(text('SELECT MIN(backup_start_time) AS earliest, COUNT(*) AS cnt FROM pitr_base_backups')).mappings().first()
+    base_count = int(earliest_row['cnt'] or 0) if earliest_row else 0
+    earliest = earliest_row['earliest'] if earliest_row else None
+
+    latest = None
+    try:
+        archive_dir = Path(os.getenv('LTPOS_PITR_WAL_ARCHIVE_DIR', 'C:/ProgramData/LovelyTechPOS/wal_archive'))
+        if archive_dir.exists():
+            wal_files = [f for f in archive_dir.iterdir() if f.is_file() and f.name.startswith('0000')]
+            if wal_files:
+                latest_ts = max(f.stat().st_mtime for f in wal_files)
+                latest = datetime.fromtimestamp(latest_ts, timezone.utc)
+    except Exception:
+        pass
+
+    if latest is None:
+        latest_row = db.execute(text('SELECT MAX(backup_end_time) AS latest FROM pitr_base_backups')).mappings().first()
+        latest = latest_row['latest'] if latest_row else None
+
+    return {
+        'earliest': earliest.isoformat() if earliest else None,
+        'latest': latest.isoformat() if latest else None,
+        'base_backup_count': base_count,
+    }
