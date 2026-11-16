@@ -1,7 +1,7 @@
 # LOVELY TECH POS — MASTER PROJECT STATE
-**Last Updated:** 2026-11-15 (after Chunk 15a backup integrity)
-**Version:** Backend 0.5.0 | Migrations: 0044_shop_name_backfill (head)
-**Status:** Phase 2 in progress (14a+14b+14c-1+15a of ~26 chunks done)
+**Last Updated:** 2026-11-16 (after Chunk 15b PITR complete)
+**Version:** Backend 0.5.0 | Migrations: 0045_pitr_base_backups (head)
+**Status:** Phase 2 in progress (14a+14b+14c-1+15a+15b of ~26 chunks done)
 ---
 
 ## 1. PROJECT OVERVIEW
@@ -88,6 +88,7 @@ curl.exe http://127.0.0.1:8000/api/v1/health
 | 14b | Frontend Restore Flow (RestoreFlow + Step 0.5) | ✅ | E2E verified on test10 — inspect → restore → login → dashboard |
 | 14c-1 | mDNS Auto-Discovery + Reconnect + Shop Name Fix | ✅ | 3 root causes fixed: mDNS ServiceInfo addresses, shop_name write-path drift, CLIENT advertise collision. Migration 0044. T1-T8 + R1-R4 pass. 429 branches deactivated |
 | 15a | Backup Integrity + Corruption Detection + Rate Limits | ✅ | .ltbak V2 (outer SHA-256) + V1 legacy ack; pg_restore --list Tier 1; deep-verify Tier 2 (temp DB); 5/10min rate limit shared bucket. 20 tests pass |
+| 15b | PITR (WAL archiving + base backup + restore script + dialog) | ✅ | Migration 0045. 6 safety guards, safety pg_dumpall, pgdata.pre-pitr rollback. R1-R5 pass, S1-S3 dialog pass. GATE 11 both themes. Production WAL enabled 2026-11-16 |
 5. REMAINING ROADMAP (14-26)
 #	Chunk	Scope	Time	Priority
 14	Disaster Recovery + mDNS	Pre-login restore, backup import, mDNS discovery	3-4 days	🔴 CRITICAL
@@ -162,7 +163,7 @@ These are non-negotiable. Worker bypass = chunk rejected.
 8. CRITICAL FILE MAP
 Backend entry: backend/app/main.py
 Backend router: backend/app/api/router.py
-Migrations: backend/alembic/versions/ (0001 → 0044)
+Migrations: backend/alembic/versions/ (0001 → 0045)
 Models: backend/app/models/master.py, shop_identity.py, machine_identity.py
 Auth: backend/app/api/routes/auth.py
 Setup: backend/app/api/routes/setup.py
@@ -331,28 +332,38 @@ Confirm every test manually — don't trust "assumed OK"
 
 ## 17. NEXT IMMEDIATE ACTION
 
-**Chunk 15a COMPLETE (2026-11-15)** — backup integrity + corruption detection + rate limits:
-- .ltbak V2 format: MAGIC_V2 + 32-byte outer SHA-256 + Fernet payload
-- V1 backward compat forever (legacy=True + UI ack required before restore)
-- Streaming SHA-256 (64KB chunks) — no full-file-in-memory hash
-- Tier 1 corruption: pg_restore --list validation on inspect
-- Tier 2 corruption: /admin/backup/deep-verify (temp DB restore + guard-checked cleanup)
-- Rate limit: 5 attempts / 10 min / IP (shared bucket inspect+restore, reset on success)
-- 6 files: service.py, backup_import.py, setup.py, admin.py, rate_limit.py (new), RestoreFlow.tsx
-- 20 tests pass (A:5 SHA-256, B:6 corruption, C:4 rate limit, R:5 regression)
+**Chunk 15b COMPLETE (2026-11-16)** — PITR end-to-end:
 
-**Chunk 15b** (next — deferred PITR, needs maintenance window):
-- pg_basebackup + WAL archiving (requires production PostgreSQL restart)
-- Migration 0045: pitr_base_backups table
-- pitr_restore.ps1 (destructive, with safety guards)
-- Frontend PITR restore dialog
-- Test on throwaway cluster (initdb port 5433, separate from production)
+Tasks:
+- 15.4a: scripts/configure_wal_archiving.ps1 (idempotent, forward slashes)
+- 15.4b: Migration 0045_pitr_base_backups + scripts/pitr_base_backup.ps1 + GET /admin/pitr/base-backups + GET /admin/pitr/restore-range
+- 15.4c: scripts/pitr_restore.ps1 (6 safety guards, safety pg_dumpall, pgdata.pre-pitr rollback)
+- 15.4d: frontend/src/features/pos/PitrRestoreDialog.tsx + BackupTab button (inline styles for visibility)
 
-**Chunk 14c-2** (parallel option):
-- mDNS auto-refresh on shop name change
-- Google Drive import (cloud restore via rclone)
+Tests passed:
+- R1-R5: PITR restore working (verified throwaway cluster, T1 marker only after restore to T1 time)
+- S1-S3: Frontend dialog all states (open, submit, ESC guard)
+- GATE 11 fold-in: both themes verified (light + dark, legacy banner + checkboxes + button)
+- Regression U1-U3: 17 tabs, V2 backup create, production 352 users intact
 
+Production WAL: enabled 2026-11-16 (archive_mode=on, archive_command forward slashes, WAL file 000000010000000000000011 confirmed in C:/ProgramData/LovelyTechPOS/wal_archive/)
 
+Commits: 815605c (foundation), fbf52fb (restore script), 665434b (frontend)
+
+Bugs found + fixed during 15b (7 total):
+1. GUC parser strips backslashes -> forward slashes in postgresql.conf
+2. PowerShell EAP Stop + native stderr -> local EAP Continue
+3. Cleanup threshold 5MB > 4.59MB real backup -> backup_manifest file check
+4. Windows service ignores -o "-p 5433" -> unregister, manual pg_ctl
+5. Windows Defender scans pgdata -> Add-MpPreference -ExclusionPath
+6. recovery_target_time ISO 8601 with Z rejected -> yyyy-MM-dd HH:mm:ss+00
+7. restore_command forward slashes + missing pg_wal.tar.gz extract -> backslashes + extract
+
+Chunk 15c / 16 (next):
+- Production PITR base backup (one-time + scheduled)
+- WAL archive retention policy + cleanup script
+- PITR restore drill on test cluster (validate production backup)
+- Chunk 16 (World Standards 1): NTP sync, JSON logging, FK audit
 ## 18. VERSION HISTORY
 
 - v0.1.0 — Initial backend (Chunks 1-3)
