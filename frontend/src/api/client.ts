@@ -204,7 +204,8 @@ export async function login(username: string, password: string): Promise<LoginRe
     throw new Error('Login reply was incomplete. Check the server address and that client/server versions match.');
   }
   localStorage.setItem('ltpos_token', result.access_token);
-  localStorage.setItem('ltpos_user', JSON.stringify(result));
+  // L2: never duplicate the bearer token inside the cached user object.
+  localStorage.setItem('ltpos_user', JSON.stringify({ ...result, access_token: '' }));
   return result;
 }
 
