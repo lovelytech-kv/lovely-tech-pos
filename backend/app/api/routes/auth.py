@@ -1,10 +1,11 @@
 from datetime import datetime, timezone, timedelta
 import hashlib, secrets
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, issue_session, token_hash, current_user, bearer
 from app.core.config import settings
+from app.models.auth import UserSession
 from app.models.master import User
 from app.models.security import LoginEvent, AdminRecoveryCode, PasswordResetToken, AuditLog
 from app.schemas.api import LoginIn, LoginOut, PasswordChangeIn, AdminRecoveryIn, ReauthIn
@@ -89,7 +90,7 @@ def recover_admin(payload: AdminRecoveryIn, db: Session = Depends(db_session)):
 
 
 @router.post('/change-password')
-def change_password(payload: PasswordChangeIn, user=Depends(current_user), db: Session=Depends(db_session)):
+def change_password(payload: PasswordChangeIn, credentials=Depends(bearer), user=Depends(current_user), db: Session=Depends(db_session)):
     if not verify_password(user.password_hash, payload.current_password):
         raise HTTPException(401, 'Current password is incorrect')
     if payload.new_password == payload.current_password:
@@ -97,6 +98,15 @@ def change_password(payload: PasswordChangeIn, user=Depends(current_user), db: S
     user.password_hash = hash_password(payload.new_password)
     user.must_change_password = False
     now = datetime.now(timezone.utc)
+    # M19: keep the calling session alive, revoke every other session for this user.
+    current_hash = token_hash(credentials.credentials) if credentials else None
+    if not current_hash:
+        raise HTTPException(401, 'Authentication required')
+    db.execute(update(UserSession).where(
+        UserSession.user_id == user.id,
+        UserSession.revoked_at.is_(None),
+        UserSession.token_hash != current_hash,
+    ).values(revoked_at=now))
     db.add(LoginEvent(username_attempted=user.username, user_id=user.id, event_type='PASSWORD_CHANGED', occurred_at=now))
     db.commit()
     return {'status':'password_changed','must_change_password':False}
@@ -174,6 +184,8 @@ def reset_password_with_token(payload: ResetPasswordWithTokenIn, db: Session = D
     user.locked_until = None
 
     token.used_at = now
+    # H12: a recovery-token reset invalidates every existing session for this user.
+    db.execute(update(UserSession).where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None)).values(revoked_at=now))
     db.add(LoginEvent(username_attempted=user.username, user_id=user.id, event_type='PASSWORD_RESET_VIA_RECOVERY', occurred_at=now))
     db.commit()
     return ResetPasswordWithTokenOut(success=True)

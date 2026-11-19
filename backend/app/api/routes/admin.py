@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import select, delete, func, text
+from sqlalchemy import select, delete, func, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission
+from app.models.auth import UserSession
 from app.models.master import User, Role, Permission, RolePermission, Target
 from app.models.sales import Expense, OtherIncome
 from app.models.master import ExpenseCategory
@@ -549,13 +550,17 @@ def reset_user_password_by_id(
     target.locked_until = None
     target.version += 1
 
+    # H5: a password reset invalidates every existing session for the target user.
+    now = datetime.now(timezone.utc)
+    db.execute(update(UserSession).where(UserSession.user_id == target.id, UserSession.revoked_at.is_(None)).values(revoked_at=now))
+
     db.add(AuditLog(
         branch_id=user.branch_id,
         actor_user_id=user.id,
         action_type='USER_PASSWORD_RESET',
         entity_type='USER',
         entity_id=target.id,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=now,
         after_json={'username': target.username},
         source_transaction_id=target.id,
     ))

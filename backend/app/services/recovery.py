@@ -1,8 +1,9 @@
 from __future__ import annotations
 import hashlib, secrets
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.orm import Session
+from app.models.auth import UserSession
 from app.models.master import User
 from app.models.security import AuditLog
 from app.security.passwords import hash_password, verify_password
@@ -56,6 +57,8 @@ class RecoveryService:
         target_user.failed_login_count = 0
         target_user.locked_until = None
         now = datetime.now(timezone.utc)
+        # H5: the reset invalidates every session belonging to the target cashier.
+        self.session.execute(update(UserSession).where(UserSession.user_id == target_user.id, UserSession.revoked_at.is_(None)).values(revoked_at=now))
         self.session.add(AuditLog(branch_id=admin_user.branch_id, actor_user_id=admin_user.id, action_type='CASHIER_PASSWORD_RESET', entity_type='USER', entity_id=target_user.id, timestamp=now, context_json={'forced_change':True}))
         self.session.flush()
     def generate_recovery_codes(self, *, user_id, actor_user_id, count: int = 8) -> list[str]:
