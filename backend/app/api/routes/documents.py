@@ -13,7 +13,6 @@ from datetime import date, datetime, time, timedelta, timezone
 
 router=APIRouter(prefix='/documents',tags=['documents'])
 
-@router.get('/search',response_model=list[DocumentSearchOut])
 @router.get('')
 def list_documents(
     date_from: date | None = None,
@@ -177,7 +176,9 @@ def list_documents(
         'total': total,
         'has_more': offset + limit < total,
     }
-def search(q:str,user:User=Depends(require_permission('DOCUMENT_REPRINT')),db:Session=Depends(db_session)):
+
+@router.get('/search',response_model=list[DocumentSearchOut])
+def search(q:str='',user:User=Depends(require_permission('DOCUMENT_REPRINT')),db:Session=Depends(db_session)):
     q=q.strip()
     if not q: return []
     admin=user.role.code.upper()=='ADMIN'   # Requirements 02: a cashier reprints only their OWN completed sales
