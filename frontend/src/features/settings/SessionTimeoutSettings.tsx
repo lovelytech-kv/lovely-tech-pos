@@ -83,7 +83,17 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
       toast.success('Session settings saved');
       await load();
     } catch (e) {
-      setSaveError((e as Error).message);
+      const msg = (e as Error).message || '';
+      // current_user() 401s are genuine session loss; reauth.py 401s are wrong-password.
+      // Anchored to avoid matching "Admin re-authentication required for session settings change".
+      const sessionGone = /^(session expired or revoked|session locked due to inactivity|authentication required|user inactive)$/i.test(msg);
+      if (sessionGone) {
+        localStorage.removeItem('ltpos_token');
+        localStorage.removeItem('ltpos_user');
+        window.dispatchEvent(new CustomEvent('ltpos:session-expired'));
+        return;
+      }
+      setSaveError(msg);
     } finally {
       setSaving(false);
     }
