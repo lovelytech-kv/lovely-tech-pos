@@ -119,7 +119,8 @@ def update_role_permissions(role_id:str,payload:RolePermissionUpdateIn,user:User
     db.commit(); return {'role_id':str(role.id),'permissions':sorted(set(payload.permission_codes))}
 
 @router.put('/users/{user_id}/role')
-def update_user_role(user_id:str,payload:UserRoleUpdateIn,user:User=Depends(admin_user),db:Session=Depends(db_session)):
+def update_user_role(user_id:str,payload:UserRoleUpdateIn,admin_password:str|None=None,user:User=Depends(admin_user),db:Session=Depends(db_session)):
+    require_admin_reauth(user=user, password=admin_password, db=db, action='role changes')
     target=db.scalar(select(User).where(User.id==user_id,User.branch_id==user.branch_id).with_for_update())
     role=db.scalar(select(Role).where(Role.code==payload.role_code.upper()))
     if not target or not role: raise HTTPException(404,'User or role not found')
