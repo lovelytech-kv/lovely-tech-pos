@@ -3,7 +3,7 @@ import hashlib, secrets
 from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_session_factory
@@ -38,7 +38,7 @@ def current_user(request: Request, credentials: HTTPAuthorizationCredentials = D
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     now = datetime.now(timezone.utc)
-    session = db.scalar(select(UserSession).where(UserSession.token_hash == token_hash(credentials.credentials)).with_for_update())
+    session = db.scalar(select(UserSession).where(UserSession.token_hash == token_hash(credentials.credentials)))
     if session is None or session.revoked_at is not None or session.expires_at <= now:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or revoked")
     user = db.get(User, session.user_id)
@@ -56,7 +56,8 @@ def current_user(request: Request, credentials: HTTPAuthorizationCredentials = D
 
     # Absolute expiry is fixed at issue_session() time (created_at + absolute_hours).
     # Never extend expires_at here — that would turn absolute expiry into a sliding window.
-    session.last_seen_at = now
+    # Single atomic UPDATE: no row lock is held for the duration of the request.
+    db.execute(update(UserSession).where(UserSession.id == session.id).values(last_seen_at=now))
     db.commit()
 
     if user.must_change_password and not request.url.path.endswith(("/auth/change-password", "/auth/logout", "/auth/me")):
