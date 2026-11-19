@@ -131,6 +131,14 @@ export async function configureManualServer(input: string): Promise<{ baseUrl: s
 function errorText(detail: unknown, fallback: string): string {
   if (typeof detail === 'string') return detail;
   if (detail == null) return fallback;
+  // FastAPI/Pydantic 422: detail is an array of { loc, msg, type }.
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0] as { loc?: unknown; msg?: unknown };
+    if (first && typeof first.msg === 'string') {
+      const loc = Array.isArray(first.loc) ? first.loc.slice(1).join('.') : '';
+      return loc ? `${loc}: ${first.msg}` : first.msg;
+    }
+  }
   try { return JSON.stringify(detail); } catch { return fallback; }
 }
 
