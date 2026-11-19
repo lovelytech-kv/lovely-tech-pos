@@ -137,31 +137,28 @@ class RecoveryService:
             self.session.commit()
             return {'valid': False}
 
-        # Look up unused, non-revoked codes
-        codes = self.session.scalars(
-            select(AdminRecoveryCode).where(
+        # H11: atomic consume — the WHERE clause is the concurrency guard.
+        target_hash = _hash_code(normalized_code)
+        consumed = self.session.execute(
+            update(AdminRecoveryCode).where(
                 AdminRecoveryCode.created_by == user.id,
+                AdminRecoveryCode.code_hash == target_hash,
                 AdminRecoveryCode.used_at.is_(None),
                 AdminRecoveryCode.revoked_at.is_(None),
-            )
-        ).all()
-
-        target_hash = _hash_code(normalized_code)
-        for row in codes:
-            if row.code_hash == target_hash:
-                row.used_at = now
-                row.used_by = user.id
-                self.session.add(AuditLog(
-                    branch_id=user.branch_id,
-                    actor_user_id=user.id,
-                    action_type='RECOVERY_CODE_USED',
-                    entity_type='USER',
-                    entity_id=user.id,
-                    timestamp=now,
-                    context_json={'via': 'forgot_password_flow'},
-                ))
-                self.session.flush()
-                return {'valid': True, 'user_id': user.id}
+            ).values(used_at=now, used_by=user.id)
+        ).rowcount
+        if consumed == 1:
+            self.session.add(AuditLog(
+                branch_id=user.branch_id,
+                actor_user_id=user.id,
+                action_type='RECOVERY_CODE_USED',
+                entity_type='USER',
+                entity_id=user.id,
+                timestamp=now,
+                context_json={'via': 'forgot_password_flow'},
+            ))
+            self.session.flush()
+            return {'valid': True, 'user_id': user.id}
 
         self._log_invalid_attempt(normalized_user, now, 'code_mismatch')
         self.session.flush()
