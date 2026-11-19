@@ -48,19 +48,14 @@ def current_user(request: Request, credentials: HTTPAuthorizationCredentials = D
     cfg = get_session_settings(db)
     is_admin = user.role.code.upper() == "ADMIN"
     idle_minutes = cfg['admin_minutes'] if is_admin else cfg['cashier_minutes']
-    absolute_hours = cfg['admin_hours'] if is_admin else cfg['cashier_hours']
-
     # Idle check (0 = disabled)
     if idle_minutes > 0 and session.last_seen_at + timedelta(minutes=idle_minutes) <= now:
         session.revoked_at = now
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session locked due to inactivity")
 
-    # Absolute sliding window — extend expires_at on every request
-    # (unless absolute_hours == 0 = never expires, keep original far-future)
-    if absolute_hours > 0:
-        session.expires_at = now + timedelta(hours=absolute_hours)
-
+    # Absolute expiry is fixed at issue_session() time (created_at + absolute_hours).
+    # Never extend expires_at here — that would turn absolute expiry into a sliding window.
     session.last_seen_at = now
     db.commit()
 
