@@ -26,7 +26,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=LoginOut)
 def login(payload: LoginIn, db: Session = Depends(db_session)):
-    user = db.scalar(select(User).where(User.username == payload.username))
+    user = db.scalar(select(User).where(User.username == payload.username).with_for_update())
     now = datetime.now(timezone.utc)
     if user is None or not user.is_active or (user.locked_until and user.locked_until > now) or not verify_password(user.password_hash, payload.password):
         if user:
