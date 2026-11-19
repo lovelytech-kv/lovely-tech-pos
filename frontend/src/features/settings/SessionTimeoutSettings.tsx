@@ -31,6 +31,9 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
   const [cfg, setCfg] = useState<Cfg | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [saveError, setSaveError] = useState('');
 
   async function load() {
     try {
@@ -46,15 +49,41 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
 
   useEffect(() => { void load(); }, []);
 
-  async function save() {
-    if (!cfg) return;
+  function requestSave() {
+    if (!cfg || saving) return;
+    setAdminPassword('');
+    setSaveError('');
+    setPromptOpen(true);
+  }
+
+  function cancelSave() {
+    if (saving) return;
+    setPromptOpen(false);
+    setAdminPassword('');
+    setSaveError('');
+  }
+
+  async function confirmSave() {
+    if (!cfg || saving) return;
+    if (!adminPassword.trim()) {
+      setSaveError('Admin password is required.');
+      return;
+    }
     try {
       setSaving(true);
-      await api('/session-settings', { method: 'PUT', body: JSON.stringify(cfg) });
+      setSaveError('');
+      await api('/session-settings', {
+        method: 'PUT',
+        body: JSON.stringify({ ...cfg, admin_password: adminPassword }),
+        // Wrong re-auth password returns 401 — do not treat it as an expired session.
+        skipAuthLogout: true,
+      });
+      setPromptOpen(false);
+      setAdminPassword('');
       toast.success('Session settings saved');
       await load();
     } catch (e) {
-      toast.error((e as Error).message);
+      setSaveError((e as Error).message);
     } finally {
       setSaving(false);
     }
@@ -88,17 +117,17 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
           <b style={{ fontSize: '0.85rem', color: 'var(--text)' }}>👑 Admin</b>
           <label style={labelStyle}>
             Idle logout (minutes)
-            <input type="number" min={0} max={720} value={cfg.admin_minutes}
-              onChange={(e) => setCfg({ ...cfg, admin_minutes: Math.max(0, Number(e.target.value) || 0) })}
+            <input type="number" min={1} max={720} value={cfg.admin_minutes}
+              onChange={(e) => setCfg({ ...cfg, admin_minutes: Math.max(1, Number(e.target.value) || 1) })}
               style={inputStyle} />
-            <small style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>0 = never idle-logout</small>
+            <small style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>Minimum 1 minute</small>
           </label>
           <label style={labelStyle}>
             Session lifetime (hours)
-            <input type="number" min={0} max={8760} value={cfg.admin_hours}
-              onChange={(e) => setCfg({ ...cfg, admin_hours: Math.max(0, Number(e.target.value) || 0) })}
+            <input type="number" min={1} max={8760} value={cfg.admin_hours}
+              onChange={(e) => setCfg({ ...cfg, admin_hours: Math.max(1, Number(e.target.value) || 1) })}
               style={inputStyle} />
-            <small style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>0 = never expires (extends on every request)</small>
+            <small style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>Minimum 1 hour; fixed at login</small>
           </label>
         </div>
 
@@ -106,28 +135,59 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
           <b style={{ fontSize: '0.85rem', color: 'var(--text)' }}>🧑‍💼 Cashier</b>
           <label style={labelStyle}>
             Idle logout (minutes)
-            <input type="number" min={0} max={720} value={cfg.cashier_minutes}
-              onChange={(e) => setCfg({ ...cfg, cashier_minutes: Math.max(0, Number(e.target.value) || 0) })}
+            <input type="number" min={1} max={720} value={cfg.cashier_minutes}
+              onChange={(e) => setCfg({ ...cfg, cashier_minutes: Math.max(1, Number(e.target.value) || 1) })}
               style={inputStyle} />
-            <small style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>0 = never idle-logout</small>
+            <small style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>Minimum 1 minute</small>
           </label>
           <label style={labelStyle}>
             Session lifetime (hours)
-            <input type="number" min={0} max={8760} value={cfg.cashier_hours}
-              onChange={(e) => setCfg({ ...cfg, cashier_hours: Math.max(0, Number(e.target.value) || 0) })}
+            <input type="number" min={1} max={8760} value={cfg.cashier_hours}
+              onChange={(e) => setCfg({ ...cfg, cashier_hours: Math.max(1, Number(e.target.value) || 1) })}
               style={inputStyle} />
-            <small style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>0 = never expires (extends on every request)</small>
+            <small style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>Minimum 1 hour; fixed at login</small>
           </label>
         </div>
       </div>
 
       <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.75rem' }}>
-        ⓘ Session lifetime extends automatically on every API request. Users will only be logged out after being idle for the configured minutes, or after the absolute lifetime expires.
+        ⓘ Idle logout and absolute session lifetime are enforced separately. The absolute lifetime is fixed when the user logs in and does not extend with activity.
       </p>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
-        <button className="primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Session Settings'}</button>
+        <button className="primary" onClick={requestSave} disabled={saving}>{saving ? 'Saving…' : 'Save Session Settings'}</button>
       </div>
+
+      {promptOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm session settings change"
+          onKeyDown={(e) => { if (e.key === 'Escape') cancelSave(); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'grid', placeItems: 'center', zIndex: 50, padding: '1rem' }}
+        >
+          <div className="glass-panel" style={{ width: '100%', maxWidth: 420, padding: '1.25rem', display: 'grid', gap: '0.75rem' }}>
+            <h3 style={{ margin: 0 }}>Confirm with admin password</h3>
+            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>Changing session timeouts is a sensitive Admin action.</p>
+            <input
+              type="password"
+              autoFocus
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void confirmSave(); }}
+              placeholder="Admin password"
+              aria-label="Admin password"
+              disabled={saving}
+              style={inputStyle}
+            />
+            {saveError && <p role="alert" style={{ margin: 0, color: '#dc2626', fontSize: '0.8rem' }}>{saveError}</p>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button type="button" className="btn-secondary" onClick={cancelSave} disabled={saving}>Cancel</button>
+              <button type="button" className="primary" onClick={() => void confirmSave()} disabled={saving}>{saving ? 'Saving…' : 'Confirm Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

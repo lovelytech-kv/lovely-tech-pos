@@ -149,10 +149,10 @@ export type LoginResponse = {
   username: string; display_name: string; role: string; branch_id: string; must_change_password: boolean;
 };
 
-export type ApiOptions = RequestInit & { timeoutMs?: number };
+export type ApiOptions = RequestInit & { timeoutMs?: number; skipAuthLogout?: boolean };
 
 export async function api<T = any>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { timeoutMs = REQUEST_TIMEOUT_MS, ...fetchOptions } = options;
+  const { timeoutMs = REQUEST_TIMEOUT_MS, skipAuthLogout = false, ...fetchOptions } = options;
   const baseUrl = await resolveBaseUrlForPath(path);
   assertServerConfigured(baseUrl);
   const token = localStorage.getItem('ltpos_token');
@@ -172,7 +172,7 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
         if (res.ok) throw new Error(`Unexpected non-JSON reply from ${baseUrl}${path}. Check the server address and that the POS server is running.`);
       }
     }
-    if (res.status === 401) {
+    if (res.status === 401 && !skipAuthLogout) {
       localStorage.removeItem('ltpos_token');
       localStorage.removeItem('ltpos_user');
       window.dispatchEvent(new CustomEvent('ltpos:session-expired'));
