@@ -3,7 +3,7 @@ import hashlib, secrets
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
-from app.api.deps import db_session, issue_session, token_hash, current_user
+from app.api.deps import db_session, issue_session, token_hash, current_user, bearer
 from app.core.config import settings
 from app.models.master import User
 from app.models.security import LoginEvent, AdminRecoveryCode, PasswordResetToken, AuditLog
@@ -45,11 +45,13 @@ def login(payload: LoginIn, db: Session = Depends(db_session)):
 
 
 @router.post("/logout")
-def logout(user=Depends(current_user), db: Session = Depends(db_session)):
+def logout(credentials=Depends(bearer), user=Depends(current_user), db: Session = Depends(db_session)):
     from app.models.auth import UserSession
     from sqlalchemy import update
     now = datetime.now(timezone.utc)
-    db.execute(update(UserSession).where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None)).values(revoked_at=now))
+    # Revoke only the calling token — other laptops stay logged in.
+    current_hash = token_hash(credentials.credentials) if credentials else None
+    db.execute(update(UserSession).where(UserSession.user_id == user.id, UserSession.token_hash == current_hash, UserSession.revoked_at.is_(None)).values(revoked_at=now))
     db.add(LoginEvent(username_attempted=user.username, user_id=user.id, event_type="LOGOUT", occurred_at=now))
     db.commit()
     return {"status": "logged_out"}
