@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import { money } from '../../services/money';
 import { useModal } from '../../ui/modals';
 import { toast } from '../../ui/toast';
+import { escapeHtml } from '../../utils/escapeHtml';
 
 type Props = {
   isAdmin: boolean;
@@ -188,7 +189,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
       return;
     }
     const lines = Array.isArray(detail.lines) ? detail.lines : [];
-    w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${detail.invoice_no}</title>
+    w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${escapeHtml(detail.invoice_no)}</title>
       <style>
         body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
         h1{font-size:16px;text-align:center;margin:0 0 4px;}
@@ -200,16 +201,16 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
         .foot{text-align:center;font-size:11px;margin-top:8px;}
       </style></head><body>
       <h1>Lovely Tech POS</h1>
-      <div class="meta">Invoice: ${detail.invoice_no}<br/>${new Date(detail.sale_datetime).toLocaleString()}</div>
+      <div class="meta">Invoice: ${escapeHtml(detail.invoice_no)}<br/>${new Date(detail.sale_datetime).toLocaleString()}</div>
       <div class="divider"></div>
       ${lines.map((l) => `
         <div class="line">
-          <div>${l.description || l.item_code || ''}</div>
-          <div class="row"><span>${l.quantity} × Rs. ${l.unit_price}</span><span>Rs. ${l.final_total}</span></div>
+          <div>${escapeHtml(l.description || l.item_code || '')}</div>
+          <div class="row"><span>${escapeHtml(l.quantity)} × Rs. ${escapeHtml(l.unit_price)}</span><span>Rs. ${escapeHtml(l.final_total)}</span></div>
         </div>
       `).join('')}
       <div class="divider"></div>
-      <div class="row total"><span>TOTAL</span><span>Rs. ${detail.grand_total}</span></div>
+      <div class="row total"><span>TOTAL</span><span>Rs. ${escapeHtml(detail.grand_total)}</span></div>
       <div class="divider"></div>
       <div class="foot">Thank you for shopping at Lovely Tech!</div>
       <script>window.onload = function(){ window.print(); };</script>

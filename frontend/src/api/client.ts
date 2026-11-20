@@ -4,6 +4,24 @@ let _resolvedBaseUrl: string | null = null;
 let _initPromise: Promise<string> | null = null;
 let _initError: Error | null = null;
 
+// H16 — keep the bearer token in memory; sessionStorage is only a page-reload fallback.
+let _token: string | null = null;
+
+function readStoredToken(): string | null {
+  if (_token !== null) return _token;
+  try {
+    const stored = sessionStorage.getItem('ltpos_token');
+    if (stored) _token = stored;
+  } catch { /* storage unavailable */ }
+  return _token;
+}
+
+function clearStoredToken(): void {
+  _token = null;
+  try { sessionStorage.removeItem('ltpos_token'); } catch { /* storage unavailable */ }
+  localStorage.removeItem('ltpos_token');
+}
+
 // Chunk 13b — CLIENT mode: business APIs must go to remote server
 let _machineInfoCache: { role: string; serverUrl: string | null } | null = null;
 
@@ -155,7 +173,7 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
   const { timeoutMs = REQUEST_TIMEOUT_MS, skipAuthLogout = false, ...fetchOptions } = options;
   const baseUrl = await resolveBaseUrlForPath(path);
   assertServerConfigured(baseUrl);
-  const token = localStorage.getItem('ltpos_token');
+  const token = readStoredToken();
   const headers = new Headers(fetchOptions.headers);
   const isFormData = fetchOptions.body instanceof FormData;
   if (fetchOptions.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
@@ -173,7 +191,7 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
       }
     }
     if (res.status === 401 && !skipAuthLogout) {
-      localStorage.removeItem('ltpos_token');
+      clearStoredToken();
       localStorage.removeItem('ltpos_user');
       window.dispatchEvent(new CustomEvent('ltpos:session-expired'));
     }
@@ -203,7 +221,9 @@ export async function login(username: string, password: string): Promise<LoginRe
   if (!result || !result.access_token || typeof result.role !== 'string') {
     throw new Error('Login reply was incomplete. Check the server address and that client/server versions match.');
   }
-  localStorage.setItem('ltpos_token', result.access_token);
+  _token = result.access_token;
+  sessionStorage.setItem('ltpos_token', result.access_token);
+  localStorage.removeItem('ltpos_token');
   // L2: never duplicate the bearer token inside the cached user object.
   localStorage.setItem('ltpos_user', JSON.stringify({ ...result, access_token: '' }));
   return result;
@@ -213,13 +233,16 @@ export async function serverLogout(): Promise<void> {
   try { await api('/auth/logout', {method:'POST'}); } finally { logout(); }
 }
 
-export function logout() { localStorage.removeItem('ltpos_token'); localStorage.removeItem('ltpos_user'); }
+export function logout() {
+  clearStoredToken();
+  localStorage.removeItem('ltpos_user');
+}
 export function currentUser(): LoginResponse | null {
   try {
     const raw = localStorage.getItem('ltpos_user');
     if (!raw) return null;
     const u = JSON.parse(raw);
-    if (u && typeof u.role === 'string' && typeof u.username === 'string' && localStorage.getItem('ltpos_token')) return u as LoginResponse;
+    if (u && typeof u.role === 'string' && typeof u.username === 'string' && readStoredToken()) return u as LoginResponse;
   } catch { /* corrupt session */ }
   logout();
   return null;

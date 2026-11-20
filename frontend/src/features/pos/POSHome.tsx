@@ -13,6 +13,7 @@ import { HomeDashboard } from '../home/HomeDashboard';
 import { SalesHistory } from '../sales/SalesHistory';
 import { UserManagement } from '../users/UserManagement';
 import { moneyInputProps, intInputProps, signedIntInputProps } from '../../utils/numberInput';
+import { escapeHtml } from '../../utils/escapeHtml';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
 import { useShopProfile } from '../settings/ShopContext';
@@ -62,7 +63,7 @@ function buildGenericReprintHTML(r: any): string {
   const no = String(r.document_no || '—');
   const dateStr = r.document_datetime ? new Date(r.document_datetime).toLocaleString() : '—';
   const status = String(r.status || '—');
-  return `<!DOCTYPE html><html><head><title>Reprint ${no}</title>
+  return `<!DOCTYPE html><html><head><title>Reprint ${escapeHtml(no)}</title>
     <style>
       body{font-family:'Consolas','Menlo',monospace;padding:20px;font-size:13px;color:#000;}
       h1{font-size:16px;text-align:center;margin:0 0 12px;}
@@ -71,16 +72,16 @@ function buildGenericReprintHTML(r: any): string {
       .divider{border-top:1px dashed #000;margin:12px 0;}
       .foot{text-align:center;font-size:10px;color:#888;margin-top:16px;line-height:1.4;}
     </style></head><body>
-    <h1>Reprint — ${title}</h1>
+    <h1>Reprint — ${escapeHtml(title)}</h1>
     <div class="divider"></div>
     <div class="label">Document No</div>
-    <div class="value">${no}</div>
+    <div class="value">${escapeHtml(no)}</div>
     <div class="label">Type</div>
-    <div class="value">${title}</div>
+    <div class="value">${escapeHtml(title)}</div>
     <div class="label">Date</div>
-    <div class="value">${dateStr}</div>
+    <div class="value">${escapeHtml(dateStr)}</div>
     <div class="label">Status</div>
-    <div class="value">${status}</div>
+    <div class="value">${escapeHtml(status)}</div>
     <div class="divider"></div>
     <div class="foot">This is a reprint record.<br/>For full document copy, please contact admin.</div>
     <script>window.onload = function(){ window.print(); };</script>
@@ -95,7 +96,7 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
   const phone = fullShop?.phone || '';
   const email = fullShop?.email || '';
   const invoiceNo = sale?.invoice_no || '-';
-  return `<!DOCTYPE html><html><head><title>Receipt ${invoiceNo}</title>
+  return `<!DOCTYPE html><html><head><title>Receipt ${escapeHtml(invoiceNo)}</title>
     <style>
       body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
       h1{font-size:16px;text-align:center;margin:0 0 4px;}
@@ -109,21 +110,21 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
       .vendor{text-align:center;font-size:9px;color:#888;margin-top:6px;letter-spacing:0.02em;}
       .logo{display:block;margin:0 auto 4px;max-width:80px;max-height:80px;object-fit:contain;}
     </style></head><body>
-    ${logoUrl ? `<img src="${logoUrl}" class="logo" />` : ''}
-    <h1>${shopName}</h1>
-    ${(address || phone || email) ? `<div class="contact">${address ? address + '<br/>' : ''}${phone ? 'Tel: ' + phone : ''}${phone && email ? ' · ' : ''}${email || ''}</div>` : ''}
-    <div class="meta">Invoice: ${invoiceNo}<br/>${new Date().toLocaleString()}</div>
+    ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" class="logo" />` : ''}
+    <h1>${escapeHtml(shopName)}</h1>
+    ${(address || phone || email) ? `<div class="contact">${address ? escapeHtml(address) + '<br/>' : ''}${phone ? 'Tel: ' + escapeHtml(phone) : ''}${phone && email ? ' · ' : ''}${escapeHtml(email)}</div>` : ''}
+    <div class="meta">Invoice: ${escapeHtml(invoiceNo)}<br/>${new Date().toLocaleString()}</div>
     <div class="divider"></div>
     ${lines.map((l: any) => `
       <div class="line">
-        <div>${l.description || l.item_code || ''}</div>
-        <div class="row"><span>${l.quantity || '1'} × Rs. ${l.unit_price || '0'}</span><span>Rs. ${l.final_total || l.line_total || l.unit_price || '0'}</span></div>
+        <div>${escapeHtml(l.description || l.item_code || '')}</div>
+        <div class="row"><span>${escapeHtml(l.quantity || '1')} × Rs. ${escapeHtml(l.unit_price || '0')}</span><span>Rs. ${escapeHtml(l.final_total || l.line_total || l.unit_price || '0')}</span></div>
       </div>
     `).join('')}
     <div class="divider"></div>
-    <div class="row total"><span>TOTAL</span><span>Rs. ${sale?.grand_total || '0'}</span></div>
+    <div class="row total"><span>TOTAL</span><span>Rs. ${escapeHtml(sale?.grand_total || '0')}</span></div>
     <div class="divider"></div>
-    <div class="foot">Thank you for shopping at ${shopName}!</div>
+    <div class="foot">Thank you for shopping at ${escapeHtml(shopName)}!</div>
     <div class="vendor">Software by Lovely Tech</div>
     <script>window.onload = function(){ window.print(); };</script>
     </body></html>`;
