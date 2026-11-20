@@ -29,37 +29,52 @@ export function invalidateMachineInfoCache() {
   _machineInfoCache = null;
 }
 
+// M14 — identity lookup must not hang business API calls on a stalled LAN.
+const MACHINE_IDENTITY_TIMEOUT_MS = Number(import.meta.env.VITE_IDENTITY_TIMEOUT_MS ?? 3000);
+
 async function getLocalMachineInfo(): Promise<{ role: string; serverUrl: string | null }> {
   if (_machineInfoCache) return _machineInfoCache;
   const localBase = await resolveBaseUrl();
-  let res: Response;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), MACHINE_IDENTITY_TIMEOUT_MS);
   try {
-    res = await fetch(`${localBase}/machine/identity`, { cache: 'no-store' });
-  } catch {
-    // H14 — never assume SERVER on a failed identity lookup: a CLIENT laptop
-    // would silently write to its own local database.
-    throw new Error('Cannot reach server — check LAN');
+    let res: Response;
+    try {
+      res = await fetch(`${localBase}/machine/identity`, { cache: 'no-store', signal: controller.signal });
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new Error('Cannot reach server — machine identity check timed out. Check LAN');
+      }
+      // H14 — never assume SERVER on a failed identity lookup: a CLIENT laptop
+      // would silently write to its own local database.
+      throw new Error('Cannot reach server — check LAN');
+    }
+    if (!res.ok) {
+      throw new Error(`Cannot reach server — machine identity check failed (HTTP ${res.status})`);
+    }
+    let data: any;
+    try {
+      data = await res.json();
+    } catch {
+      if (controller.signal.aborted) {
+        throw new Error('Cannot reach server — machine identity check timed out. Check LAN');
+      }
+      throw new Error('Cannot reach server — machine identity reply was not valid JSON');
+    }
+    const role = String(data.machine_role || data.role || '').toUpperCase();
+    if (role !== 'SERVER' && role !== 'CLIENT') {
+      throw new Error('Cannot reach server — machine identity reply was invalid');
+    }
+    const serverUrl = data.server_url ? String(data.server_url).replace(/\/$/, '') : null;
+    if (role === 'CLIENT' && !serverUrl) {
+      throw new Error('Cannot reach server — this CLIENT machine has no server URL configured');
+    }
+    // Only a confirmed 200 with a valid role is cached.
+    _machineInfoCache = { role, serverUrl };
+    return _machineInfoCache;
+  } finally {
+    window.clearTimeout(timer);
   }
-  if (!res.ok) {
-    throw new Error(`Cannot reach server — machine identity check failed (HTTP ${res.status})`);
-  }
-  let data: any;
-  try {
-    data = await res.json();
-  } catch {
-    throw new Error('Cannot reach server — machine identity reply was not valid JSON');
-  }
-  const role = String(data.machine_role || data.role || '').toUpperCase();
-  if (role !== 'SERVER' && role !== 'CLIENT') {
-    throw new Error('Cannot reach server — machine identity reply was invalid');
-  }
-  const serverUrl = data.server_url ? String(data.server_url).replace(/\/$/, '') : null;
-  if (role === 'CLIENT' && !serverUrl) {
-    throw new Error('Cannot reach server — this CLIENT machine has no server URL configured');
-  }
-  // Only a confirmed 200 with a valid role is cached.
-  _machineInfoCache = { role, serverUrl };
-  return _machineInfoCache;
 }
 
 function assertServerConfigured(baseUrl: string) {
