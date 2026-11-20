@@ -192,10 +192,33 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
   const isFormData = fetchOptions.body instanceof FormData;
   if (fetchOptions.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  const controller = fetchOptions.signal ? null : new AbortController();
-  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+  // H17 — the timeout is always armed, even when the caller supplies a signal.
+  const timeoutController = new AbortController();
+  const timer = window.setTimeout(() => timeoutController.abort(), timeoutMs);
+  const callerSignal = fetchOptions.signal;
+  let signal: AbortSignal = timeoutController.signal;
+  let detachAbortListeners: (() => void) | null = null;
+  if (callerSignal) {
+    if (typeof AbortSignal.any === 'function') {
+      signal = AbortSignal.any([callerSignal, timeoutController.signal]);
+    } else {
+      const merged = new AbortController();
+      const abortMerged = () => merged.abort();
+      if (callerSignal.aborted || timeoutController.signal.aborted) {
+        merged.abort();
+      } else {
+        callerSignal.addEventListener('abort', abortMerged, { once: true });
+        timeoutController.signal.addEventListener('abort', abortMerged, { once: true });
+        detachAbortListeners = () => {
+          callerSignal.removeEventListener('abort', abortMerged);
+          timeoutController.signal.removeEventListener('abort', abortMerged);
+        };
+      }
+      signal = merged.signal;
+    }
+  }
   try {
-    const res = await fetch(`${baseUrl}${path}`, {...fetchOptions, headers, signal: fetchOptions.signal ?? controller?.signal});
+    const res = await fetch(`${baseUrl}${path}`, {...fetchOptions, headers, signal});
     const text = await res.text();
     let body: any = {};
     if (text) {
@@ -212,11 +235,16 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
     if (!res.ok) throw new Error(errorText(body?.detail, `HTTP ${res.status}`));
     return body as T;
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw new Error('Request timed out. Please check the LAN connection and try again.');
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      // Distinguish our timeout from a caller-initiated abort.
+      if (timeoutController.signal.aborted) throw new Error('Request timed out. Please check the LAN connection and try again.');
+      throw error;
+    }
     if (error instanceof TypeError) throw new Error(`Cannot reach the POS server at ${baseUrl}. Check the server laptop is on, the IP is correct and the firewall allows port 8000.`);
     throw error;
   } finally {
-    if (timer !== null) window.clearTimeout(timer);
+    window.clearTimeout(timer);
+    detachAbortListeners?.();
   }
 }
 
