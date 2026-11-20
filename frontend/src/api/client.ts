@@ -24,16 +24,18 @@ function clearStoredToken(): void {
 
 // Chunk 13b — CLIENT mode: business APIs must go to remote server
 let _machineInfoCache: { role: string; serverUrl: string | null } | null = null;
+// M15 — cache the in-flight lookup so concurrent callers share one request.
+let _machineInfoPromise: Promise<{ role: string; serverUrl: string | null }> | null = null;
 
 export function invalidateMachineInfoCache() {
   _machineInfoCache = null;
+  _machineInfoPromise = null;
 }
 
 // M14 — identity lookup must not hang business API calls on a stalled LAN.
 const MACHINE_IDENTITY_TIMEOUT_MS = Number(import.meta.env.VITE_IDENTITY_TIMEOUT_MS ?? 3000);
 
-async function getLocalMachineInfo(): Promise<{ role: string; serverUrl: string | null }> {
-  if (_machineInfoCache) return _machineInfoCache;
+async function loadLocalMachineInfo(): Promise<{ role: string; serverUrl: string | null }> {
   const localBase = await resolveBaseUrl();
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), MACHINE_IDENTITY_TIMEOUT_MS);
@@ -69,12 +71,26 @@ async function getLocalMachineInfo(): Promise<{ role: string; serverUrl: string 
     if (role === 'CLIENT' && !serverUrl) {
       throw new Error('Cannot reach server — this CLIENT machine has no server URL configured');
     }
-    // Only a confirmed 200 with a valid role is cached.
-    _machineInfoCache = { role, serverUrl };
-    return _machineInfoCache;
+    // Only a confirmed 200 with a valid role is cached (by the caller).
+    return { role, serverUrl };
   } finally {
     window.clearTimeout(timer);
   }
+}
+
+async function getLocalMachineInfo(): Promise<{ role: string; serverUrl: string | null }> {
+  if (_machineInfoCache) return _machineInfoCache;
+  if (_machineInfoPromise) return _machineInfoPromise;
+  const promise = loadLocalMachineInfo()
+    .then((info) => {
+      if (_machineInfoPromise === promise) _machineInfoCache = info;
+      return info;
+    })
+    .finally(() => {
+      if (_machineInfoPromise === promise) _machineInfoPromise = null;
+    });
+  _machineInfoPromise = promise;
+  return promise;
 }
 
 function assertServerConfigured(baseUrl: string) {
@@ -156,7 +172,7 @@ export async function ensureApiBaseResolved(): Promise<string> {
 export async function resetApiBaseResolution(): Promise<void> {
   _resolvedBaseUrl = null;
   _initError = null;
-  _machineInfoCache = null;
+  invalidateMachineInfoCache();
   if (_initPromise) {
     await _initPromise.catch(() => {});
   }
@@ -175,7 +191,7 @@ export async function configureManualServer(input: string): Promise<{ baseUrl: s
   _resolvedBaseUrl = baseUrl;
   _initError = null;
   // The manual server may have a different machine role; re-read identity.
-  _machineInfoCache = null;
+  invalidateMachineInfoCache();
   return { baseUrl, identity: verified.identity };
 }
 
