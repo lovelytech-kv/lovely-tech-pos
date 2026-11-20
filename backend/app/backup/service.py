@@ -188,15 +188,36 @@ def create_postgres_dump(*, pg_dump: str, database_url: str, destination: Path,
         )
 
 
+def _terminate_other_connections(*, psql: str, database_url: str) -> None:
+    """H13 — drop other backends before pg_restore --clean.
+
+    Best-effort: a backend may exit between listing and termination, and a
+    cleanup failure must not abort an otherwise valid restore attempt.
+    """
+    subprocess.run(
+        [psql, "--dbname", database_url, "--command",
+         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+         "WHERE datname = current_database() AND pid <> pg_backend_pid();"],
+        env=os.environ.copy(), check=False, capture_output=True, text=True, timeout=60,
+    )
+
+
 def restore_postgres_backup(*, pg_dump: str, pg_restore: str, psql: str,
                             database_url: str, encrypted_backup: Path,
-                            safety_output: Path, secret: str) -> Path:
-    database_url = libpq_url(database_url)
+                            safety_output: Path, secret: str,
+                            engine=None) -> Path:
     """Restore a verified Lovely Tech encrypted custom-format dump.
 
     Explicit operator action. Safety backup is created and verified
     before pg_restore is allowed to replace the database.
+
+    H13 — when the caller passes its SQLAlchemy Engine, the pool is disposed
+    and other database backends are terminated before ``pg_restore --clean``
+    so idle pooled connections cannot hold locks on objects being dropped.
+    The engine is disposed again after restore so the next request opens a
+    fresh session against the restored database.
     """
+    database_url = libpq_url(database_url)
     if not encrypted_backup.exists():
         raise BackupError("Backup file not found")
     meta, raw_dump = decrypt_backup(encrypted_backup.read_bytes(), secret=secret)
@@ -218,6 +239,10 @@ def restore_postgres_backup(*, pg_dump: str, pg_restore: str, psql: str,
         )
         restore_raw = Path(td) / "restore.dump"
         restore_raw.write_bytes(raw_dump)
+        # H13 — release the pool and terminate other backends before --clean.
+        if engine is not None:
+            engine.dispose()
+        _terminate_other_connections(psql=psql, database_url=database_url)
         subprocess.run(
             [pg_restore, "--clean", "--if-exists", "--no-owner", "--no-privileges",
              "--exit-on-error", "--dbname", database_url, str(restore_raw)],
@@ -227,6 +252,10 @@ def restore_postgres_backup(*, pg_dump: str, pg_restore: str, psql: str,
             [psql, "--dbname", database_url, "--command", "SELECT 1;"],
             env=os.environ.copy(), check=True, capture_output=True, text=True, timeout=60,
         )
+        # Drop any connection opened during the restore window so callers
+        # reconnect to the restored database, never to pre-restore state.
+        if engine is not None:
+            engine.dispose()
     return safety_output
 
 

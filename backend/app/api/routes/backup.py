@@ -128,11 +128,14 @@ def restore(backup_id:str, confirm:bool=False, admin_password:str|None=None, use
     settings=__import__('app.core.config',fromlist=['settings']).settings
     event=RestoreEvent(branch_id=user.branch_id,backup_point_id=point.id,actor_user_id=user.id,status='STARTED',reason='Admin restore started')
     db.add(event); db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='RESTORE_STARTED',entity_type='BACKUP_POINT',entity_id=point.id,timestamp=datetime.now(timezone.utc),after_json={'status':'STARTED'},source_transaction_id=point.id)); db.commit()
+    # H13 — capture the Engine before closing the request session so the pool
+    # can be disposed before pg_restore --clean touches the live database.
+    engine = db.get_bind()
     db.close()
     try:
         backup_path=Path(point.storage_target)/point.filename
         safety=Path(settings.backup_root)/f'pre-restore-{datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")}.ltbak'
-        restore_postgres_backup(pg_dump=settings.pg_dump_bin,pg_restore=settings.pg_restore_bin,psql=settings.psql_bin,database_url=settings.database_url,encrypted_backup=backup_path,safety_output=safety,secret=settings.secret_key)
+        restore_postgres_backup(pg_dump=settings.pg_dump_bin,pg_restore=settings.pg_restore_bin,psql=settings.psql_bin,database_url=settings.database_url,encrypted_backup=backup_path,safety_output=safety,secret=settings.secret_key,engine=engine)
         journal=Path(settings.backup_root)/'restore-journal.log'; journal.parent.mkdir(parents=True,exist_ok=True); journal.open('a',encoding='utf-8').write(f"{datetime.now(timezone.utc).isoformat()} RESTORE_SUCCEEDED backup={backup_id} actor={user.id} safety={safety}\n")
         return {'backup_id':str(point.id),'status':'SUCCEEDED','safety_backup':str(safety)}
     except Exception as exc:

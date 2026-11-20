@@ -416,6 +416,9 @@ async def restore_from_file(
     journal = Path(settings.backup_root) / "restore-journal.log"
     journal.parent.mkdir(parents=True, exist_ok=True)
 
+    # H13 — capture the Engine before closing the request session so the pool
+    # can be disposed before pg_restore --clean touches the live database.
+    engine = db.get_bind()
     db.close()
 
     try:
@@ -427,6 +430,7 @@ async def restore_from_file(
             encrypted_backup=dest,
             safety_output=safety,
             secret=settings.secret_key,
+            engine=engine,
         )
     except Exception as exc:
         with journal.open('a', encoding='utf-8') as f:
