@@ -81,6 +81,9 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
 
   const modal = useModal();
   const debounceRef = useRef<number | null>(null);
+  // M12 — abort superseded list requests and ignore stale responses.
+  const salesRequestSeq = useRef(0);
+  const salesAbortRef = useRef<AbortController | null>(null);
 
   // Load cashiers dropdown (admin only)
   useEffect(() => {
@@ -97,6 +100,10 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
 
   const fetchSales = useCallback(
     async (append = false) => {
+      const seq = ++salesRequestSeq.current;
+      salesAbortRef.current?.abort();
+      const controller = new AbortController();
+      salesAbortRef.current = controller;
       try {
         if (append) setLoadingMore(true);
         else setLoading(true);
@@ -111,16 +118,21 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
         params.set('offset', String(append ? sales.length : 0));
         const result = await api<{ items: SaleListItem[]; total: number; has_more: boolean }>(
           `/sales?${params.toString()}`,
+          { signal: controller.signal },
         );
+        if (seq !== salesRequestSeq.current) return;
         if (append) setSales((prev) => [...prev, ...result.items]);
         else setSales(result.items);
         setTotal(result.total);
         setHasMore(result.has_more);
       } catch (e) {
+        if (seq !== salesRequestSeq.current || controller.signal.aborted) return;
         onError((e as Error).message);
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (seq === salesRequestSeq.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
