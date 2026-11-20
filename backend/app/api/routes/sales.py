@@ -201,6 +201,50 @@ def list_sales(
     }
 
 
+def _approval_amount(value) -> Decimal:
+    try:
+        return Decimal(str(value)).quantize(Decimal("0.01"))
+    except Exception:
+        return Decimal("0")
+
+
+def _approval_matches_sale(approval: ApprovalRequest, payload: SaleIn, user: User) -> bool:
+    """H8 — approval must belong to this cashier and match the approved sale snapshot."""
+    data = approval.payload_json or {}
+    if str(approval.requester_user_id) != str(user.id):
+        return False
+    if str(data.get("cashier_id") or "") != str(user.id):
+        return False
+
+    snapshot = data.get("sale") or {}
+    snapshot_customer = snapshot.get("customer_id")
+    payload_customer = payload.customer_id
+    if (str(snapshot_customer) if snapshot_customer else None) != (
+        str(payload_customer) if payload_customer else None
+    ):
+        return False
+
+    def line_key(line: dict) -> tuple:
+        return (
+            str(line.get("item_id") or ""),
+            _approval_amount(line.get("quantity")),
+            _approval_amount(line.get("unit_price")),
+            _approval_amount(line.get("discount")),
+        )
+
+    approved_lines = [line_key(x) for x in (snapshot.get("lines") or [])]
+    sale_lines = [line_key(x.model_dump()) for x in payload.lines]
+    if sorted(approved_lines) != sorted(sale_lines):
+        return False
+
+    approved_discount = sum(
+        (_approval_amount(x.get("discount")) for x in (snapshot.get("lines") or [])),
+        Decimal("0"),
+    )
+    sale_discount = sum((_approval_amount(x.discount) for x in payload.lines), Decimal("0"))
+    return _approval_amount(approved_discount) == _approval_amount(sale_discount)
+
+
 @router.post("", response_model=SaleOut)
 def create_sale(payload: SaleIn, user: User = Depends(require_permission("SALE_CREATE")), db: Session = Depends(db_session)):
     if payload.credit_sale and user.role.code.upper() != "ADMIN":
@@ -212,15 +256,32 @@ def create_sale(payload: SaleIn, user: User = Depends(require_permission("SALE_C
             raise HTTPException(400, "Sale date/time cannot be in the future")
         if sale_datetime.date() != now.date() and user.role.code.upper() != "ADMIN":
             raise HTTPException(403, "Backdated or missed sale entry is Admin-only")
+    approval: ApprovalRequest | None = None
     approval_ok = False
     if payload.admin_discount_approval_id:
-        approval = db.scalar(select(ApprovalRequest).where(ApprovalRequest.id == payload.admin_discount_approval_id, ApprovalRequest.branch_id == user.branch_id, ApprovalRequest.action_type == "DISCOUNT_OVERRIDE", ApprovalRequest.status == "APPROVED"))
-        if not approval:
-            raise HTTPException(400, "Approved discount authorization not found")
+        approval = db.scalar(
+            select(ApprovalRequest)
+            .where(
+                ApprovalRequest.id == payload.admin_discount_approval_id,
+                ApprovalRequest.branch_id == user.branch_id,
+                ApprovalRequest.action_type == "DISCOUNT_OVERRIDE",
+            )
+            .with_for_update()
+        )
+        if (
+            approval is None
+            or approval.status != "APPROVED"
+            or not _approval_matches_sale(approval, payload, user)
+        ):
+            raise HTTPException(422, "Approval is not valid for this sale")
         approval_ok = True
     req = SaleRequest(branch_id=user.branch_id, cashier_id=user.id, lines=tuple(SaleLineInput(**x.model_dump()) for x in payload.lines), payments=tuple(PaymentInput(**x.model_dump()) for x in payload.payments), document_type=payload.document_type, manual_invoice_ref=payload.manual_invoice_ref, customer_id=payload.customer_id, sale_datetime=sale_datetime, idempotency_key=payload.idempotency_key, credit_sale=payload.credit_sale, cash_received=payload.cash_received, discount_limit_percent=user.discount_limit_percent if user.role.code.upper() != "ADMIN" else None, admin_discount_approved=approval_ok or user.role.code.upper() == "ADMIN")
     try:
         result = SaleService(db).complete(req, version=payload.version)
+        if approval is not None and not ApprovalService(db).consume_for_sale(
+            approval.id, branch_id=user.branch_id, sale_id=result.sale_id
+        ):
+            raise HTTPException(422, "Approval is not valid for this sale")
         db.commit()
     except SaleValidationError as exc:
         db.rollback(); raise HTTPException(400, str(exc))

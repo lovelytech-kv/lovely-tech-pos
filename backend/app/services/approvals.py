@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid, secrets
 from datetime import datetime, timezone
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from app.models.security import ApprovalRequest, AuditLog
 class ApprovalError(ValueError): pass
@@ -18,3 +18,16 @@ class ApprovalService:
         row.status='APPROVED' if approve else 'REJECTED'; row.version += 1; row.reviewer_user_id=reviewer_user_id; row.reviewed_at=datetime.now(timezone.utc); row.reject_reason=None if approve else (reject_reason or 'Rejected')
         self.session.add(AuditLog(branch_id=branch_id,actor_user_id=reviewer_user_id,action_type='APPROVAL_REVIEWED',entity_type='APPROVAL_REQUEST',entity_id=row.id,timestamp=datetime.now(timezone.utc),after_json={'status':row.status,'action_type':row.action_type},source_transaction_id=row.source_transaction_id))
         self.session.flush(); return row
+    def consume_for_sale(self, approval_id, *, branch_id, sale_id) -> bool:
+        """H8 — atomically mark a discount approval single-use and bind it to one sale."""
+        result = self.session.execute(
+            update(ApprovalRequest)
+            .where(
+                ApprovalRequest.id == approval_id,
+                ApprovalRequest.branch_id == branch_id,
+                ApprovalRequest.action_type == 'DISCOUNT_OVERRIDE',
+                ApprovalRequest.status == 'APPROVED',
+            )
+            .values(status='CONSUMED', source_transaction_id=sale_id)
+        )
+        return result.rowcount == 1
