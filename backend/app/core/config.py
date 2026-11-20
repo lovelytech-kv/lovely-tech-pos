@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     session_absolute_timeout_cashier_hours: int = 12
     critical_reauth_required: bool = True
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,tauri://localhost,http://tauri.localhost"
+    # H7 — CLIENT machine join posts admin credentials. Plain HTTP is an accepted risk
+    # only on a physically trusted shop LAN; set LTPOS_TRUST_LAN=false to require HTTPS.
+    ltpos_trust_lan: bool = True
     backup_root: str = "./backups"
     pg_dump_bin: str = "pg_dump"
     pg_restore_bin: str = "pg_restore"
