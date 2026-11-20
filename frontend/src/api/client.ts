@@ -32,18 +32,33 @@ export function invalidateMachineInfoCache() {
 async function getLocalMachineInfo(): Promise<{ role: string; serverUrl: string | null }> {
   if (_machineInfoCache) return _machineInfoCache;
   const localBase = await resolveBaseUrl();
+  let res: Response;
   try {
-    const res = await fetch(`${localBase}/machine/identity`, { cache: 'no-store' });
-    if (res.ok) {
-      const data: any = await res.json();
-      _machineInfoCache = {
-        role: String(data.machine_role || data.role || 'SERVER').toUpperCase(),
-        serverUrl: data.server_url ? String(data.server_url).replace(/\/$/, '') : null,
-      };
-      return _machineInfoCache;
-    }
-  } catch { /* fallback to SERVER */ }
-  _machineInfoCache = { role: 'SERVER', serverUrl: null };
+    res = await fetch(`${localBase}/machine/identity`, { cache: 'no-store' });
+  } catch {
+    // H14 — never assume SERVER on a failed identity lookup: a CLIENT laptop
+    // would silently write to its own local database.
+    throw new Error('Cannot reach server — check LAN');
+  }
+  if (!res.ok) {
+    throw new Error(`Cannot reach server — machine identity check failed (HTTP ${res.status})`);
+  }
+  let data: any;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error('Cannot reach server — machine identity reply was not valid JSON');
+  }
+  const role = String(data.machine_role || data.role || '').toUpperCase();
+  if (role !== 'SERVER' && role !== 'CLIENT') {
+    throw new Error('Cannot reach server — machine identity reply was invalid');
+  }
+  const serverUrl = data.server_url ? String(data.server_url).replace(/\/$/, '') : null;
+  if (role === 'CLIENT' && !serverUrl) {
+    throw new Error('Cannot reach server — this CLIENT machine has no server URL configured');
+  }
+  // Only a confirmed 200 with a valid role is cached.
+  _machineInfoCache = { role, serverUrl };
   return _machineInfoCache;
 }
 
@@ -95,17 +110,16 @@ async function resolveBaseUrlForPath(path: string): Promise<string> {
 
   if (isLocalOnly) return localBase;
 
-  // All other paths → if CLIENT, send to remote server URL
-  try {
-    const info = await getLocalMachineInfo();
-    if (info.role === 'CLIENT' && info.serverUrl) {
-      const remote = info.serverUrl.replace(/\/$/, '');
-      // DB stores server_url WITHOUT /api/v1 (e.g. http://host:8001)
-      // Local base uses /api/v1 (dev proxy or http://host:8000/api/v1)
-      // So we must append it for the remote path too.
-      return remote.endsWith('/api/v1') ? remote : `${remote}/api/v1`;
-    }
-  } catch { /* fallback */ }
+  // All other paths → if CLIENT, send to remote server URL.
+  // H14 — identity failures propagate: never fall back to the local backend.
+  const info = await getLocalMachineInfo();
+  if (info.role === 'CLIENT' && info.serverUrl) {
+    const remote = info.serverUrl.replace(/\/$/, '');
+    // DB stores server_url WITHOUT /api/v1 (e.g. http://host:8001)
+    // Local base uses /api/v1 (dev proxy or http://host:8000/api/v1)
+    // So we must append it for the remote path too.
+    return remote.endsWith('/api/v1') ? remote : `${remote}/api/v1`;
+  }
 
   return localBase;
 }
