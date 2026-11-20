@@ -1,4 +1,4 @@
-import { getApiBaseUrl, verifyManualServer, getManualOverride, clearManualOverride } from '../services/discovery';
+import { getApiBaseUrl, verifyManualServer, getManualOverride, setManualOverride, clearManualOverride } from '../services/discovery';
 
 let _resolvedBaseUrl: string | null = null;
 let _initPromise: Promise<string> | null = null;
@@ -155,8 +155,12 @@ export async function resetApiBaseResolution(): Promise<void> {
 export async function configureManualServer(input: string): Promise<{ baseUrl: string; identity: any }> {
   const verified = await verifyManualServer(input);
   const baseUrl = verified.baseUrl.replace(/\/$/, '');
+  // M8 — persist the verified override so it survives an app restart.
+  setManualOverride(baseUrl);
   _resolvedBaseUrl = baseUrl;
   _initError = null;
+  // The manual server may have a different machine role; re-read identity.
+  _machineInfoCache = null;
   return { baseUrl, identity: verified.identity };
 }
 
