@@ -89,6 +89,7 @@ class PermissionOut(BaseModel):
     description: str | None
 
 class RepairCreateIn(BaseModel):
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
     device_brand: str | None = None; model: str | None = None; given_accessories: str | None = None
     special_note: str | None = None; customer_id: UUID | None = None; customer_name: str | None = None
     contact_no: str | None = None; reported_fault: str | None = None; estimated_amount: Decimal | None = Field(default=None, ge=0)

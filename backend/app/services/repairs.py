@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.fifo.engine import FifoEngine
 from app.models.inventory import DamageLossRecord, FifoAllocation, PurchaseLot, StockMovement
 from app.models.sales import Repair, RepairPart, RepairPayment, RepairWarranty
-from app.models.security import AuditLog, DocumentEvent
+from app.models.security import AuditLog, DocumentEvent, IdempotencyKey
 from app.services.numbering import NumberingService
 from app.services.warranty_calculator import calculate_expiry, WarrantyCalculationError
 
@@ -36,6 +39,14 @@ class RepairCreateRequest:
     estimated_amount: Decimal | None = None
     warranty_period: str | None = None
     date_in: datetime | None = None
+    idempotency_key: str | None = None
+
+@dataclass(frozen=True)
+class RepairCreateResult:
+    repair_id: uuid.UUID
+    repair_no: str
+    status: str
+    replayed: bool = False
 
 @dataclass(frozen=True)
 class RepairPartInput:
@@ -85,7 +96,79 @@ class RepairService:
     def money(v: Decimal) -> Decimal:
         return Decimal(v).quantize(CENT, rounding=ROUND_HALF_UP)
 
-    def create(self, req: RepairCreateRequest) -> Repair:
+    @staticmethod
+    def canonical_request_hash(request: RepairCreateRequest) -> str:
+        payload = {
+            "branch_id": str(request.branch_id),
+            "actor_user_id": str(request.actor_user_id),
+            "device_brand": request.device_brand,
+            "model": request.model,
+            "given_accessories": request.given_accessories,
+            "special_note": request.special_note,
+            "customer_id": str(request.customer_id) if request.customer_id else None,
+            "customer_name": request.customer_name,
+            "contact_no": request.contact_no,
+            "reported_fault": request.reported_fault,
+            "estimated_amount": str(request.estimated_amount) if request.estimated_amount is not None else None,
+            "warranty_period": request.warranty_period,
+            "date_in": request.date_in.isoformat() if request.date_in else None,
+        }
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(raw).hexdigest()
+
+    def _get_idempotent_replay(self, request: RepairCreateRequest, request_hash: str) -> RepairCreateResult | None:
+        if not request.idempotency_key:
+            return None
+        key = self.session.scalar(
+            select(IdempotencyKey).where(IdempotencyKey.key == request.idempotency_key).with_for_update()
+        )
+        if key is None:
+            return None
+        if key.request_hash != request_hash:
+            raise RepairValidationError("Idempotency key was already used for a different request")
+        if not key.completed_at or not key.response_json:
+            raise RepairValidationError("The same request is currently being completed; retry after transaction finishes")
+        response = key.response_json
+        return RepairCreateResult(
+            repair_id=uuid.UUID(response["repair_id"]),
+            repair_no=response["repair_no"],
+            status=response["status"],
+            replayed=True,
+        )
+
+    def _reserve_idempotency(self, request: RepairCreateRequest, request_hash: str, result: RepairCreateResult) -> None:
+        if not request.idempotency_key:
+            return
+        response = {
+            "repair_id": str(result.repair_id),
+            "repair_no": result.repair_no,
+            "status": result.status,
+        }
+        row = IdempotencyKey(
+            key=request.idempotency_key,
+            user_id=request.actor_user_id,
+            request_hash=request_hash,
+            created_at=datetime.now(timezone.utc),
+            response_json=response,
+            completed_at=datetime.now(timezone.utc),
+        )
+        try:
+            with self.session.begin_nested():
+                self.session.add(row)
+                self.session.flush()
+        except IntegrityError:
+            existing = self.session.scalar(
+                select(IdempotencyKey).where(IdempotencyKey.key == request.idempotency_key).with_for_update()
+            )
+            if existing is None or existing.request_hash != request_hash:
+                raise RepairValidationError("Idempotency key conflict")
+            raise RepairValidationError("Idempotency request has already completed")
+
+    def create(self, req: RepairCreateRequest) -> RepairCreateResult:
+        request_hash = self.canonical_request_hash(req)
+        replay = self._get_idempotent_replay(req, request_hash)
+        if replay is not None:
+            return replay
         now = req.date_in or datetime.now(timezone.utc)
         repair = Repair(
             branch_id=req.branch_id,
@@ -102,7 +185,9 @@ class RepairService:
         self._audit(req.branch_id, req.actor_user_id, "REPAIR_CREATED", repair, now, {"repair_no": repair.repair_no})
         self.session.add(DocumentEvent(document_type="REPAIR", document_id=repair.id, event_type="ORIGINAL", actor_user_id=req.actor_user_id, occurred_at=now, reason="Repair created"))
         self.session.flush()
-        return repair
+        result = RepairCreateResult(repair.id, repair.repair_no, repair.status)
+        self._reserve_idempotency(req, request_hash, result)
+        return result
 
     def set_status(self, repair_id: uuid.UUID, branch_id: uuid.UUID, actor_user_id: uuid.UUID, status: str, *, version: int | None = None, authorized_by: uuid.UUID | None = None) -> Repair:
         if status not in self.STATUSES:

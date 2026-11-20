@@ -51,7 +51,7 @@ def commit_or_400(db, fn):
 @router.post('/repairs', dependencies=[Depends(require_permission('REPAIR_CREATE'))])
 def create_repair(payload: RepairCreateIn, user: User=Depends(require_permission('REPAIR_CREATE')), db: Session=Depends(db_session)):
     r=commit_or_400(db, lambda: RepairService(db).create(RepairCreateRequest(branch_id=user.branch_id,actor_user_id=user.id,**payload.model_dump())))
-    return {'repair_id':str(r.id),'repair_no':r.repair_no,'status':r.status}
+    return {'repair_id':str(r.repair_id),'repair_no':r.repair_no,'status':r.status,'replayed':r.replayed}
 
 @router.post('/repairs/{repair_id}/status', dependencies=[Depends(require_permission('REPAIR_UPDATE'))])
 def repair_status(repair_id:str,payload:RepairStatusIn,user:User=Depends(require_permission('REPAIR_UPDATE')),db:Session=Depends(db_session)):
