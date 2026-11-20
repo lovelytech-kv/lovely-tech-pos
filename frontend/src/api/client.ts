@@ -211,26 +211,16 @@ function errorText(detail: unknown, fallback: string): string {
 
 const REQUEST_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 15000);
 
-export type LoginResponse = {
-  access_token: string; token_type: string; expires_at: string; user_id: string;
-  username: string; display_name: string; role: string; branch_id: string; must_change_password: boolean;
+type AbortScope = {
+  signal: AbortSignal;
+  timedOut: () => boolean;
+  cleanup: () => void;
 };
 
-export type ApiOptions = RequestInit & { timeoutMs?: number; skipAuthLogout?: boolean };
-
-export async function api<T = any>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { timeoutMs = REQUEST_TIMEOUT_MS, skipAuthLogout = false, ...fetchOptions } = options;
-  const baseUrl = await resolveBaseUrlForPath(path);
-  assertServerConfigured(baseUrl);
-  const token = readStoredToken();
-  const headers = new Headers(fetchOptions.headers);
-  const isFormData = fetchOptions.body instanceof FormData;
-  if (fetchOptions.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  // H17 — the timeout is always armed, even when the caller supplies a signal.
+// H17 — the timeout is always armed, even when the caller supplies a signal.
+function createAbortScope(timeoutMs: number, callerSignal?: AbortSignal | null): AbortScope {
   const timeoutController = new AbortController();
   const timer = window.setTimeout(() => timeoutController.abort(), timeoutMs);
-  const callerSignal = fetchOptions.signal;
   let signal: AbortSignal = timeoutController.signal;
   let detachAbortListeners: (() => void) | null = null;
   if (callerSignal) {
@@ -252,8 +242,50 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
       signal = merged.signal;
     }
   }
+  return {
+    signal,
+    timedOut: () => timeoutController.signal.aborted,
+    cleanup: () => {
+      window.clearTimeout(timer);
+      detachAbortListeners?.();
+    },
+  };
+}
+
+function mapRequestError(error: unknown, baseUrl: string, timedOut: boolean): never {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    // Distinguish our timeout from a caller-initiated abort.
+    if (timedOut) throw new Error('Request timed out. Please check the LAN connection and try again.');
+    throw error;
+  }
+  if (error instanceof TypeError) throw new Error(`Cannot reach the POS server at ${baseUrl}. Check the server laptop is on, the IP is correct and the firewall allows port 8000.`);
+  throw error;
+}
+
+function buildRequestHeaders(fetchOptions: RequestInit): Headers {
+  const headers = new Headers(fetchOptions.headers);
+  const isFormData = fetchOptions.body instanceof FormData;
+  if (fetchOptions.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const token = readStoredToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return headers;
+}
+
+export type LoginResponse = {
+  access_token: string; token_type: string; expires_at: string; user_id: string;
+  username: string; display_name: string; role: string; branch_id: string; must_change_password: boolean;
+};
+
+export type ApiOptions = RequestInit & { timeoutMs?: number; skipAuthLogout?: boolean };
+
+export async function api<T = any>(path: string, options: ApiOptions = {}): Promise<T> {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, skipAuthLogout = false, ...fetchOptions } = options;
+  const baseUrl = await resolveBaseUrlForPath(path);
+  assertServerConfigured(baseUrl);
+  const headers = buildRequestHeaders(fetchOptions);
+  const abortScope = createAbortScope(timeoutMs, fetchOptions.signal);
   try {
-    const res = await fetch(`${baseUrl}${path}`, {...fetchOptions, headers, signal});
+    const res = await fetch(`${baseUrl}${path}`, {...fetchOptions, headers, signal: abortScope.signal});
     const text = await res.text();
     let body: any = {};
     if (text) {
@@ -270,16 +302,39 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
     if (!res.ok) throw new Error(errorText(body?.detail, `HTTP ${res.status}`));
     return body as T;
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      // Distinguish our timeout from a caller-initiated abort.
-      if (timeoutController.signal.aborted) throw new Error('Request timed out. Please check the LAN connection and try again.');
-      throw error;
-    }
-    if (error instanceof TypeError) throw new Error(`Cannot reach the POS server at ${baseUrl}. Check the server laptop is on, the IP is correct and the firewall allows port 8000.`);
-    throw error;
+    mapRequestError(error, baseUrl, abortScope.timedOut());
   } finally {
-    window.clearTimeout(timer);
-    detachAbortListeners?.();
+    abortScope.cleanup();
+  }
+}
+
+// H15 — binary responses (report exports) must use CLIENT-aware routing too.
+export async function apiBlob(path: string, options: ApiOptions = {}): Promise<Blob> {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, skipAuthLogout = false, ...fetchOptions } = options;
+  const baseUrl = await resolveBaseUrlForPath(path);
+  assertServerConfigured(baseUrl);
+  const headers = buildRequestHeaders(fetchOptions);
+  const abortScope = createAbortScope(timeoutMs, fetchOptions.signal);
+  try {
+    const res = await fetch(`${baseUrl}${path}`, {...fetchOptions, headers, signal: abortScope.signal});
+    if (res.status === 401 && !skipAuthLogout) {
+      clearStoredToken();
+      localStorage.removeItem('ltpos_user');
+      window.dispatchEvent(new CustomEvent('ltpos:session-expired'));
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      let body: any = {};
+      if (text) {
+        try { body = JSON.parse(text); } catch { /* plain-text error body */ }
+      }
+      throw new Error(errorText(body?.detail, text ? text.slice(0, 300) : `HTTP ${res.status}`));
+    }
+    return await res.blob();
+  } catch (error) {
+    mapRequestError(error, baseUrl, abortScope.timedOut());
+  } finally {
+    abortScope.cleanup();
   }
 }
 
