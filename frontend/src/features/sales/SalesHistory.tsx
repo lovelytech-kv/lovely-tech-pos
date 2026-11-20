@@ -84,6 +84,8 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   // M12 — abort superseded list requests and ignore stale responses.
   const salesRequestSeq = useRef(0);
   const salesAbortRef = useRef<AbortController | null>(null);
+  // M13 — only the latest opened sale may populate the detail panel.
+  const detailRequestSeq = useRef(0);
 
   // Load cashiers dropdown (admin only)
   useEffect(() => {
@@ -153,25 +155,30 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   }, [filters.date_from, filters.date_to, filters.q, filters.payment_method, filters.status, filters.cashier_id]);
 
   async function openSale(item: SaleListItem) {
+    const seq = ++detailRequestSeq.current;
     setSelectedItem(item);
     setSelectedDetail(null);
     try {
       setDetailLoading(true);
       const detail = await api<SaleDetail>(`/sales/${encodeURIComponent(item.invoice_no)}`);
+      if (seq !== detailRequestSeq.current) return;
       setSelectedDetail(detail);
     } catch (e) {
+      if (seq !== detailRequestSeq.current) return;
       onError((e as Error).message);
       // If sale is VOIDED, backend get_sale_detail returns 404 (only COMPLETED).
       // We still show the list-item info; user can't view lines for voided sales.
       setSelectedDetail(null);
     } finally {
-      setDetailLoading(false);
+      if (seq === detailRequestSeq.current) setDetailLoading(false);
     }
   }
 
   function closeDetail() {
+    detailRequestSeq.current += 1;
     setSelectedItem(null);
     setSelectedDetail(null);
+    setDetailLoading(false);
   }
 
   function quickRange(kind: 'today' | 'yesterday' | 'week' | 'month') {
