@@ -144,7 +144,23 @@ class PurchaseService:
             raise ValueError(f"IMEI/serial already exists in the system: {', '.join(sorted(taken))}")
         return cleaned
 
+    def _lock_item(self, item_id: uuid.UUID) -> Item:
+        """H10 — take the same Item row lock sales take before touching FIFO.
+
+        Lock order matches services/sales.py:_lock_item(): Item first, then
+        lot/allocation rows. This serialises cost completion against a
+        concurrent sale so NEGATIVE_STOCK reconciliation cannot miss a sale
+        allocation that is being created at the same time.
+        """
+        item = self.session.scalar(select(Item).where(Item.id == item_id).with_for_update())
+        if item is None:
+            raise ValueError("Item not found for purchase line")
+        return item
+
     def complete_line_cost(self, *, purchase: Purchase, line: PurchaseLine, unit_cost: Decimal, actor_user_id: uuid.UUID | None = None) -> None:
+        # H10 — item lock must be held before PurchaseLot creation / negative
+        # stock reconciliation. Deterministic order: Item row first.
+        self._lock_item(line.item_id)
         if purchase.status not in {"PENDING_COST", "COMPLETED"}:
             raise ValueError(f"Purchase cannot receive cost in status {purchase.status}")
         if line.quantity <= 0:
