@@ -16,6 +16,36 @@ def sales_summary(payload: DateRangeIn, user: User = Depends(require_permission(
     is_admin = user.role.code.upper() == "ADMIN"
     return ReportOut(start=payload.start, end=payload.end, sales_count=s.sales_count, sales_total=s.sales_total, cash_total=s.cash_total, card_total=s.card_total, online_total=s.online_total, cost_total=s.cost_total if is_admin else None, gross_profit=s.gross_profit if is_admin else None, expenses_total=s.expenses_total if is_admin else None, other_income_total=s.other_income_total if is_admin else None, net_profit=s.net_profit if is_admin else None, refunds_total=s.refunds_total if is_admin else None, return_charge_total=s.return_charge_total if is_admin else None, repair_income=s.repair_income, repair_profit=s.repair_profit if is_admin else None, damage_loss_total=s.damage_loss_total if is_admin else None)
 
+@router.post('/sales')
+def sales_report(payload: DateRangeIn, user: User = Depends(require_permission('REPORT_VIEW')), db: Session = Depends(db_session)):
+    """E6 — completed sales rows for the selected range (same filter as sales-summary)."""
+    if payload.end < payload.start:
+        raise HTTPException(400, 'End date cannot be before start date')
+    from app.models.sales import Sale, Customer
+    from app.models.master import User as UserModel
+    rows = db.execute(
+        select(Sale, UserModel, Customer)
+        .outerjoin(UserModel, UserModel.id == Sale.cashier_id)
+        .outerjoin(Customer, Customer.id == Sale.customer_id)
+        .where(
+            Sale.branch_id == user.branch_id,
+            func.date(Sale.sale_datetime).between(payload.start, payload.end),
+            Sale.status == 'COMPLETED',
+        )
+        .order_by(Sale.sale_datetime.desc())
+    ).all()
+    return [
+        {
+            'sale_id': str(sale.id),
+            'invoice_no': sale.invoice_no,
+            'sale_datetime': sale.sale_datetime,
+            'cashier_name': cashier.display_name if cashier else '',
+            'customer_name': customer.name if customer else '',
+            'grand_total': sale.grand_total,
+        }
+        for sale, cashier, customer in rows
+    ]
+
 @router.post('/target-progress')
 def target_progress(payload: DateRangeIn, user: User = Depends(require_permission('REPORT_VIEW')), db: Session = Depends(db_session)):
     if payload.end < payload.start: raise HTTPException(400, 'End date cannot be before start date')
@@ -112,10 +142,43 @@ def export_report(report_type: str, file_format: str, payload: DateRangeIn, user
         s=ReportService(db).sales_summary(branch_id=user.branch_id,start=payload.start,end=payload.end)
         rows=[('Sales Profit',s.gross_profit),('Repair Profit',s.repair_profit),('Other Income',s.other_income_total),('Return Charge Income',s.return_charge_total),('Expenses',s.expenses_total),('Damage/Loss',s.damage_loss_total),('Net Profit',s.net_profit)]
     elif report_type=='sales':
+        from app.models.sales import Sale, Customer
+        from app.models.master import User as UserModel
+        rows=[('Invoice','Date','Cashier','Customer','Total')]
+        data=db.execute(
+            select(Sale, UserModel, Customer)
+            .outerjoin(UserModel, UserModel.id == Sale.cashier_id)
+            .outerjoin(Customer, Customer.id == Sale.customer_id)
+            .where(
+                Sale.branch_id == user.branch_id,
+                func.date(Sale.sale_datetime).between(payload.start, payload.end),
+                Sale.status == 'COMPLETED',
+            )
+            .order_by(Sale.sale_datetime.desc())
+        ).all()
+        rows += [
+            (r.invoice_no, str(r.sale_datetime), u.display_name if u else '', c.name if c else '', r.grand_total)
+            for r, u, c in data
+        ]
         s=ReportService(db).sales_summary(branch_id=user.branch_id,start=payload.start,end=payload.end)
-        rows=[('Sales Total',s.sales_total),('Bills',s.sales_count),('Cash',s.cash_total),('Card',s.card_total),('Online',s.online_total)]
+        rows.append(('', '', '', '', ''))
+        rows += [
+            ('Sales Total', s.sales_total, '', '', ''),
+            ('Bills', s.sales_count, '', '', ''),
+            ('Cash', s.cash_total, '', '', ''),
+            ('Card', s.card_total, '', '', ''),
+            ('Online', s.online_total, '', '', ''),
+        ]
         if is_admin:
-            rows += [('Cost',s.cost_total),('Gross Profit',s.gross_profit),('Refunds',s.refunds_total),('Return Charges',s.return_charge_total),('Expenses',s.expenses_total),('Other Income',s.other_income_total),('Net Profit',s.net_profit)]
+            rows += [
+                ('Cost', s.cost_total, '', '', ''),
+                ('Gross Profit', s.gross_profit, '', '', ''),
+                ('Refunds', s.refunds_total, '', '', ''),
+                ('Return Charges', s.return_charge_total, '', '', ''),
+                ('Expenses', s.expenses_total, '', '', ''),
+                ('Other Income', s.other_income_total, '', '', ''),
+                ('Net Profit', s.net_profit, '', '', ''),
+            ]
     elif report_type=='cash-in-hands':
         if not is_admin: raise HTTPException(403,'Admin only')
         rows=[('Cash In Hands',ReportService(db).cash_in_hands(branch_id=user.branch_id,start=payload.start,end=payload.end))]
