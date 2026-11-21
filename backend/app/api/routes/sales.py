@@ -312,13 +312,29 @@ def request_discount_approval(payload: SaleIn, user: User = Depends(require_perm
 @router.get("/{sale_id}")
 def get_sale_detail(sale_id: str, user: User = Depends(require_permission("RETURN_CREATE")), db: Session = Depends(db_session)):
     key = sale_id.strip()
-    try:
-        match = Sale.id == uuid.UUID(key)
-    except ValueError:
-        match = Sale.invoice_no == key.upper()
-    sale = db.scalar(select(Sale).where(match, Sale.branch_id == user.branch_id, Sale.status == "COMPLETED"))
+    sale = None
+    if key:
+        try:
+            sale = db.scalar(select(Sale).where(Sale.id == uuid.UUID(key), Sale.branch_id == user.branch_id))
+        except ValueError:
+            sale = None
+    if sale is None and key:
+        sale = db.scalar(select(Sale).where(Sale.invoice_no == key.upper(), Sale.branch_id == user.branch_id))
+    if sale is None and key.isdigit():
+        # E11 — allow the numeric part of the invoice (e.g. 15 or 000015) when it is unambiguous.
+        padded = key.zfill(6)
+        candidates = db.scalars(select(Sale).where(
+            Sale.branch_id == user.branch_id,
+            Sale.invoice_no.ilike(f"%-{padded}"),
+        ).order_by(Sale.sale_datetime.desc())).all()
+        if len(candidates) > 1:
+            matches = ", ".join(c.invoice_no for c in candidates[:5])
+            raise HTTPException(409, f"Multiple sales match '{key}' ({matches}). Enter the full invoice number.")
+        sale = candidates[0] if candidates else None
     if sale is None:
-        raise HTTPException(404, "Sale not found")
+        raise HTTPException(404, f"No sale matches '{key}' in this branch. Use the full invoice number (e.g. INV-000123) or the sale ID.")
+    if sale.status != "COMPLETED":
+        raise HTTPException(409, f"Sale {sale.invoice_no} is {sale.status}; only completed sales can be returned.")
     lines = db.execute(select(SaleLine, Item).join(Item, Item.id == SaleLine.item_id).where(SaleLine.sale_id == sale.id)).all()
     return {
         "sale_id": str(sale.id), "invoice_no": sale.invoice_no, "sale_datetime": sale.sale_datetime,

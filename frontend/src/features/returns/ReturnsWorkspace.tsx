@@ -80,6 +80,8 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
       if (prefill) {
         setSaleQuery(prefill);
         localStorage.removeItem('ltpos_return_prefill');
+        // E11 — arriving from Sales History should open the sale immediately.
+        void findSale(prefill);
       }
     } catch {
       // ignore storage errors
@@ -96,8 +98,8 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
     [lines],
   );
 
-  async function findSale() {
-    const query = saleQuery.trim();
+  async function findSale(queryOverride?: string) {
+    const query = (queryOverride ?? saleQuery).trim();
     if (!query) {
       onError('Enter the completed sale ID or invoice number.');
       return;
@@ -105,6 +107,7 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
     try {
       const result = await api<Sale>(`/sales/${encodeURIComponent(query)}`);
       setSale(result);
+      setSaleQuery(result.invoice_no);
       setLines((result.lines || []).map((line) => ({ ...line, return_qty: '0', condition: 'GOOD' })));
       setLastResult(null);
     } catch (error) {
