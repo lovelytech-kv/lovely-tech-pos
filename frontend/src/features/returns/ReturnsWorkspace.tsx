@@ -246,6 +246,10 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
     }
   }
 
+  function handleSaleSearch() {
+    void findSale();
+  }
+
   return (
     <section className="workspace">
       <div className="split">
@@ -263,10 +267,10 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
             <input
               value={saleQuery}
               onChange={(event) => setSaleQuery(event.target.value)}
-              onKeyDown={(event) => { if (event.key === 'Enter') void findSale(); }}
+              onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleSaleSearch(); } }}
               placeholder="Completed sale ID / invoice number"
             />
-            <button onClick={() => void findSale()}>Find Sale</button>
+            <button onClick={handleSaleSearch}>Find Sale</button>
           </div>
 
           {sale && (
