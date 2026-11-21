@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission, current_user
 from app.backup.auto import create_verified_backup
-from app.backup.service import create_postgres_dump, decrypt_backup, restore_postgres_backup, sync_backup_to_google_drive, BackupError
+from app.backup.service import create_postgres_dump, decrypt_backup_file, restore_postgres_backup, sync_backup_to_google_drive, BackupError
 from app.security.reauth import require_admin_reauth
 from app.models.backup import BackupPoint, RestoreEvent
 from app.models.master import User
@@ -47,7 +47,7 @@ def verify(backup_id:str,user:User=Depends(require_permission('BACKUP_MANAGE')),
     if not point: raise HTTPException(404,'Backup point not found')
     path=Path(point.storage_target)/point.filename
     try:
-        meta,_=decrypt_backup(path.read_bytes(),secret=__import__('app.core.config',fromlist=['settings']).settings.secret_key)
+        meta,_=decrypt_backup_file(path,secret=__import__('app.core.config',fromlist=['settings']).settings.secret_key)
     except Exception as exc: point.state='FAILED'; point.failure_reason=str(exc); db.commit(); raise HTTPException(400,str(exc))
     point.state='VERIFIED'; point.sha256=meta['sha256']; point.verified_at=datetime.now(timezone.utc); point.failure_reason=None; db.commit()
     return {'backup_id':str(point.id),'state':point.state,'sha256':point.sha256}
