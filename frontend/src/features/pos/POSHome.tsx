@@ -65,6 +65,7 @@ function buildGenericReprintHTML(r: any): string {
   const dateStr = r.document_datetime ? new Date(r.document_datetime).toLocaleString() : '—';
   const status = String(r.status || '—');
   return `<!DOCTYPE html><html><head><title>Reprint ${escapeHtml(no)}</title>
+    <link rel="icon" href="data:," />
     <style>
       body{font-family:'Consolas','Menlo',monospace;padding:20px;font-size:13px;color:#000;}
       h1{font-size:16px;text-align:center;margin:0 0 12px;}
@@ -98,6 +99,7 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
   const email = fullShop?.email || '';
   const invoiceNo = sale?.invoice_no || '-';
   return `<!DOCTYPE html><html><head><title>Receipt ${escapeHtml(invoiceNo)}</title>
+    <link rel="icon" href="data:," />
     <style>
       body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
       h1{font-size:16px;text-align:center;margin:0 0 4px;}
@@ -371,7 +373,7 @@ useEffect(() => {
     try {
       const w = window.open('', '_blank', 'width=420,height=640');
       if (w) {
-        w.document.write('<!DOCTYPE html><html><head><title>Preparing receipt…</title></head><body style="font-family:monospace;padding:20px;text-align:center;font-size:13px"><p>Preparing receipt…</p></body></html>');
+        w.document.write('<!DOCTYPE html><html><head><title>Preparing receipt…</title><link rel="icon" href="data:," /></head><body style="font-family:monospace;padding:20px;text-align:center;font-size:13px"><p>Preparing receipt…</p></body></html>');
         w.document.close();
       }
       return w;
