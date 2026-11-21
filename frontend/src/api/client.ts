@@ -252,13 +252,25 @@ function createAbortScope(timeoutMs: number, callerSignal?: AbortSignal | null):
   };
 }
 
+function cannotReachMessage(baseUrl: string): string {
+  return `Cannot reach the POS server at ${baseUrl}. Check the server laptop is on, the IP is correct and the firewall allows port 8000.`;
+}
+
+// E4 — the Vite dev proxy answers with an empty 500 when the backend is down.
+// A real backend 500 always carries a body (JSON detail or "Internal Server Error").
+function isProxyGatewayFailure(status: number, text: string): boolean {
+  return status >= 500 && text.trim() === '';
+}
+
 function mapRequestError(error: unknown, baseUrl: string, timedOut: boolean): never {
   if (error instanceof DOMException && error.name === 'AbortError') {
     // Distinguish our timeout from a caller-initiated abort.
     if (timedOut) throw new Error('Request timed out. Please check the LAN connection and try again.');
     throw error;
   }
-  if (error instanceof TypeError) throw new Error(`Cannot reach the POS server at ${baseUrl}. Check the server laptop is on, the IP is correct and the firewall allows port 8000.`);
+  if (error instanceof TypeError || (typeof error === 'object' && error !== null && (error as { name?: string }).name === 'TypeError')) {
+    throw new Error(cannotReachMessage(baseUrl));
+  }
   throw error;
 }
 
@@ -299,7 +311,10 @@ export async function api<T = any>(path: string, options: ApiOptions = {}): Prom
       localStorage.removeItem('ltpos_user');
       window.dispatchEvent(new CustomEvent('ltpos:session-expired'));
     }
-    if (!res.ok) throw new Error(errorText(body?.detail, `HTTP ${res.status}`));
+    if (!res.ok) {
+      if (isProxyGatewayFailure(res.status, text)) throw new Error(cannotReachMessage(baseUrl));
+      throw new Error(errorText(body?.detail, `HTTP ${res.status}`));
+    }
     return body as T;
   } catch (error) {
     mapRequestError(error, baseUrl, abortScope.timedOut());
@@ -328,6 +343,7 @@ export async function apiBlob(path: string, options: ApiOptions = {}): Promise<B
       if (text) {
         try { body = JSON.parse(text); } catch { /* plain-text error body */ }
       }
+      if (isProxyGatewayFailure(res.status, text)) throw new Error(cannotReachMessage(baseUrl));
       throw new Error(errorText(body?.detail, text ? text.slice(0, 300) : `HTTP ${res.status}`));
     }
     return await res.blob();
