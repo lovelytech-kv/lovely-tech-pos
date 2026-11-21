@@ -4,6 +4,7 @@ import { money } from '../../services/money';
 import { useModal } from '../../ui/modals';
 import { toast } from '../../ui/toast';
 import { escapeHtml } from '../../utils/escapeHtml';
+import { useShopProfile } from '../settings/ShopContext';
 
 type Props = {
   isAdmin: boolean;
@@ -80,6 +81,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   const [cashiers, setCashiers] = useState<Array<{ user_id: string; display_name: string; role: string }>>([]);
 
   const modal = useModal();
+  const shop = useShopProfile();
   const debounceRef = useRef<number | null>(null);
   // M12 — abort superseded list requests and ignore stale responses.
   const salesRequestSeq = useRef(0);
@@ -201,25 +203,41 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
     }
   }
 
-  function printReceipt(detail: SaleDetail) {
+  async function printReceipt(detail: SaleDetail) {
     const w = window.open('', '_blank', 'width=420,height=640');
     if (!w) {
       toast.error('Print popup blocked. Allow popups for this site.');
       return;
     }
+    // Receipt must use the shop profile, not a hardcoded product name.
+    let fullShop: { address?: string | null; phone?: string | null; email?: string | null } | null = null;
+    try {
+      fullShop = await api('/branch/profile');
+    } catch {
+      // Contact block is optional; the receipt still prints with the shop name/logo.
+    }
+    const shopName = shop.getShopName();
+    const logoUrl = shop.getLogoDataUrl('light');
+    const address = fullShop?.address || '';
+    const phone = fullShop?.phone || '';
+    const email = fullShop?.email || '';
     const lines = Array.isArray(detail.lines) ? detail.lines : [];
     w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${escapeHtml(detail.invoice_no)}</title>
       <style>
         body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
         h1{font-size:16px;text-align:center;margin:0 0 4px;}
-        .meta{text-align:center;font-size:11px;color:#333;margin-bottom:8px;}
+        .meta{text-align:center;font-size:11px;color:#333;margin-bottom:4px;}
+        .contact{text-align:center;font-size:10px;color:#555;margin-bottom:8px;line-height:1.35;}
         .divider{border-top:1px dashed #000;margin:8px 0;}
         .row{display:flex;justify-content:space-between;gap:8px;}
         .line{padding:2px 0;}
         .total{font-size:15px;font-weight:700;}
         .foot{text-align:center;font-size:11px;margin-top:8px;}
+        .logo{display:block;margin:0 auto 4px;max-width:80px;max-height:80px;object-fit:contain;}
       </style></head><body>
-      <h1>Lovely Tech POS</h1>
+      ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" class="logo" />` : ''}
+      <h1>${escapeHtml(shopName)}</h1>
+      ${(address || phone || email) ? `<div class="contact">${address ? escapeHtml(address) + '<br/>' : ''}${phone ? 'Tel: ' + escapeHtml(phone) : ''}${phone && email ? ' · ' : ''}${escapeHtml(email)}</div>` : ''}
       <div class="meta">Invoice: ${escapeHtml(detail.invoice_no)}<br/>${new Date(detail.sale_datetime).toLocaleString()}</div>
       <div class="divider"></div>
       ${lines.map((l) => `
@@ -231,7 +249,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
       <div class="divider"></div>
       <div class="row total"><span>TOTAL</span><span>Rs. ${escapeHtml(detail.grand_total)}</span></div>
       <div class="divider"></div>
-      <div class="foot">Thank you for shopping at Lovely Tech!</div>
+      <div class="foot">Thank you for shopping at ${escapeHtml(shopName)}!</div>
       <script>window.onload = function(){ window.print(); };</script>
       </body></html>`);
     w.document.close();
