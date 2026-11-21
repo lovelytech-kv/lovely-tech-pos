@@ -34,7 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'Dashboard', label: 'Overview', icon: NAV_GLYPHS.Dashboard, group: 'primary', permission: 'dashboard.view' },
   { key: 'Sales', label: 'POS', icon: NAV_GLYPHS.Sales, group: 'primary', permission: 'sales.view' },
   { key: 'SalesHistory', label: 'Sales History', icon: NAV_GLYPHS.SalesHistory, group: 'primary', permission: 'sales.view' },
-  { key: 'Items', label: 'Inventory', icon: NAV_GLYPHS.Items, group: 'primary', permission: 'items.view' },
+  { key: 'Items', label: 'Items', icon: NAV_GLYPHS.Items, group: 'primary', permission: 'items.view' },
   { key: 'Customers', label: 'Customers', icon: NAV_GLYPHS.Customers, group: 'primary', permission: 'customers.view' },
   { key: 'Repairs', label: 'Repairs', icon: NAV_GLYPHS.Repairs, group: 'primary', permission: 'repairs.view' },
   { key: 'Warranty', label: 'Warranty', icon: NAV_GLYPHS.Warranty, group: 'primary', permission: 'warranty.view' },
