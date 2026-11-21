@@ -30,6 +30,7 @@ export function RepairForm({ onCreated, onError }: Props) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [advanceKey, setAdvanceKey] = useState(() => crypto.randomUUID());
+  const [repairKey, setRepairKey] = useState(() => crypto.randomUUID());
   const [pendingAdvance, setPendingAdvance] = useState<{ repair_id: string; repair_no: string; amount: string; method: RepairFormValues['advance_method'] } | null>(null);
   const set = (key: keyof RepairFormValues, value: string) => setForm(prev => ({ ...prev, [key]: value }));
 
@@ -51,6 +52,7 @@ export function RepairForm({ onCreated, onError }: Props) {
         const createdRepair = await api('/repairs', {
           method: 'POST',
           body: JSON.stringify({
+            idempotency_key: repairKey,
             device_brand: form.device_brand.trim() || null,
             model: form.model.trim() || null,
             customer_name: form.customer_name.trim() || null,
@@ -84,6 +86,7 @@ export function RepairForm({ onCreated, onError }: Props) {
       setPendingAdvance(null);
       setForm(initial);
       setAdvanceKey(crypto.randomUUID());
+      setRepairKey(crypto.randomUUID());
       onCreated?.(created);
     } catch (e) {
       onError?.((e as Error).message);

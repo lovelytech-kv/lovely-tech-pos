@@ -70,6 +70,8 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
   const [lastResult, setLastResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
     const [refundKey, setRefundKey] = useState(() => crypto.randomUUID());
+  // M10 — one key per return attempt; reused on retry, replaced after success.
+  const [returnKey, setReturnKey] = useState(() => crypto.randomUUID());
 
   // Pre-fill from Sales History "Return" button
   useEffect(() => {
@@ -78,6 +80,8 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
       if (prefill) {
         setSaleQuery(prefill);
         localStorage.removeItem('ltpos_return_prefill');
+        // E11 — arriving from Sales History should open the sale immediately.
+        void findSale(prefill);
       }
     } catch {
       // ignore storage errors
@@ -94,8 +98,8 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
     [lines],
   );
 
-  async function findSale() {
-    const query = saleQuery.trim();
+  async function findSale(queryOverride?: string) {
+    const query = (queryOverride ?? saleQuery).trim();
     if (!query) {
       onError('Enter the completed sale ID or invoice number.');
       return;
@@ -103,6 +107,7 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
     try {
       const result = await api<Sale>(`/sales/${encodeURIComponent(query)}`);
       setSale(result);
+      setSaleQuery(result.invoice_no);
       setLines((result.lines || []).map((line) => ({ ...line, return_qty: '0', condition: 'GOOD' })));
       setLastResult(null);
     } catch (error) {
@@ -136,6 +141,7 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
       const result = await api<any>('/returns', {
         method: 'POST',
         body: JSON.stringify({
+          idempotency_key: returnKey,
           original_sale_id: sale.sale_id,
           lines: selected.map((line) => ({
             sale_line_id: line.sale_line_id,
@@ -153,6 +159,7 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
       });
       setLastResult(result);
       setReturnId(result.return_id);
+      setReturnKey(crypto.randomUUID());
       setLines((current) => current.map((line) => ({ ...line, return_qty: '0' })));
       await loadReturn(result.return_id);
     } catch (error) {

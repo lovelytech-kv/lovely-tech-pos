@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.api.deps import db_session
@@ -34,6 +34,10 @@ from app.schemas.setup import SetupInitializeIn, SetupInitializeOut
 from app.security.passwords import hash_password
 
 router = APIRouter(prefix='/setup', tags=['setup'])
+
+# H9 — serializes first-run setup across concurrent requests.
+_SETUP_ADVISORY_LOCK_KEY = 1583805441
+_LOCALHOST_HOSTS = ('127.0.0.1', '::1')
 
 
 # ============================================================================
@@ -412,6 +416,9 @@ async def restore_from_file(
     journal = Path(settings.backup_root) / "restore-journal.log"
     journal.parent.mkdir(parents=True, exist_ok=True)
 
+    # H13 — capture the Engine before closing the request session so the pool
+    # can be disposed before pg_restore --clean touches the live database.
+    engine = db.get_bind()
     db.close()
 
     try:
@@ -423,6 +430,7 @@ async def restore_from_file(
             encrypted_backup=dest,
             safety_output=safety,
             secret=settings.secret_key,
+            engine=engine,
         )
     except Exception as exc:
         with journal.open('a', encoding='utf-8') as f:
@@ -501,9 +509,16 @@ async def restore_from_file(
 @router.post('/initialize', response_model=SetupInitializeOut)
 def setup_initialize(
     payload: SetupInitializeIn,
+    request: Request,
     db: Session = Depends(db_session),
 ):
-    """One-time bootstrap. 409 if any user exists."""
+    """One-time bootstrap. Localhost-only. 409 if any user exists."""
+    if _client_ip(request) not in _LOCALHOST_HOSTS:
+        raise HTTPException(403, 'Setup must be run from localhost')
+
+    # H9 — block a concurrent setup until this transaction finishes.
+    db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': _SETUP_ADVISORY_LOCK_KEY})
+
     existing_users = int(db.scalar(select(func.count()).select_from(User)) or 0)
     if existing_users > 0:
         raise HTTPException(

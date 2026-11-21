@@ -33,6 +33,10 @@ def complete_cost(payload:PurchaseCostIn,user:User=Depends(require_permission("P
     line=db.scalar(select(PurchaseLine).where(PurchaseLine.id==payload.purchase_line_id,PurchaseLine.purchase_id==payload.purchase_id).with_for_update())
     if not purchase or not line:
         raise HTTPException(404,"Purchase or purchase line not found")
+    # H10 — lock the Item row (same order as sales: Item first) before FIFO
+    # lot creation so a concurrent sale cannot create NEGATIVE_STOCK that this
+    # completion would miss during reconciliation.
+    db.scalar(select(Item).where(Item.id==line.item_id).with_for_update())
     if payload.version is None or payload.purchase_version is None: raise HTTPException(409,'Purchase versions are required; reload the record')
     if payload.version is not None and line.version != payload.version: raise HTTPException(409,'Purchase line changed; reload before editing')
     if payload.purchase_version is not None and purchase.version != payload.purchase_version: raise HTTPException(409,'Purchase changed; reload before editing')

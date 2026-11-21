@@ -1,8 +1,9 @@
 from __future__ import annotations
 import hashlib, secrets
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.orm import Session
+from app.models.auth import UserSession
 from app.models.master import User
 from app.models.security import AuditLog
 from app.security.passwords import hash_password, verify_password
@@ -34,7 +35,7 @@ class RecoveryService:
     def recover_admin(self, *, user:User, recovery_code:str, new_password:str):
         from app.models.security import AdminRecoveryCode
         if not user.is_active: raise RecoveryError('User is inactive')
-        row=self.session.scalar(select(AdminRecoveryCode).where(AdminRecoveryCode.code_hash==_hash_code(recovery_code.strip().upper()),AdminRecoveryCode.used_at.is_(None),AdminRecoveryCode.revoked_at.is_(None)).with_for_update())
+        row=self.session.scalar(select(AdminRecoveryCode).where(AdminRecoveryCode.code_hash==_hash_code(recovery_code.strip().upper()),AdminRecoveryCode.created_by==user.id,AdminRecoveryCode.used_at.is_(None),AdminRecoveryCode.revoked_at.is_(None)).with_for_update())
         if not row: raise RecoveryError('Invalid or already-used recovery code')
         user.password_hash=hash_password(new_password); user.must_change_password=False; row.used_at=datetime.now(timezone.utc); row.used_by=user.id
         self.session.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='ADMIN_PASSWORD_RECOVERY',entity_type='USER',entity_id=user.id,timestamp=datetime.now(timezone.utc),context_json={'recovery_code_used':True})); self.session.flush()
@@ -56,6 +57,8 @@ class RecoveryService:
         target_user.failed_login_count = 0
         target_user.locked_until = None
         now = datetime.now(timezone.utc)
+        # H5: the reset invalidates every session belonging to the target cashier.
+        self.session.execute(update(UserSession).where(UserSession.user_id == target_user.id, UserSession.revoked_at.is_(None)).values(revoked_at=now))
         self.session.add(AuditLog(branch_id=admin_user.branch_id, actor_user_id=admin_user.id, action_type='CASHIER_PASSWORD_RESET', entity_type='USER', entity_id=target_user.id, timestamp=now, context_json={'forced_change':True}))
         self.session.flush()
     def generate_recovery_codes(self, *, user_id, actor_user_id, count: int = 8) -> list[str]:
@@ -134,31 +137,28 @@ class RecoveryService:
             self.session.commit()
             return {'valid': False}
 
-        # Look up unused, non-revoked codes
-        codes = self.session.scalars(
-            select(AdminRecoveryCode).where(
+        # H11: atomic consume — the WHERE clause is the concurrency guard.
+        target_hash = _hash_code(normalized_code)
+        consumed = self.session.execute(
+            update(AdminRecoveryCode).where(
                 AdminRecoveryCode.created_by == user.id,
+                AdminRecoveryCode.code_hash == target_hash,
                 AdminRecoveryCode.used_at.is_(None),
                 AdminRecoveryCode.revoked_at.is_(None),
-            )
-        ).all()
-
-        target_hash = _hash_code(normalized_code)
-        for row in codes:
-            if row.code_hash == target_hash:
-                row.used_at = now
-                row.used_by = user.id
-                self.session.add(AuditLog(
-                    branch_id=user.branch_id,
-                    actor_user_id=user.id,
-                    action_type='RECOVERY_CODE_USED',
-                    entity_type='USER',
-                    entity_id=user.id,
-                    timestamp=now,
-                    context_json={'via': 'forgot_password_flow'},
-                ))
-                self.session.flush()
-                return {'valid': True, 'user_id': user.id}
+            ).values(used_at=now, used_by=user.id)
+        ).rowcount
+        if consumed == 1:
+            self.session.add(AuditLog(
+                branch_id=user.branch_id,
+                actor_user_id=user.id,
+                action_type='RECOVERY_CODE_USED',
+                entity_type='USER',
+                entity_id=user.id,
+                timestamp=now,
+                context_json={'via': 'forgot_password_flow'},
+            ))
+            self.session.flush()
+            return {'valid': True, 'user_id': user.id}
 
         self._log_invalid_attempt(normalized_user, now, 'code_mismatch')
         self.session.flush()

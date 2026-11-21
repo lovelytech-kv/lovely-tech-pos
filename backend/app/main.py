@@ -44,6 +44,8 @@ def _should_advertise_mdns() -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # M7 — re-check production settings when the app starts serving traffic.
+    validate_production_settings()
     # Only SERVER machines advertise. CLIENT must not broadcast phantom
     # server entries that confuse discovery on the LAN.
     mdns_task = (

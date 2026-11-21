@@ -1,6 +1,7 @@
 """Machine role identity endpoints (Chunk 12a + 13)."""
 from datetime import datetime, timezone
 import json as _json
+import logging
 import time
 import urllib.error
 import urllib.request
@@ -11,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import db_session, require_permission
+from app.core.config import settings
 from app.core.mdns import _resolve_lan_ip
 from app.models.master import User
 from app.models.machine_identity import MachineIdentity
@@ -20,6 +22,8 @@ from app.schemas.api import MachineIdentityOut, MachineIdentityUpdateIn
 
 router = APIRouter(prefix='/machine', tags=['machine'])
 
+logger = logging.getLogger(__name__)
+
 
 # ============ Chunk 13 — CLIENT Join (rate limit + verify + join) ============
 
@@ -27,6 +31,19 @@ _URL_PATTERN = r'^https?://.+:\d+$'
 _verify_rate_limit: dict[str, list[float]] = {}
 _RATE_WINDOW_SECONDS = 300
 _RATE_MAX_ATTEMPTS = 5
+
+
+def _enforce_lan_http_policy(server_url: str, client_ip: str) -> None:
+    """H7 — plain HTTP machine join is allowed only when LTPOS_TRUST_LAN is true."""
+    if not server_url.lower().startswith('http://'):
+        return
+    if not settings.ltpos_trust_lan:
+        raise HTTPException(400, 'HTTPS required — LTPOS_TRUST_LAN=false')
+    logger.warning(
+        'Insecure HTTP machine join from %s to %s (LTPOS_TRUST_LAN=true)',
+        client_ip,
+        server_url,
+    )
 
 
 def _rate_key(client_ip: str, server_url: str) -> str:
@@ -90,6 +107,8 @@ def _http_get_json(url: str, timeout: int = 5) -> tuple[int, dict]:
 
 def _verify_admin_on_server(server_url: str, username: str, password: str) -> dict:
     """Verify admin credentials against remote SERVER. Returns dict with 'valid' + details."""
+    if server_url.lower().startswith('http://') and not settings.ltpos_trust_lan:
+        raise HTTPException(400, 'HTTPS required — LTPOS_TRUST_LAN=false')
     base = server_url.rstrip('/')
 
     health_status, health_body = _http_get_json(f"{base}/api/v1/health", timeout=5)
@@ -159,6 +178,8 @@ def machine_verify_admin(
     """Verify remote SERVER admin credentials before allowing CLIENT join."""
     client_ip = request.client.host if request.client else 'unknown'
 
+    _enforce_lan_http_policy(payload.server_url, client_ip)
+
     allowed, retry_after = _check_rate_limit(client_ip, payload.server_url)
     if not allowed:
         raise HTTPException(
@@ -203,6 +224,8 @@ def machine_join(
 ):
     """Join this machine as CLIENT to a remote SERVER after verifying admin creds."""
     client_ip = request.client.host if request.client else 'unknown'
+
+    _enforce_lan_http_policy(payload.server_url, client_ip)
 
     allowed, retry_after = _check_rate_limit(client_ip, payload.server_url)
     if not allowed:

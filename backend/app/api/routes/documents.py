@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
-from app.api.deps import db_session, require_permission
+from app.api.deps import db_session, require_permission, require_any_permission
 from app.models.master import User
 from app.models.sales import Sale, SaleLine, Repair, RepairPayment, CreditSettlement, Customer
 from app.models.inventory import SerializedUnit
@@ -13,7 +13,6 @@ from datetime import date, datetime, time, timedelta, timezone
 
 router=APIRouter(prefix='/documents',tags=['documents'])
 
-@router.get('/search',response_model=list[DocumentSearchOut])
 @router.get('')
 def list_documents(
     date_from: date | None = None,
@@ -23,7 +22,7 @@ def list_documents(
     q: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    user: User = Depends(require_permission('DOCUMENT_REPRINT')),
+    user: User = Depends(require_any_permission('DOCUMENT_REPRINT', 'REPORT_VIEW')),
     db: Session = Depends(db_session),
 ):
     """List all documents across sales, repairs, repair payments and settlements.
@@ -177,7 +176,9 @@ def list_documents(
         'total': total,
         'has_more': offset + limit < total,
     }
-def search(q:str,user:User=Depends(require_permission('DOCUMENT_REPRINT')),db:Session=Depends(db_session)):
+
+@router.get('/search',response_model=list[DocumentSearchOut])
+def search(q:str='',user:User=Depends(require_any_permission('DOCUMENT_REPRINT', 'REPORT_VIEW')),db:Session=Depends(db_session)):
     q=q.strip()
     if not q: return []
     admin=user.role.code.upper()=='ADMIN'   # Requirements 02: a cashier reprints only their OWN completed sales

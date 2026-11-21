@@ -3,7 +3,7 @@ import hashlib, secrets
 from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_session_factory
@@ -38,7 +38,7 @@ def current_user(request: Request, credentials: HTTPAuthorizationCredentials = D
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     now = datetime.now(timezone.utc)
-    session = db.scalar(select(UserSession).where(UserSession.token_hash == token_hash(credentials.credentials)).with_for_update())
+    session = db.scalar(select(UserSession).where(UserSession.token_hash == token_hash(credentials.credentials)))
     if session is None or session.revoked_at is not None or session.expires_at <= now:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or revoked")
     user = db.get(User, session.user_id)
@@ -48,20 +48,16 @@ def current_user(request: Request, credentials: HTTPAuthorizationCredentials = D
     cfg = get_session_settings(db)
     is_admin = user.role.code.upper() == "ADMIN"
     idle_minutes = cfg['admin_minutes'] if is_admin else cfg['cashier_minutes']
-    absolute_hours = cfg['admin_hours'] if is_admin else cfg['cashier_hours']
-
     # Idle check (0 = disabled)
     if idle_minutes > 0 and session.last_seen_at + timedelta(minutes=idle_minutes) <= now:
         session.revoked_at = now
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session locked due to inactivity")
 
-    # Absolute sliding window — extend expires_at on every request
-    # (unless absolute_hours == 0 = never expires, keep original far-future)
-    if absolute_hours > 0:
-        session.expires_at = now + timedelta(hours=absolute_hours)
-
-    session.last_seen_at = now
+    # Absolute expiry is fixed at issue_session() time (created_at + absolute_hours).
+    # Never extend expires_at here — that would turn absolute expiry into a sliding window.
+    # Single atomic UPDATE: no row lock is held for the duration of the request.
+    db.execute(update(UserSession).where(UserSession.id == session.id).values(last_seen_at=now))
     db.commit()
 
     if user.must_change_password and not request.url.path.endswith(("/auth/change-password", "/auth/logout", "/auth/me")):
@@ -75,5 +71,20 @@ def require_permission(code: str):
         allowed = db.scalar(select(Permission.id).join(RolePermission, RolePermission.permission_id == Permission.id).where(RolePermission.role_id == user.role_id, Permission.code == code))
         if allowed is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission required: {code}")
+        return user
+    return dependency
+
+def require_any_permission(*codes: str):
+    """Allow the request when the role holds at least one of the listed permissions.
+
+    C6 — used by read endpoints so a cashier with a view permission can read
+    masters/documents while the corresponding write endpoints stay locked.
+    """
+    def dependency(user: User = Depends(current_user), db: Session = Depends(db_session)) -> User:
+        if user.role.code.upper() == "ADMIN":
+            return user
+        allowed = db.scalar(select(Permission.id).join(RolePermission, RolePermission.permission_id == Permission.id).where(RolePermission.role_id == user.role_id, Permission.code.in_(codes)))
+        if allowed is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission required: {' or '.join(codes)}")
         return user
     return dependency

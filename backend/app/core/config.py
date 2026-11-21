@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     session_absolute_timeout_cashier_hours: int = 12
     critical_reauth_required: bool = True
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,tauri://localhost,http://tauri.localhost"
+    # H7 — CLIENT machine join posts admin credentials. Plain HTTP is an accepted risk
+    # only on a physically trusted shop LAN; set LTPOS_TRUST_LAN=false to require HTTPS.
+    ltpos_trust_lan: bool = True
     backup_root: str = "./backups"
     pg_dump_bin: str = "pg_dump"
     pg_restore_bin: str = "pg_restore"
@@ -40,10 +43,20 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
+_KNOWN_ENVIRONMENTS = ("development", "test", "testing", "production")
+
+
 def validate_production_settings() -> None:
-    if settings.app_env.lower() == "production":
-        secret = settings.secret_key
-        if secret == "development-only-change-me" or "change_me" in secret.lower() or len(secret) < 32:
-            raise RuntimeError("Production SECRET_KEY must be changed (unique, at least 32 characters)")
-        if "change_me" in settings.database_url.lower():
-            raise RuntimeError("Production DATABASE_URL must be configured")
+    app_env = settings.app_env.strip().lower()
+    if app_env not in _KNOWN_ENVIRONMENTS:
+        raise RuntimeError(
+            f"Unknown APP_ENV '{settings.app_env}'. Set APP_ENV to development, test or production."
+        )
+    if app_env != "production":
+        return
+    secret = settings.secret_key
+    if secret == "development-only-change-me" or "change_me" in secret.lower() or len(secret) < 32:
+        raise RuntimeError("Production SECRET_KEY must be changed (unique, at least 32 characters)")
+    db_url = settings.database_url.strip()
+    if not db_url or "change_me" in db_url.lower():
+        raise RuntimeError("Production DATABASE_URL must be configured")

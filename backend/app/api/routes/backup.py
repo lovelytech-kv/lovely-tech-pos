@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission, current_user
 from app.backup.auto import create_verified_backup
-from app.backup.service import create_postgres_dump, decrypt_backup, restore_postgres_backup, sync_backup_to_google_drive, BackupError
+from app.backup.service import create_postgres_dump, decrypt_backup_file, restore_postgres_backup, sync_backup_to_google_drive, BackupError
 from app.security.reauth import require_admin_reauth
 from app.models.backup import BackupPoint, RestoreEvent
 from app.models.master import User
@@ -47,7 +47,7 @@ def verify(backup_id:str,user:User=Depends(require_permission('BACKUP_MANAGE')),
     if not point: raise HTTPException(404,'Backup point not found')
     path=Path(point.storage_target)/point.filename
     try:
-        meta,_=decrypt_backup(path.read_bytes(),secret=__import__('app.core.config',fromlist=['settings']).settings.secret_key)
+        meta,_=decrypt_backup_file(path,secret=__import__('app.core.config',fromlist=['settings']).settings.secret_key)
     except Exception as exc: point.state='FAILED'; point.failure_reason=str(exc); db.commit(); raise HTTPException(400,str(exc))
     point.state='VERIFIED'; point.sha256=meta['sha256']; point.verified_at=datetime.now(timezone.utc); point.failure_reason=None; db.commit()
     return {'backup_id':str(point.id),'state':point.state,'sha256':point.sha256}
@@ -128,11 +128,14 @@ def restore(backup_id:str, confirm:bool=False, admin_password:str|None=None, use
     settings=__import__('app.core.config',fromlist=['settings']).settings
     event=RestoreEvent(branch_id=user.branch_id,backup_point_id=point.id,actor_user_id=user.id,status='STARTED',reason='Admin restore started')
     db.add(event); db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='RESTORE_STARTED',entity_type='BACKUP_POINT',entity_id=point.id,timestamp=datetime.now(timezone.utc),after_json={'status':'STARTED'},source_transaction_id=point.id)); db.commit()
+    # H13 — capture the Engine before closing the request session so the pool
+    # can be disposed before pg_restore --clean touches the live database.
+    engine = db.get_bind()
     db.close()
     try:
         backup_path=Path(point.storage_target)/point.filename
         safety=Path(settings.backup_root)/f'pre-restore-{datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")}.ltbak'
-        restore_postgres_backup(pg_dump=settings.pg_dump_bin,pg_restore=settings.pg_restore_bin,psql=settings.psql_bin,database_url=settings.database_url,encrypted_backup=backup_path,safety_output=safety,secret=settings.secret_key)
+        restore_postgres_backup(pg_dump=settings.pg_dump_bin,pg_restore=settings.pg_restore_bin,psql=settings.psql_bin,database_url=settings.database_url,encrypted_backup=backup_path,safety_output=safety,secret=settings.secret_key,engine=engine)
         journal=Path(settings.backup_root)/'restore-journal.log'; journal.parent.mkdir(parents=True,exist_ok=True); journal.open('a',encoding='utf-8').write(f"{datetime.now(timezone.utc).isoformat()} RESTORE_SUCCEEDED backup={backup_id} actor={user.id} safety={safety}\n")
         return {'backup_id':str(point.id),'status':'SUCCEEDED','safety_backup':str(safety)}
     except Exception as exc:

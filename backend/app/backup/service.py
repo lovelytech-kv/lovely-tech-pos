@@ -25,6 +25,7 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Union
@@ -132,7 +133,13 @@ def decrypt_backup(blob: bytes, *, secret: str) -> tuple[dict, bytes]:
         try:
             envelope = Fernet(derive_key(secret)).decrypt(fernet_payload)
         except InvalidToken as exc:
-            raise BackupError("Backup authentication failed") from exc
+            # E3 — the bytes are intact (outer hash passed), so this is a key
+            # mismatch, not corruption. Say so; "authentication failed" alone
+            # sent operators chasing a restore bug.
+            raise BackupError(
+                "Backup authentication failed: the file was encrypted with a different "
+                "SECRET_KEY (another installation) or is corrupted"
+            ) from exc
         meta_raw, raw = envelope.split(b"\n", 1)
         meta = json.loads(meta_raw.decode())
         if hashlib.sha256(raw).hexdigest() != meta.get("sha256") or len(raw) != meta.get("size"):
@@ -144,7 +151,10 @@ def decrypt_backup(blob: bytes, *, secret: str) -> tuple[dict, bytes]:
         try:
             envelope = Fernet(derive_key(secret)).decrypt(blob[len(MAGIC_V1):])
         except InvalidToken as exc:
-            raise BackupError("Backup authentication failed") from exc
+            raise BackupError(
+                "Backup authentication failed: the file was encrypted with a different "
+                "SECRET_KEY (another installation) or is corrupted"
+            ) from exc
         meta_raw, raw = envelope.split(b"\n", 1)
         meta = json.loads(meta_raw.decode())
         if hashlib.sha256(raw).hexdigest() != meta.get("sha256") or len(raw) != meta.get("size"):
@@ -155,6 +165,52 @@ def decrypt_backup(blob: bytes, *, secret: str) -> tuple[dict, bytes]:
     raise BackupError(
         "Unsupported backup format (expected LTPOS-BACKUP-V1 or LTPOS-BACKUP-V2)"
     )
+
+
+def decrypt_backup_file(path: str | Path, *, secret: str, attempts: int = 2,
+                        retry_delay: float = 0.3) -> tuple[dict, bytes]:
+    """Read and decrypt a .ltbak file with one retry on a transient read.
+
+    E3 — backups are often kept in a cloud-synced folder, on a USB stick, or
+    opened straight from a network share. Such files can be observed
+    half-written/partially-synced on the first read and complete on the next,
+    which surfaced as a random "Backup authentication failed". Re-reading the
+    bytes once is safe because both V1 and V2 verify integrity after decrypt.
+
+    A genuine key mismatch still fails: the error then names the real cause.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise BackupError("Backup file not found")
+
+    seen_sha: str | None = None
+    file_changed = False
+    last_error: BackupError | None = None
+
+    for attempt in range(max(1, attempts)):
+        blob = path.read_bytes()
+        digest = hashlib.sha256(blob).hexdigest()
+        if seen_sha is not None and digest != seen_sha:
+            file_changed = True
+        seen_sha = digest
+
+        try:
+            return decrypt_backup(blob, secret=secret)
+        except BackupError as exc:
+            last_error = exc
+            # An unsupported format cannot fix itself by re-reading.
+            if "Unsupported backup format" in str(exc):
+                raise
+            if attempt + 1 < attempts:
+                time.sleep(retry_delay)
+
+    assert last_error is not None
+    if file_changed:
+        raise BackupError(
+            "Backup file changed while it was being read (still syncing or being written). "
+            "Copy the file to a local folder and retry."
+        ) from last_error
+    raise last_error
 
 
 def write_verified_backup(raw: bytes, destination: str | Path, *, secret: str,
@@ -188,18 +244,39 @@ def create_postgres_dump(*, pg_dump: str, database_url: str, destination: Path,
         )
 
 
+def _terminate_other_connections(*, psql: str, database_url: str) -> None:
+    """H13 — drop other backends before pg_restore --clean.
+
+    Best-effort: a backend may exit between listing and termination, and a
+    cleanup failure must not abort an otherwise valid restore attempt.
+    """
+    subprocess.run(
+        [psql, "--dbname", database_url, "--command",
+         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+         "WHERE datname = current_database() AND pid <> pg_backend_pid();"],
+        env=os.environ.copy(), check=False, capture_output=True, text=True, timeout=60,
+    )
+
+
 def restore_postgres_backup(*, pg_dump: str, pg_restore: str, psql: str,
                             database_url: str, encrypted_backup: Path,
-                            safety_output: Path, secret: str) -> Path:
-    database_url = libpq_url(database_url)
+                            safety_output: Path, secret: str,
+                            engine=None) -> Path:
     """Restore a verified Lovely Tech encrypted custom-format dump.
 
     Explicit operator action. Safety backup is created and verified
     before pg_restore is allowed to replace the database.
+
+    H13 — when the caller passes its SQLAlchemy Engine, the pool is disposed
+    and other database backends are terminated before ``pg_restore --clean``
+    so idle pooled connections cannot hold locks on objects being dropped.
+    The engine is disposed again after restore so the next request opens a
+    fresh session against the restored database.
     """
+    database_url = libpq_url(database_url)
     if not encrypted_backup.exists():
         raise BackupError("Backup file not found")
-    meta, raw_dump = decrypt_backup(encrypted_backup.read_bytes(), secret=secret)
+    meta, raw_dump = decrypt_backup_file(encrypted_backup, secret=secret)
     fmt = meta.get("format")
     if fmt not in ("LTPOS-BACKUP-V1", "LTPOS-BACKUP-V2"):
         raise BackupError("Unsupported backup envelope")
@@ -218,6 +295,10 @@ def restore_postgres_backup(*, pg_dump: str, pg_restore: str, psql: str,
         )
         restore_raw = Path(td) / "restore.dump"
         restore_raw.write_bytes(raw_dump)
+        # H13 — release the pool and terminate other backends before --clean.
+        if engine is not None:
+            engine.dispose()
+        _terminate_other_connections(psql=psql, database_url=database_url)
         subprocess.run(
             [pg_restore, "--clean", "--if-exists", "--no-owner", "--no-privileges",
              "--exit-on-error", "--dbname", database_url, str(restore_raw)],
@@ -227,6 +308,10 @@ def restore_postgres_backup(*, pg_dump: str, pg_restore: str, psql: str,
             [psql, "--dbname", database_url, "--command", "SELECT 1;"],
             env=os.environ.copy(), check=True, capture_output=True, text=True, timeout=60,
         )
+        # Drop any connection opened during the restore window so callers
+        # reconnect to the restored database, never to pre-restore state.
+        if engine is not None:
+            engine.dispose()
     return safety_output
 
 

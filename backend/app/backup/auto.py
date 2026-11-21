@@ -29,7 +29,7 @@ from typing import Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.backup.service import BackupError, create_postgres_dump, decrypt_backup, sync_backup_to_google_drive
+from app.backup.service import BackupError, create_postgres_dump, decrypt_backup_file, sync_backup_to_google_drive
 from app.core.config import settings as default_settings
 from app.db.session import get_session_factory
 from app.models.backup import BackupPoint
@@ -120,7 +120,7 @@ def create_verified_backup(
 
         blob = dump_fn(pg_dump=cfg.pg_dump_bin, database_url=cfg.database_url, destination=dest,
                        secret=cfg.secret_key, metadata=metadata_for_backup)
-        meta, _ = decrypt_backup(Path(blob).read_bytes(), secret=cfg.secret_key)
+        meta, _ = decrypt_backup_file(Path(blob), secret=cfg.secret_key)
         point.state = "VERIFIED"
         point.sha256 = meta["sha256"]
         point.verified_at = _now()
@@ -149,7 +149,7 @@ def create_verified_backup(
                     alt_dir.mkdir(parents=True, exist_ok=True)
                     copy = alt_dir / dest.name
                     shutil.copy2(dest, copy)
-                    alt_meta, _ = decrypt_backup(copy.read_bytes(), secret=cfg.secret_key)
+                    alt_meta, _ = decrypt_backup_file(copy, secret=cfg.secret_key)
                     if alt_meta["sha256"] != meta["sha256"]:
                         raise BackupError("Alternate backup copy failed verification")
                     note += f" | verified copy kept on alternate target ({alt_dir.name})"
