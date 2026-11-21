@@ -19,11 +19,13 @@ def test_bootstrap_defines_every_route_permission():
     assert _route_permission_codes() <= defined
 
 
-def test_cashier_can_do_basic_item_entry():
-    # Requirements section 02: Cashier has "basic item entry/edit" and purchase entry without cost.
+def test_cashier_has_read_only_item_access():
+    # Manager decision (Session 3A, C6 / Option A): Cashier can view the item
+    # master but must not create or edit items.
     cashier_block = re.search(r"cashier_codes=\{([^}]*)\}", BOOTSTRAP).group(1)
-    assert "'ITEM_EDIT'" in cashier_block
+    assert "'ITEM_EDIT'" not in cashier_block
+    assert "'STOCK_VIEW'" in cashier_block
     assert "'PURCHASE_ENTRY'" in cashier_block
-    # ...but never cost entry or Admin controls.
+    # ...and never cost entry or Admin controls.
     for forbidden in ("PURCHASE_COST", "STOCK_ADJUST", "ADMIN_PANEL", "BACKUP_MANAGE", "WARRANTY_DECIDE"):
         assert f"'{forbidden}'" not in cashier_block

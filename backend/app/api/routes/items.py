@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.api.deps import db_session, require_permission
+from app.api.deps import db_session, require_permission, require_any_permission
 from app.models.master import User, Item, ItemBarcode, Category, ItemType, WarrantyDefault
 from app.models.security import AuditLog
 from app.schemas.items import ItemCreateIn, ItemUpdateIn, BarcodeIn, WarrantyDefaultIn
@@ -12,7 +12,7 @@ from app.services.numbering import NumberingService
 router = APIRouter(prefix="/items", tags=["items"])
 
 @router.get("/admin-list")
-def admin_list_items(q: str = "", active_only: bool = False, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
+def admin_list_items(q: str = "", active_only: bool = False, user: User = Depends(require_any_permission("ITEM_EDIT", "STOCK_VIEW")), db: Session = Depends(db_session)):
     term = q.strip()
     stmt = select(Item)
     if active_only:
@@ -33,7 +33,7 @@ def admin_list_items(q: str = "", active_only: bool = False, user: User = Depend
     return out
 
 @router.get("/masters")
-def item_masters(user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
+def item_masters(user: User = Depends(require_any_permission("ITEM_EDIT", "STOCK_VIEW")), db: Session = Depends(db_session)):
     cats = db.scalars(select(Category).where(Category.is_active.is_(True)).order_by(Category.name)).all()
     types = db.scalars(select(ItemType).where(ItemType.is_active.is_(True)).order_by(ItemType.name)).all()
     return {"categories":[{"id":str(x.id),"name":x.name,"parent_id":str(x.parent_id) if x.parent_id else None} for x in cats],

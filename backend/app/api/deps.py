@@ -73,3 +73,18 @@ def require_permission(code: str):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission required: {code}")
         return user
     return dependency
+
+def require_any_permission(*codes: str):
+    """Allow the request when the role holds at least one of the listed permissions.
+
+    C6 — used by read endpoints so a cashier with a view permission can read
+    masters/documents while the corresponding write endpoints stay locked.
+    """
+    def dependency(user: User = Depends(current_user), db: Session = Depends(db_session)) -> User:
+        if user.role.code.upper() == "ADMIN":
+            return user
+        allowed = db.scalar(select(Permission.id).join(RolePermission, RolePermission.permission_id == Permission.id).where(RolePermission.role_id == user.role_id, Permission.code.in_(codes)))
+        if allowed is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission required: {' or '.join(codes)}")
+        return user
+    return dependency
