@@ -246,6 +246,10 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
     }
   }
 
+  function handleSaleSearch() {
+    void findSale();
+  }
+
   return (
     <section className="workspace">
       <div className="split">
@@ -263,10 +267,10 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
             <input
               value={saleQuery}
               onChange={(event) => setSaleQuery(event.target.value)}
-              onKeyDown={(event) => { if (event.key === 'Enter') void findSale(); }}
+              onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleSaleSearch(); } }}
               placeholder="Completed sale ID / invoice number"
             />
-            <button onClick={() => void findSale()}>Find Sale</button>
+            <button onClick={handleSaleSearch}>Find Sale</button>
           </div>
 
           {sale && (
@@ -277,7 +281,7 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
 
               <div className="list-stack">
                 {lines.map((line) => (
-                  <div className="claim-row" key={line.sale_line_id}>
+                  <div className="claim-row return-line" key={line.sale_line_id}>
                     <div>
                       <b>{line.item_code} · {line.description}</b>
                       <small>Sold {line.quantity} · Line total Rs. {money(line.final_total)}</small>
@@ -288,7 +292,7 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
                       max={line.quantity}
                       aria-label={`Return quantity for ${line.item_code}`}
                     />
-                    <select value={line.condition} onChange={(event) => updateLine(line.sale_line_id, { condition: event.target.value as 'GOOD' | 'DAMAGED' })}>
+                    <select aria-label={`Condition for ${line.item_code}`} value={line.condition} onChange={(event) => updateLine(line.sale_line_id, { condition: event.target.value as 'GOOD' | 'DAMAGED' })}>
                       <option value="GOOD">Good</option>
                       <option value="DAMAGED">Damaged</option>
                     </select>

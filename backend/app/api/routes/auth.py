@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-import hashlib, secrets
+import hashlib, math, secrets
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, func, update
 from sqlalchemy.orm import Session
@@ -29,13 +29,21 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def login(payload: LoginIn, db: Session = Depends(db_session)):
     user = db.scalar(select(User).where(User.username == payload.username).with_for_update())
     now = datetime.now(timezone.utc)
-    if user is None or not user.is_active or (user.locked_until and user.locked_until > now) or not verify_password(user.password_hash, payload.password):
+    # H1 — a locked account must not extend its own lockout or keep counting attempts.
+    if user is not None and user.locked_until and user.locked_until > now:
+        minutes = max(1, math.ceil((user.locked_until - now).total_seconds() / 60))
+        db.add(LoginEvent(username_attempted=payload.username, user_id=user.id, event_type="LOGIN_BLOCKED", occurred_at=now))
+        db.commit()
+        raise HTTPException(status_code=423, detail=f"Account locked — try again in {minutes} minute{'s' if minutes != 1 else ''}")
+    if user is None or not user.is_active or not verify_password(user.password_hash, payload.password):
         if user:
             user.failed_login_count += 1
             if user.failed_login_count >= 5:
                 user.locked_until = now + timedelta(minutes=15)
         db.add(LoginEvent(username_attempted=payload.username, user_id=user.id if user else None, event_type="LOGIN_FAILED", occurred_at=now))
         db.commit()
+        if user is not None and user.locked_until and user.locked_until > now:
+            raise HTTPException(status_code=423, detail="Account locked — try again in 15 minutes")
         raise HTTPException(status_code=401, detail="Invalid username or password")
     user.failed_login_count = 0
     user.locked_until = None
