@@ -99,6 +99,11 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
   const phone = fullShop?.phone || '';
   const email = fullShop?.email || '';
   const invoiceNo = sale?.invoice_no || '-';
+  const customerName = sale?.customer_name || '';
+  const customerContact = sale?.customer_contact || '';
+  const customerLine = (customerName || customerContact)
+    ? `<div class="meta">Customer: ${customerName ? escapeHtml(customerName) : ''}${customerName && customerContact ? ' · ' : ''}${customerContact ? escapeHtml(customerContact) : ''}</div>`
+    : '';
   return `<!DOCTYPE html><html><head><title>Receipt ${escapeHtml(invoiceNo)}</title>
     <link rel="icon" href="data:," />
     <style>
@@ -118,6 +123,7 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
     <h1>${escapeHtml(shopName)}</h1>
     ${(address || phone || email) ? `<div class="contact">${address ? escapeHtml(address) + '<br/>' : ''}${phone ? 'Tel: ' + escapeHtml(phone) : ''}${phone && email ? ' · ' : ''}${escapeHtml(email)}</div>` : ''}
     <div class="meta">Invoice: ${escapeHtml(invoiceNo)}<br/>${new Date().toLocaleString()}</div>
+    ${customerLine}
     <div class="divider"></div>
     ${lines.map((l: any) => `
       <div class="line">

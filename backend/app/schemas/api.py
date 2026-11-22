@@ -49,6 +49,17 @@ class SaleIn(BaseModel):
     admin_discount_approval_id: UUID | None = None
     version: int | None = None
 
+class SaleLineOut(BaseModel):
+    sale_line_id: UUID
+    item_id: UUID
+    item_code: str
+    description: str
+    quantity: Decimal
+    unit_price: Decimal
+    discount: Decimal
+    final_total: Decimal
+    serialized_unit_id: UUID | None = None
+
 class SaleOut(BaseModel):
     sale_id: UUID
     invoice_no: str
@@ -59,6 +70,9 @@ class SaleOut(BaseModel):
     warranty_ids: list[UUID]
     replayed: bool
     version: int = 1
+    customer_name: str | None = None
+    customer_contact: str | None = None
+    lines: list[SaleLineOut] = Field(default_factory=list)
 
 class DateRangeIn(BaseModel):
     start: date

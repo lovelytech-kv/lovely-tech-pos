@@ -46,7 +46,15 @@ type SaleDetail = {
   sale_datetime: string;
   grand_total: string | number;
   version: number;
+  customer_name?: string | null;
+  customer_contact?: string | null;
   lines: SaleLine[];
+};
+
+type CustomerOption = {
+  customer_id: string;
+  name: string | null;
+  contact_no: string | null;
 };
 
 type Filters = {
@@ -56,10 +64,18 @@ type Filters = {
   payment_method: string;
   status: string;
   cashier_id: string;
+  customer_id: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const LIMIT = 50;
+
+function customerText(name?: string | null, contact?: string | null): string {
+  const fullName = (name || '').trim();
+  const phone = (contact || '').trim();
+  if (fullName && phone) return `${fullName} · ${phone}`;
+  return fullName || phone || 'Walk-in';
+}
 
 export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   const [filters, setFilters] = useState<Filters>({
@@ -69,6 +85,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
     payment_method: '',
     status: '',
     cashier_id: '',
+    customer_id: '',
   });
   const [sales, setSales] = useState<SaleListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -79,6 +96,10 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   const [selectedDetail, setSelectedDetail] = useState<SaleDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [cashiers, setCashiers] = useState<Array<{ user_id: string; display_name: string; role: string }>>([]);
+  const [customerQuery, setCustomerQuery] = useState('');
+  const [customerFilterLabel, setCustomerFilterLabel] = useState('');
+  const [customerMatches, setCustomerMatches] = useState<CustomerOption[]>([]);
+  const [customerSearching, setCustomerSearching] = useState(false);
 
   const modal = useModal();
   const shop = useShopProfile();
@@ -88,6 +109,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   const salesAbortRef = useRef<AbortController | null>(null);
   // M13 — only the latest opened sale may populate the detail panel.
   const detailRequestSeq = useRef(0);
+  const customerAbortRef = useRef<AbortController | null>(null);
 
   // Load cashiers dropdown (admin only)
   useEffect(() => {
@@ -101,6 +123,45 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
       }
     })();
   }, [isAdmin]);
+
+  // Debounced customer filter lookup (phone or name).
+  useEffect(() => {
+    const term = customerQuery.trim();
+    if (filters.customer_id && term === customerFilterLabel) {
+      setCustomerMatches([]);
+      setCustomerSearching(false);
+      return;
+    }
+    if (!term) {
+      setCustomerMatches([]);
+      setCustomerSearching(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      customerAbortRef.current?.abort();
+      const controller = new AbortController();
+      customerAbortRef.current = controller;
+      setCustomerSearching(true);
+      try {
+        const rows = await api<CustomerOption[]>(
+          `/customers?q=${encodeURIComponent(term)}&limit=10`,
+          { signal: controller.signal },
+        );
+        if (!cancelled && !controller.signal.aborted) setCustomerMatches(rows);
+      } catch {
+        if (!cancelled) setCustomerMatches([]);
+      } finally {
+        if (!cancelled) setCustomerSearching(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [customerQuery, filters.customer_id, customerFilterLabel]);
+
+  useEffect(() => () => customerAbortRef.current?.abort(), []);
 
   const fetchSales = useCallback(
     async (append = false) => {
@@ -117,6 +178,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
         if (filters.q.trim()) params.set('q', filters.q.trim());
         if (filters.payment_method) params.set('payment_method', filters.payment_method);
         if (filters.status) params.set('status', filters.status);
+        if (filters.customer_id) params.set('customer_id', filters.customer_id);
         if (isAdmin && filters.cashier_id) params.set('cashier_id', filters.cashier_id);
         params.set('limit', String(LIMIT));
         params.set('offset', String(append ? sales.length : 0));
@@ -154,7 +216,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.date_from, filters.date_to, filters.q, filters.payment_method, filters.status, filters.cashier_id]);
+  }, [filters.date_from, filters.date_to, filters.q, filters.payment_method, filters.status, filters.cashier_id, filters.customer_id]);
 
   async function openSale(item: SaleListItem) {
     const seq = ++detailRequestSeq.current;
@@ -203,8 +265,22 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
     }
   }
 
-  async function printReceipt(detail: SaleDetail) {
-    const w = window.open('', '_blank', 'width=420,height=640');
+  function pickCustomerFilter(customer: CustomerOption) {
+    const label = customer.name || customer.contact_no || 'Customer';
+    setFilters((f) => ({ ...f, customer_id: customer.customer_id }));
+    setCustomerQuery(label);
+    setCustomerFilterLabel(label);
+    setCustomerMatches([]);
+  }
+
+  function clearCustomerFilter() {
+    setFilters((f) => ({ ...f, customer_id: '' }));
+    setCustomerQuery('');
+    setCustomerFilterLabel('');
+    setCustomerMatches([]);
+  }
+
+  async function printReceipt(detail: SaleDetail) {    const w = window.open('', '_blank', 'width=420,height=640');
     if (!w) {
       toast.error('Print popup blocked. Allow popups for this site.');
       return;
@@ -222,6 +298,11 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
     const phone = fullShop?.phone || '';
     const email = fullShop?.email || '';
     const lines = Array.isArray(detail.lines) ? detail.lines : [];
+    const customerName = detail.customer_name || '';
+    const customerContact = detail.customer_contact || '';
+    const customerLine = (customerName || customerContact)
+      ? `<div class="meta">Customer: ${customerName ? escapeHtml(customerName) : ''}${customerName && customerContact ? ' · ' : ''}${customerContact ? escapeHtml(customerContact) : ''}</div>`
+      : '';
     w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${escapeHtml(detail.invoice_no)}</title>
       <style>
         body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
@@ -239,6 +320,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
       <h1>${escapeHtml(shopName)}</h1>
       ${(address || phone || email) ? `<div class="contact">${address ? escapeHtml(address) + '<br/>' : ''}${phone ? 'Tel: ' + escapeHtml(phone) : ''}${phone && email ? ' · ' : ''}${escapeHtml(email)}</div>` : ''}
       <div class="meta">Invoice: ${escapeHtml(detail.invoice_no)}<br/>${new Date(detail.sale_datetime).toLocaleString()}</div>
+      ${customerLine}
       <div class="divider"></div>
       ${lines.map((l) => `
         <div class="line">
@@ -380,6 +462,48 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
             </label>
           )}
         </div>
+
+        <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.35rem' }}>
+          <span className="eyebrow" style={{ fontSize: '0.7rem' }}>Customer filter</span>
+          <div className="search-row" style={{ margin: 0 }}>
+            <input
+              value={customerQuery}
+              onChange={(e) => {
+                const value = e.target.value;
+                setCustomerQuery(value);
+                if (filters.customer_id && value.trim() !== customerFilterLabel) {
+                  setFilters((f) => ({ ...f, customer_id: '' }));
+                }
+                if (!value.trim()) setCustomerFilterLabel('');
+              }}
+              placeholder="Filter by customer (phone or name)"
+              aria-label="Filter by customer"
+            />
+            {(filters.customer_id || customerQuery) && (
+              <button type="button" className="ghost" onClick={clearCustomerFilter}>Clear</button>
+            )}
+          </div>
+          {customerSearching && <small className="muted">Searching customers…</small>}
+          {filters.customer_id && <small className="muted">Showing only the selected customer’s sales.</small>}
+          {!customerSearching && customerMatches.length > 0 && (
+            <div className="list-stack">
+              {customerMatches.map((customer) => (
+                <button
+                  type="button"
+                  className="list-row customer-row"
+                  key={customer.customer_id}
+                  onClick={() => pickCustomerFilter(customer)}
+                >
+                  <span>
+                    <b>{customer.name || customer.contact_no || 'Unnamed customer'}</b>
+                    <small>{customer.contact_no || 'No phone number'}</small>
+                  </span>
+                  <span>›</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* TABLE + DETAIL */}
@@ -426,7 +550,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                       >
                         <td><b>{s.invoice_no}</b></td>
                         <td>{new Date(s.sale_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td>{s.customer_name || s.customer_contact || '—'}</td>
+                        <td>{customerText(s.customer_name, s.customer_contact)}</td>
                         <td style={{ textAlign: 'right' }}>{s.item_count}</td>
                         <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                           Rs. {money(s.grand_total)}
@@ -487,7 +611,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
 
               <div className="day-card" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
                 <span>Customer</span>
-                <b>{selectedItem.customer_name || selectedItem.customer_contact || 'Walk-in'}</b>
+                <b>{customerText(selectedItem.customer_name, selectedItem.customer_contact)}</b>
                 <span>Cashier</span>
                 <b>{selectedItem.cashier_name}</b>
                 <span>Payment</span>
