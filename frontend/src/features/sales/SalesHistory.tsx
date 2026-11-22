@@ -297,6 +297,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
     const address = fullShop?.address || '';
     const phone = fullShop?.phone || '';
     const email = fullShop?.email || '';
+    const receiptFooter = phone ? `Software by Lovely Tech · ${escapeHtml(phone)}` : 'Software by Lovely Tech';
     const lines = Array.isArray(detail.lines) ? detail.lines : [];
     const customerName = detail.customer_name || '';
     const customerContact = detail.customer_contact || '';
@@ -314,6 +315,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
         .line{padding:2px 0;}
         .total{font-size:15px;font-weight:700;}
         .foot{text-align:center;font-size:11px;margin-top:8px;}
+        .receipt-footer{margin-top:16px;padding-top:8px;border-top:1px dashed #ccc;text-align:center;font-size:10px;color:#888;}
         .logo{display:block;margin:0 auto 4px;max-width:80px;max-height:80px;object-fit:contain;}
       </style></head><body>
       ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" class="logo" />` : ''}
@@ -332,6 +334,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
       <div class="row total"><span>TOTAL</span><span>Rs. ${escapeHtml(detail.grand_total)}</span></div>
       <div class="divider"></div>
       <div class="foot">Thank you for shopping at ${escapeHtml(shopName)}!</div>
+      <div class="receipt-footer">${receiptFooter}</div>
       <script>window.onload = function(){ window.print(); };</script>
       </body></html>`);
     w.document.close();

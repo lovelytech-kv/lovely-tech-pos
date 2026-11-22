@@ -349,6 +349,16 @@ html,body,#root{height:100%;max-height:100%}
 @media(max-width:1240px){.app-header-user-text{display:none}.app-header .header-status,.app-header-notifications{display:none}}
 @media(max-width:1180px){.app-header .global-search{display:none}.app-header-title h1{max-width:280px}}
 
+/* ============ SESSION 3B-3 — RECEIPT FOOTER ============ */
+.receipt-footer {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px dashed #ccc;
+  text-align: center;
+  font-size: 10px;
+  color: #888;
+}
+
 /* Discovery + Admin manual server fallback */
 .primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s,opacity .15s}
 .primary:hover{filter:brightness(1.06)}
