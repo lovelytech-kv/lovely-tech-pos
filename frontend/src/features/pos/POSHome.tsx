@@ -19,6 +19,7 @@ import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
 import { useShopProfile } from '../settings/ShopContext';
 import { PitrRestoreDialog } from './PitrRestoreDialog';
+import { CustomerPickerModal, type PickerCustomer } from './CustomerPickerModal';
 
 type User = { display_name:string; role:string; branch_id:string; username?:string };
 type WarrantyDefault = { warranty_type:string; duration_value?:number|null; custom_rule?:string|null };
@@ -155,7 +156,7 @@ function CustomersTab({onError}:{onError:(x:string)=>void}){
 }
 
 function SalesTab({isAdmin,onError,onNavigate}:{isAdmin:boolean,onError:(x:string)=>void,onNavigate:(key:string)=>void}){
-  const [q,setQ]=useState(''),[items,setItems]=useState<Item[]>([]),[cart,setCart]=useState<CartLine[]>([]),[cash,setCash]=useState(''),[card,setCard]=useState(''),[online,setOnline]=useState(''),[credit,setCredit]=useState(false),[customer,setCustomer]=useState(''),[customerQuery,setCustomerQuery]=useState(''),[customers,setCustomers]=useState<any[]>([]),[settleAmount,setSettleAmount]=useState(''),[settleMethod,setSettleMethod]=useState('CASH'),[settlementKey,setSettlementKey]=useState(()=>crypto.randomUUID()),[saleKey,setSaleKey]=useState(()=>crypto.randomUUID()),[approvalId,setApprovalId]=useState(''),[pendingApproval,setPendingApproval]=useState<any|null>(null),[customerHistory,setCustomerHistory]=useState<any|null>(null),[doc,setDoc]=useState<DocType>(() => getDefaultDocType()),[manualRef,setManualRef]=useState(''),[saleDateTime,setSaleDateTime]=useState(''),[busy,setBusy]=useState(false),[last,setLast]=useState<any>();
+  const [q,setQ]=useState(''),[items,setItems]=useState<Item[]>([]),[cart,setCart]=useState<CartLine[]>([]),[cash,setCash]=useState(''),[card,setCard]=useState(''),[online,setOnline]=useState(''),[credit,setCredit]=useState(false),[customer,setCustomer]=useState(''),[selectedCustomer,setSelectedCustomer]=useState<PickerCustomer|null>(null),[pickerOpen,setPickerOpen]=useState(false),[settleAmount,setSettleAmount]=useState(''),[settleMethod,setSettleMethod]=useState('CASH'),[settlementKey,setSettlementKey]=useState(()=>crypto.randomUUID()),[saleKey,setSaleKey]=useState(()=>crypto.randomUUID()),[approvalId,setApprovalId]=useState(''),[pendingApproval,setPendingApproval]=useState<any|null>(null),[customerHistory,setCustomerHistory]=useState<any|null>(null),[doc,setDoc]=useState<DocType>(() => getDefaultDocType()),[manualRef,setManualRef]=useState(''),[saleDateTime,setSaleDateTime]=useState(''),[busy,setBusy]=useState(false),[last,setLast]=useState<any>();
   const [toast,setToast]=useState('');
   const [recentItems,setRecentItems]=useState<Item[]>(()=>loadRecent());
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -198,6 +199,19 @@ useEffect(() => {
   const isFullyPaid = remaining < 0.01 || totalPaid >= Number(total);
 
   const moneyInputPattern = /^\d*\.?\d{0,2}$/;
+
+  function customerDisplay(c: PickerCustomer): string {
+    const fullName = c.name?.trim();
+    const phone = c.contact_no?.trim();
+    if (fullName && phone) return `${fullName} · ${phone}`;
+    return fullName || phone || 'Customer';
+  }
+
+  function clearCustomer() {
+    setCustomer('');
+    setSelectedCustomer(null);
+    setCustomerHistory(null);
+  }
 
   function recordRecent(item: Item) {
     const stored = loadRecent().filter(x => x.item_id !== item.item_id);
@@ -345,7 +359,6 @@ useEffect(() => {
     }
   }
 
-  async function searchCustomers(){try{setCustomers(await api<any[]>(`/customers?q=${encodeURIComponent(customerQuery)}`))}catch(e){onError((e as Error).message)}}
   async function loadCustomerHistory(){try{if(!customer){onError('Select a customer first.');return} setCustomerHistory(await api<any>(`/customers/${customer}/history`))}catch(e){onError((e as Error).message)}}
   function edit(id:string,k:'quantity'|'price'|'discount',v:string){setCart(c=>c.map(x=>x.line_id===id?{...x,[k]:v}:x))}
   function setWarrantyOverride(id:string, value:string){setCart(c=>c.map(x=>x.line_id===id?{...x,warranty_override:value==='DEFAULT'?null:{...(x.warranty_default||{warranty_type:'NONE'}),warranty_type:value,duration_value:value==='DAYS'||value==='MONTHS'?(x.warranty_override?.duration_value||x.warranty_default?.duration_value||null):null,custom_rule:value==='CUSTOM'?(x.warranty_override?.custom_rule||x.warranty_default?.custom_rule||''):null}}:x))}
@@ -396,6 +409,7 @@ useEffect(() => {
     try{
       setBusy(true);
       if(!cart.length){onError('Add at least one item.');closePre();return}
+      if(saleCredit && !customer){onError('Credit sale requires a customer. Add one above the cart.');closePre();return}
       const noImei=cart.find(x=>x.is_serialized&&!x.serialized_unit_id);
       if(noImei){onError(`Select the IMEI / serial number for ${noImei.description} (scan the IMEI into the search box).`);closePre();return}
       if(cart.some(x=>!x.price||!moneyPositive(x.price))){onError('Enter a sale price for every item.');closePre();return}
@@ -425,7 +439,7 @@ useEffect(() => {
         })),
         payments,
         credit_sale: saleCredit,
-        customer_id: saleCredit ? customer || null : null,
+        customer_id: customer || null,
         document_type: saleDoc,
         manual_invoice_ref: saleDoc === 'MANUAL' ? manualRef.trim() : null,
         sale_datetime: isAdmin && saleDateTime ? new Date(saleDateTime).toISOString() : null,
@@ -445,6 +459,7 @@ useEffect(() => {
         setCredit(false);
         setApprovalId('');
         setPendingApproval(null);
+        clearCustomer();
         setSaleKey(crypto.randomUUID());
         setDoc(getDefaultDocType());
         if (saleDoc === 'SYSTEM_PRINTED' && !saleCredit && preOpenedPrintWindow && !preOpenedPrintWindow.closed) {
@@ -478,6 +493,8 @@ useEffect(() => {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Customer picker and other modals own their own keyboard handling.
+      if (document.querySelector('.modal-overlay')) return;
       const target = e.target as HTMLElement | null;
       const isInput = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT');
       if (e.key === 'F2') {
@@ -603,6 +620,29 @@ useEffect(() => {
               style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--muted)', cursor: cart.length ? 'pointer' : 'not-allowed', minHeight: 28 }}
             >Clear</button>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) 0', borderBottom: '1px solid var(--line)', marginBottom: 'var(--space-2)', flexWrap: 'wrap' }}>
+            <span className="eyebrow" style={{ margin: 0 }}>Customer</span>
+            {selectedCustomer ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 999, padding: '2px 4px 2px 10px', fontSize: '0.8rem', maxWidth: '100%' }}>
+                <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{customerDisplay(selectedCustomer)}</b>
+                <button
+                  type="button"
+                  onClick={clearCustomer}
+                  aria-label="Remove customer from sale"
+                  title="Remove customer"
+                  style={{ background: 'transparent', border: 0, color: 'var(--muted)', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: '2px 6px' }}
+                >×</button>
+              </span>
+            ) : (
+              <span className="muted" style={{ fontSize: '0.85rem' }}>Walk-in Customer</span>
+            )}
+            <button
+              type="button"
+              className="ghost"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => setPickerOpen(true)}
+            >{selectedCustomer ? 'Change' : '+ Add Customer'}</button>
+          </div>
           {cart.length === 0
             ? <div className="sales-cart-empty">No items yet. Scan or search to add.</div>
             : cart.map(x => (
@@ -704,7 +744,7 @@ useEffect(() => {
 
           {isAdmin && (
             <div className="sales-admin-row">
-              <label><input type="checkbox" checked={credit} onChange={e => setCredit(e.target.checked)} /> Credit Sale</label>
+              <label><input type="checkbox" checked={credit} onChange={e => { setCredit(e.target.checked); if (e.target.checked && !customer) setPickerOpen(true); }} /> Credit Sale</label>
             </div>
           )}
 
@@ -726,42 +766,24 @@ useEffect(() => {
 
           {credit && (
             <div className="sales-panel" style={{ background: 'var(--surface-2)', marginTop: 'var(--space-2)' }}>
-              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                <input placeholder="Customer name / contact" value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchCustomers()} style={{ flex: 1, padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />
-                <button type="button" onClick={searchCustomers} style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600 }}>Find</button>
-              </div>
-              <select value={customer} onChange={e => setCustomer(e.target.value)} style={{ width: '100%', marginTop: 'var(--space-2)', padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }}>
-                <option value="">Select customer</option>
-                {customers.map(c => <option key={c.customer_id} value={c.customer_id}>{c.name || 'Unnamed'} · {c.contact_no || 'No contact'}</option>)}
-              </select>
-              <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
-                <input id="newCustomerName" placeholder="New customer name" style={{ flex: 1, padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />
-                <input id="newCustomerContact" placeholder="Contact no." style={{ flex: 1, padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />
-                <button type="button" onClick={async () => {
-                  try {
-                    const n = (document.getElementById('newCustomerName') as HTMLInputElement)?.value.trim();
-                    const c = (document.getElementById('newCustomerContact') as HTMLInputElement)?.value.trim();
-                    if (!n && !c) { onError('Enter customer name or contact.'); return; }
-                    const r = await api<any>('/customers', { method: 'POST', body: JSON.stringify({ name: n || null, contact_no: c || null, notes: null }) });
-                    setCustomer(r.customer_id);
-                    setCustomerQuery(r.name || r.contact_no || '');
-                    searchCustomers();
-                  } catch (e) { onError((e as Error).message); }
-                }} style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600 }}>Create</button>
-              </div>
-              <button type="button" disabled={!customer} onClick={loadCustomerHistory} style={{ marginTop: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', cursor: customer ? 'pointer' : 'not-allowed' }}>History</button>
+              {!customer && <p className="muted" style={{ margin: 0 }}>Credit sale requires a customer. Use “+ Add Customer” above the cart.</p>}
+              {customer && (
+                <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button type="button" onClick={loadCustomerHistory} style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', cursor: 'pointer' }}>Customer History</button>
+                  {customerHistory && <button type="button" onClick={() => setCustomerHistory(null)}>Hide</button>}
+                </div>
+              )}
               {customerHistory && (
                 <div style={{ marginTop: 'var(--space-2)', padding: 'var(--space-2)', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-1)' }}>
                     <b>{customerHistory.customer?.name || customerHistory.customer?.contact_no || 'Customer'}</b>
-                    <button type="button" onClick={() => setCustomerHistory(null)}>Close</button>
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
                     Sales: {customerHistory.sales?.length || 0} · Repairs: {customerHistory.repairs?.length || 0} · Warranty: {customerHistory.warranty_claims?.length || 0}
                   </div>
                 </div>
               )}
-              {isAdmin && (
+              {isAdmin && customer && (
                 <div style={{ marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-2)' }}>
                   <input type="text" inputMode="decimal" placeholder="Settlement amount" value={settleAmount} onChange={e => { const v = e.target.value; if (v === '' || moneyInputPattern.test(v)) setSettleAmount(v); }} style={{ flex: 1, padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />
                   <select value={settleMethod} onChange={e => setSettleMethod(e.target.value)} style={{ padding: 'var(--space-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }}>
@@ -801,11 +823,20 @@ useEffect(() => {
             </div>
           )}
 
-          <button className="sales-complete-btn" disabled={!cart.length || busy || (!credit && !isFullyPaid)} onClick={handleCompleteSale}>
+          <button className="sales-complete-btn" disabled={!cart.length || busy || (credit && !customer) || (!credit && !isFullyPaid)} onClick={handleCompleteSale}>
             {busy ? 'Processing…' : credit ? '✓ Complete Credit Sale' : '✓ Complete Sale'}
           </button>
         </div>
       </div>
+      {pickerOpen && (
+        <CustomerPickerModal
+          onSelect={(picked) => {
+            setCustomer(picked.customer_id);
+            setSelectedCustomer(picked);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </section>
   );
 }
