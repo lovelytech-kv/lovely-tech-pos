@@ -12,6 +12,8 @@ type Props = {
   onClose: () => void;
 };
 
+const digitsOnly = (value: string | null | undefined): string => (value || '').replace(/\D/g, '');
+
 function customerLabel(customer: PickerCustomer): string {
   return customer.name?.trim() || customer.contact_no?.trim() || 'Unnamed customer';
 }
@@ -23,23 +25,55 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [retryToken, setRetryToken] = useState(0);
+  const [phone, setPhone] = useState('');
+  const [name, setName] = useState('');
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [duplicateCount, setDuplicateCount] = useState(0);
+  const [checkingPhone, setCheckingPhone] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const savingRef = useRef(saving);
+  const dirtyRef = useRef(false);
+  const requestCloseRef = useRef<() => void>(() => undefined);
 
+  const dirty = view === 'new' && (phone.trim().length > 0 || name.trim().length > 0);
+
+  function requestClose() {
+    if (savingRef.current) return;
+    if (dirtyRef.current && !window.confirm('Discard the new customer details?')) return;
+    onClose();
+  }
+
+  useEffect(() => {
+    savingRef.current = saving;
+  }, [saving]);
+
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
+
+  useEffect(() => {
+    requestCloseRef.current = requestClose;
+  }, [onClose, dirty, saving]);
+
+  // ESC closes the picker, but a dirty quick-add form must be confirmed first (G3).
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
-      onClose();
+      requestCloseRef.current();
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     if (view === 'search') searchRef.current?.focus();
+    else phoneRef.current?.focus();
   }, [view]);
 
   useEffect(() => {
@@ -73,9 +107,84 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
     return () => window.clearTimeout(timer);
   }, [query, view, retryToken]);
 
+  // Duplicate phone warning (allowed, but the cashier must see it).
+  useEffect(() => {
+    if (view !== 'new') return;
+    const raw = phone.trim();
+    const target = digitsOnly(raw);
+    if (target.length < 3) {
+      setDuplicateCount(0);
+      setCheckingPhone(false);
+      return;
+    }
+    let cancelled = false;
+    setCheckingPhone(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const rows = await api<PickerCustomer[]>(`/customers?q=${encodeURIComponent(raw)}&limit=50`);
+        if (!cancelled) {
+          setDuplicateCount(rows.filter((row) => digitsOnly(row.contact_no) === target).length);
+        }
+      } catch {
+        if (!cancelled) setDuplicateCount(0);
+      } finally {
+        if (!cancelled) setCheckingPhone(false);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [phone, view]);
+
+  function openNewCustomer() {
+    setFormError('');
+    setView('new');
+  }
+
+  function backToSearch() {
+    if (phone.trim() || name.trim()) {
+      if (!window.confirm('Discard the new customer details?')) return;
+    }
+    setPhone('');
+    setName('');
+    setFormError('');
+    setDuplicateCount(0);
+    setView('search');
+  }
+
   function choose(customer: PickerCustomer) {
     onSelect(customer);
     onClose();
+  }
+
+  async function save() {
+    if (saving) return;
+    const trimmedPhone = phone.trim();
+    const trimmedName = name.trim();
+    if (!trimmedPhone && !trimmedName) {
+      setFormError('Enter a phone number or a name.');
+      phoneRef.current?.focus();
+      return;
+    }
+    setSaving(true);
+    setFormError('');
+    try {
+      const created = await api<PickerCustomer>('/customers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: trimmedName || null,
+          contact_no: trimmedPhone || null,
+          notes: null,
+        }),
+      });
+      onSelect(created);
+      onClose();
+    } catch (e) {
+      setFormError((e as Error).message || 'Could not create the customer. Please retry.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -84,18 +193,18 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="customer-picker-title"
-      onClick={onClose}
+      onClick={requestClose}
     >
       <div className="modal-card" style={{ width: 'min(560px, 100%)' }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 id="customer-picker-title">{view === 'search' ? 'Add Customer' : 'New Customer'}</h3>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
+          <button type="button" className="modal-close" onClick={requestClose} aria-label="Close" disabled={saving}>×</button>
         </div>
 
         <div className="modal-body">
           {view === 'search' ? (
             <>
-              <button type="button" onClick={() => setView('new')} style={{ background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', padding: '0.6rem 1rem', fontWeight: 600, cursor: 'pointer' }}>
+              <button type="button" onClick={openNewCustomer} style={{ background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', padding: '0.6rem 1rem', fontWeight: 600, cursor: 'pointer' }}>
                 + New Customer
               </button>
 
@@ -153,7 +262,7 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
                       <span className="muted">
                         {query.trim() ? 'No customer matches this phone or name.' : 'Create the first customer to start attaching sales.'}
                       </span>
-                      <button type="button" onClick={() => setView('new')}>
+                      <button type="button" onClick={openNewCustomer}>
                         {query.trim() ? 'Add new customer' : '+ New Customer'}
                       </button>
                     </div>
@@ -162,17 +271,58 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
               )}
 
               <div className="modal-actions">
-                <button type="button" onClick={onClose}>Cancel</button>
+                <button type="button" onClick={requestClose}>Cancel</button>
               </div>
             </>
           ) : (
             <>
-              <button type="button" className="ghost" onClick={() => setView('search')} style={{ justifySelf: 'start' }}>
+              <button type="button" className="ghost" onClick={backToSearch} disabled={saving} style={{ justifySelf: 'start' }}>
                 ← Back to search
               </button>
-              <p className="muted">New customer form is completed in the next phase.</p>
+
+              <div className="field">
+                <label htmlFor="customer-picker-phone">Phone number</label>
+                <input
+                  id="customer-picker-phone"
+                  ref={phoneRef}
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => { setPhone(e.target.value); setFormError(''); }}
+                  placeholder="07X XXX XXXX"
+                  autoComplete="off"
+                  aria-describedby="customer-picker-phone-hint"
+                />
+                <small id="customer-picker-phone-hint" className="muted">Any format accepted (Sri Lankan 07X numbers or other digits).</small>
+                {checkingPhone && (
+                  <small className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span className="spinner" /> Checking for duplicate phone…
+                  </small>
+                )}
+                {!checkingPhone && duplicateCount > 0 && (
+                  <small style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
+                    {duplicateCount} {duplicateCount === 1 ? 'customer has' : 'customers have'} this phone number. Saving is allowed, but check it is not a duplicate.
+                  </small>
+                )}
+              </div>
+
+              <div className="field">
+                <label htmlFor="customer-picker-name">Name (optional)</label>
+                <input
+                  id="customer-picker-name"
+                  value={name}
+                  onChange={(e) => { setName(e.target.value); setFormError(''); }}
+                  placeholder="Customer name"
+                  autoComplete="off"
+                />
+              </div>
+
+              {formError && <p className="field-error" role="alert">{formError}</p>}
+
               <div className="modal-actions">
-                <button type="button" onClick={onClose}>Cancel</button>
+                <button type="button" onClick={requestClose} disabled={saving}>Cancel</button>
+                <button type="button" onClick={() => void save()} disabled={saving} style={{ background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', padding: '0.5rem 1rem', fontWeight: 600, cursor: saving ? 'wait' : 'pointer' }}>
+                  {saving ? 'Saving…' : 'Save Customer'}
+                </button>
               </div>
             </>
           )}
