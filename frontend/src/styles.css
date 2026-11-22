@@ -303,6 +303,32 @@ html,body,#root{height:100%;max-height:100%}
 .error-banner{display:flex;justify-content:space-between;align-items:center;gap:12px}.error-dismiss{border:0!important;background:transparent!important;color:inherit!important;padding:0 4px!important;font-size:18px!important}.connection-offline .online-dot,.header-offline .online-dot{background:#d9534f!important}.connection-checking .online-dot,.header-checking .online-dot{background:#d6a33d!important}.header-status{transition:.2s}.header-offline{color:#a52b27}.header-checking{color:#987020}
 @media(max-width:900px){.v0-nav{overflow-x:auto;grid-template-columns:repeat(4,minmax(110px,1fr))}.v0-nav button{white-space:nowrap}}
 
+/* ============ SESSION 3B-3 — COLLAPSIBLE SIDEBAR ============ */
+.v0-shell{grid-template-columns:var(--sidebar-width-expanded) minmax(0,1fr);transition:grid-template-columns var(--transition-normal)}
+.v0-shell.sidebar-collapsed{grid-template-columns:var(--sidebar-width-collapsed) minmax(0,1fr)}
+.v0-sidebar{width:100%;padding:16px 12px;transition:padding var(--transition-normal)}
+.v0-sidebar.is-collapsed{padding:14px 6px}
+.v0-sidebar-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding-bottom:10px;border-bottom:1px solid #ededee}
+.v0-sidebar-head .v0-brand{border-bottom:0;padding:4px 2px;min-width:0;flex:1 1 auto}
+.v0-brand .brand-text{min-width:0;overflow:hidden}
+.v0-brand .brand-text strong,.v0-brand .brand-text small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v0-sidebar-toggle{flex:0 0 auto;width:28px;height:28px;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--muted);font-size:14px;line-height:1;transition:color var(--transition-fast),border-color var(--transition-fast),background var(--transition-fast)}
+.v0-sidebar-toggle:hover{color:var(--accent);border-color:var(--accent);background:rgba(var(--accent-rgb),.06)}
+.v0-nav .nav-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v0-sidebar.is-collapsed .v0-sidebar-head{flex-direction:column-reverse;justify-content:center;gap:8px;padding-bottom:8px}
+.v0-sidebar.is-collapsed .v0-brand{flex:0 0 auto;justify-content:center;padding:2px}
+.v0-sidebar.is-collapsed .brand-text{display:none}
+.v0-sidebar.is-collapsed .v0-sidebar-label{height:1px;margin:14px 6px 7px;padding:0;background:var(--line);overflow:hidden;color:transparent;font-size:0;letter-spacing:0}
+.v0-sidebar.is-collapsed .v0-sidebar-label.more-label{margin-top:12px}
+.v0-sidebar.is-collapsed .v0-nav button{justify-content:center;gap:0;padding:11px 0}
+.v0-sidebar.is-collapsed .nav-label,.v0-sidebar.is-collapsed .nav-badge{display:none}
+.v0-sidebar.is-collapsed .nav-icon{width:auto;font-size:17px}
+.v0-sidebar.is-collapsed .v0-connection{justify-content:center;padding:11px 0}
+.v0-sidebar.is-collapsed .v0-connection > span:last-child{display:none}
+.v0-sidebar.is-collapsed .v0-user-mini{grid-template-columns:32px;justify-content:center;gap:0;padding:7px 0}
+.v0-sidebar.is-collapsed .v0-user-mini > span:not(.avatar),.v0-sidebar.is-collapsed .logout-arrow{display:none}
+:root[data-theme="dark"] .v0-sidebar-head{border-color:var(--line)}
+
 /* Discovery + Admin manual server fallback */
 .primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s,opacity .15s}
 .primary:hover{filter:brightness(1.06)}
