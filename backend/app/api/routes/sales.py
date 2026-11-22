@@ -10,7 +10,7 @@ from app.api.deps import db_session, require_permission
 from app.models.master import Item, User
 from app.models.sales import Customer, Payment, Sale, SaleLine
 from app.models.security import ApprovalRequest
-from app.schemas.api import SaleIn, SaleOut
+from app.schemas.api import SaleIn, SaleLineOut, SaleOut
 from app.services.sales import (
     PaymentInput,
     SaleLineInput,
@@ -30,6 +30,7 @@ def list_sales(
     date_to: date | None = None,
     q: str | None = None,
     cashier_id: uuid.UUID | None = None,
+    customer_id: uuid.UUID | None = None,
     payment_method: str | None = None,
     status: str | None = None,
     limit: int = 50,
@@ -74,6 +75,9 @@ def list_sales(
         stmt = stmt.where(Sale.cashier_id == user.id)
     elif cashier_id is not None:
         stmt = stmt.where(Sale.cashier_id == cashier_id)
+
+    if customer_id is not None:
+        stmt = stmt.where(Sale.customer_id == customer_id)
 
     if payment_method:
         stmt = stmt.where(
@@ -249,6 +253,11 @@ def _approval_matches_sale(approval: ApprovalRequest, payload: SaleIn, user: Use
 def create_sale(payload: SaleIn, user: User = Depends(require_permission("SALE_CREATE")), db: Session = Depends(db_session)):
     if payload.credit_sale and user.role.code.upper() != "ADMIN":
         raise HTTPException(403, "Credit sale is Admin-only")
+    customer = None
+    if payload.customer_id is not None:
+        customer = db.scalar(select(Customer).where(Customer.id == payload.customer_id, Customer.is_active.is_(True)))
+        if customer is None:
+            raise HTTPException(404, "Customer not found")
     sale_datetime = payload.sale_datetime
     if sale_datetime is not None:
         now = datetime.now(timezone.utc)
@@ -291,7 +300,40 @@ def create_sale(payload: SaleIn, user: User = Depends(require_permission("SALE_C
     change = Decimal("0")
     if req.cash_received is not None and req.cash_received >= cash_due:
         change = (req.cash_received - cash_due).quantize(Decimal("0.01"))
-    return SaleOut(sale_id=result.sale_id, invoice_no=result.invoice_no, grand_total=result.grand_total, change_amount=change, total_cost=result.total_cost if user.role.code.upper() == "ADMIN" else None, negative_stock=result.negative_stock, warranty_ids=list(result.warranty_ids), replayed=result.replayed, version=result.version)
+    line_rows = db.execute(
+        select(SaleLine, Item)
+        .join(Item, Item.id == SaleLine.item_id)
+        .where(SaleLine.sale_id == result.sale_id)
+        .order_by(SaleLine.created_at, SaleLine.id)
+    ).all()
+    lines = [
+        SaleLineOut(
+            sale_line_id=line.id,
+            item_id=line.item_id,
+            item_code=item.item_code,
+            description=item.description,
+            quantity=line.quantity,
+            unit_price=line.unit_price,
+            discount=line.discount,
+            final_total=line.final_total,
+            serialized_unit_id=line.serialized_unit_id,
+        )
+        for line, item in line_rows
+    ]
+    return SaleOut(
+        sale_id=result.sale_id,
+        invoice_no=result.invoice_no,
+        grand_total=result.grand_total,
+        change_amount=change,
+        total_cost=result.total_cost if user.role.code.upper() == "ADMIN" else None,
+        negative_stock=result.negative_stock,
+        warranty_ids=list(result.warranty_ids),
+        replayed=result.replayed,
+        version=result.version,
+        customer_name=customer.name if customer else None,
+        customer_contact=customer.contact_no if customer else None,
+        lines=lines,
+    )
 
 
 @router.post("/discount-approval")
@@ -335,10 +377,13 @@ def get_sale_detail(sale_id: str, user: User = Depends(require_permission("RETUR
         raise HTTPException(404, f"No sale matches '{key}' in this branch. Use the full invoice number (e.g. INV-000123) or the sale ID.")
     if sale.status != "COMPLETED":
         raise HTTPException(409, f"Sale {sale.invoice_no} is {sale.status}; only completed sales can be returned.")
-    lines = db.execute(select(SaleLine, Item).join(Item, Item.id == SaleLine.item_id).where(SaleLine.sale_id == sale.id)).all()
+    lines = db.execute(select(SaleLine, Item).join(Item, Item.id == SaleLine.item_id).where(SaleLine.sale_id == sale.id).order_by(SaleLine.created_at, SaleLine.id)).all()
+    customer = db.get(Customer, sale.customer_id) if sale.customer_id else None
     return {
         "sale_id": str(sale.id), "invoice_no": sale.invoice_no, "sale_datetime": sale.sale_datetime,
         "grand_total": sale.grand_total, "version": sale.version,
+        "customer_name": customer.name if customer else None,
+        "customer_contact": customer.contact_no if customer else None,
         "lines": [{"sale_line_id": str(line.id), "item_id": str(line.item_id), "item_code": item.item_code,
                    "description": item.description, "quantity": line.quantity, "unit_price": line.unit_price,
                    "discount": line.discount, "final_total": line.final_total,

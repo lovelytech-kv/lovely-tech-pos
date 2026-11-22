@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 class LoginIn(BaseModel):
     username: str = Field(min_length=1, max_length=80)
@@ -49,6 +49,17 @@ class SaleIn(BaseModel):
     admin_discount_approval_id: UUID | None = None
     version: int | None = None
 
+class SaleLineOut(BaseModel):
+    sale_line_id: UUID
+    item_id: UUID
+    item_code: str
+    description: str
+    quantity: Decimal
+    unit_price: Decimal
+    discount: Decimal
+    final_total: Decimal
+    serialized_unit_id: UUID | None = None
+
 class SaleOut(BaseModel):
     sale_id: UUID
     invoice_no: str
@@ -59,6 +70,9 @@ class SaleOut(BaseModel):
     warranty_ids: list[UUID]
     replayed: bool
     version: int = 1
+    customer_name: str | None = None
+    customer_contact: str | None = None
+    lines: list[SaleLineOut] = Field(default_factory=list)
 
 class DateRangeIn(BaseModel):
     start: date
@@ -356,6 +370,12 @@ class CustomerIn(BaseModel):
     name: str | None = None
     contact_no: str | None = None
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def require_name_or_contact(self):
+        if not (self.name or "").strip() and not (self.contact_no or "").strip():
+            raise ValueError("Enter a customer name or phone number")
+        return self
 
 class CustomerUpdateIn(CustomerIn):
     version: int
