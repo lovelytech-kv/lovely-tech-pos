@@ -329,6 +329,26 @@ html,body,#root{height:100%;max-height:100%}
 .v0-sidebar.is-collapsed .v0-user-mini > span:not(.avatar),.v0-sidebar.is-collapsed .logout-arrow{display:none}
 :root[data-theme="dark"] .v0-sidebar-head{border-color:var(--line)}
 
+/* ============ SESSION 3B-3 — UNIFIED APP HEADER ============ */
+.app-header{height:var(--header-height);min-height:var(--header-height);padding:8px 14px 8px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.app-header-title{display:flex;align-items:baseline;gap:14px;min-width:0}
+.app-header-title h1{font-size:var(--text-xl);font-weight:var(--fw-bold);letter-spacing:-.025em;margin:0;max-width:min(360px,28vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-header-datetime{display:inline-flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.app-header-datetime-sep{color:var(--line)}
+.app-header-actions{display:flex;align-items:center;gap:9px;min-width:0}
+.app-header-user{display:flex;align-items:center;gap:8px;padding-left:10px;border-left:1px solid var(--line);min-width:0}
+.app-header-user-text{min-width:0}
+.app-header-user-text b{display:block;font-size:var(--text-sm);font-weight:var(--fw-semibold);line-height:1.2;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-header-user-text small{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.app-header-user .avatar{width:30px;height:30px;font-size:10px;flex:0 0 auto}
+.app-header-logout{padding:7px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:var(--text-sm);font-weight:var(--fw-semibold);transition:border-color var(--transition-fast),color var(--transition-fast),background var(--transition-fast)}
+.app-header-logout:hover{border-color:var(--accent);color:var(--accent);background:rgba(var(--accent-rgb),.06)}
+.app-header-action{padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:var(--text-sm);font-weight:var(--fw-semibold);white-space:nowrap;transition:border-color var(--transition-fast),color var(--transition-fast),background var(--transition-fast)}
+.app-header-action:hover{border-color:var(--accent);color:var(--accent);background:rgba(var(--accent-rgb),.06)}
+@media(max-width:1400px){.app-header .global-search{width:min(280px,21vw)}.app-header-title h1{max-width:min(260px,22vw)}}
+@media(max-width:1240px){.app-header-user-text{display:none}.app-header .header-status,.app-header-notifications{display:none}}
+@media(max-width:1180px){.app-header .global-search{display:none}.app-header-title h1{max-width:280px}}
+
 /* Discovery + Admin manual server fallback */
 .primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s,opacity .15s}
 .primary:hover{filter:brightness(1.06)}

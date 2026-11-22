@@ -4,6 +4,7 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 import { NAV_ITEMS, getNavForRole } from '../config/navigation';
 import { loadPermissions, getDefaultPermissions, type Permission } from '../config/permissions';
 import { useShopProfile } from '../features/settings/ShopContext';
+import { AppHeader } from '../components/AppHeader';
 
 type User = { display_name: string; role: string; branch_id: string };
 
@@ -13,6 +14,7 @@ type Props = {
   onNavigate: (key: string) => void;
   onLogout: () => void;
   children: ReactNode;
+  headerActions?: ReactNode;
 };
 
 const SIDEBAR_STORAGE_KEY = 'ltpos_sidebar_collapsed';
@@ -27,7 +29,7 @@ function loadSidebarCollapsed(): boolean {
   }
 }
 
-export function DashboardLayout({ user, activeKey, onNavigate, onLogout, children }: Props) {
+export function DashboardLayout({ user, activeKey, onNavigate, onLogout, children, headerActions }: Props) {
   const [serverState, setServerState] = useState<'checking' | 'online' | 'offline'>('checking');
   const [collapsed, setCollapsed] = useState<boolean>(loadSidebarCollapsed);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -71,8 +73,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
     }
   }, [collapsed]);
 
-  const activeLabelSource = isAdmin ? NAV_ITEMS : NAV_ITEMS.filter((item) => !item.adminOnly);
-  const activeLabel = activeLabelSource.find((item) => item.label === activeKey)?.key ?? shopName;
+  const activeLabel = NAV_ITEMS.find((item) => item.key === activeKey)?.label ?? shopName;
 
   return (
     <main className={`v0-shell${collapsed ? ' sidebar-collapsed' : ''}`}>
@@ -148,16 +149,13 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
       </aside>
 
       <section className="v0-main">
-        <header className="v0-header glass-card">
-          <div><span className="breadcrumb">{shopName} <b>/</b> {activeLabel}</span><h1>{activeLabel}</h1></div>
-          <div className="v0-header-actions">
-            <label className="global-search"><span>⌕</span><input ref={searchRef} aria-label="Quick search" placeholder="Search products, customers, invoices..." onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLInputElement).blur(); }} /><kbd>Ctrl K</kbd></label>
-            <span className={`header-status header-${serverState}`} aria-live="polite"><i className="online-dot" /> {serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Checking…'}</span>
-            <ThemeToggle />
-            <button className="icon-button" aria-label="Notifications">♢</button>
-            <button className="header-avatar" aria-label="Account" onClick={onLogout}>{user.display_name.slice(0,1).toUpperCase()}</button>
-          </div>
-        </header>
+        <AppHeader title={activeLabel} user={user} onLogout={onLogout}>
+          <label className="global-search"><span>⌕</span><input ref={searchRef} aria-label="Quick search" placeholder="Search products, customers, invoices..." onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLInputElement).blur(); }} /><kbd>Ctrl K</kbd></label>
+          <span className={`header-status header-${serverState}`} aria-live="polite"><i className="online-dot" /> {serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Checking…'}</span>
+          <ThemeToggle />
+          <button className="icon-button app-header-notifications" aria-label="Notifications">♢</button>
+          {headerActions}
+        </AppHeader>
         <div className="v0-content">{children}</div>
       </section>
     </main>
