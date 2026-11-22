@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 class LoginIn(BaseModel):
     username: str = Field(min_length=1, max_length=80)
@@ -356,6 +356,12 @@ class CustomerIn(BaseModel):
     name: str | None = None
     contact_no: str | None = None
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def require_name_or_contact(self):
+        if not (self.name or "").strip() and not (self.contact_no or "").strip():
+            raise ValueError("Enter a customer name or phone number")
+        return self
 
 class CustomerUpdateIn(CustomerIn):
     version: int

@@ -12,18 +12,26 @@ from app.models.warranty import WarrantyClaim, ProductWarranty
 router = APIRouter(prefix="/customers", tags=["customers"])
 
 @router.get("")
-def list_customers(q: str = "", user: User = Depends(require_permission("SALE_CREATE")), db: Session = Depends(db_session)):
+def list_customers(q: str = "", limit: int = 50, user: User = Depends(require_permission("SALE_CREATE")), db: Session = Depends(db_session)):
     term = q.strip()
+    limit = max(1, min(int(limit), 100))
     stmt = select(Customer).where(Customer.is_active.is_(True))
     if term:
         like = f"%{term}%"
         stmt = stmt.where(or_(Customer.name.ilike(like), Customer.contact_no.ilike(like)))
-    rows = db.scalars(stmt.order_by(Customer.name.nullslast(), Customer.created_at.desc()).limit(50)).all()
+        order = (Customer.name.nullslast(), Customer.created_at.desc())
+    else:
+        # Empty search is used by the POS picker to show recent customers.
+        order = (Customer.created_at.desc(),)
+    rows = db.scalars(stmt.order_by(*order).limit(limit)).all()
     return [{"customer_id": str(x.id), "name": x.name, "contact_no": x.contact_no, "notes": x.notes, "version": x.version} for x in rows]
 
 @router.post("")
 def create_customer(payload: CustomerIn, user: User = Depends(require_permission("SALE_CREATE")), db: Session = Depends(db_session)):
-    row = Customer(name=payload.name, contact_no=payload.contact_no, notes=payload.notes)
+    name = (payload.name or "").strip() or None
+    contact_no = (payload.contact_no or "").strip() or None
+    notes = (payload.notes or "").strip() or None
+    row = Customer(name=name, contact_no=contact_no, notes=notes)
     db.add(row); db.flush()
     db.add(AuditLog(branch_id=user.branch_id, actor_user_id=user.id, action_type="CUSTOMER_CREATED", entity_type="CUSTOMER", entity_id=row.id, timestamp=datetime.now(timezone.utc), after_json={"name":row.name,"contact_no":row.contact_no}, source_transaction_id=row.id))
     db.commit()
@@ -35,7 +43,10 @@ def update_customer(customer_id: str, payload: CustomerUpdateIn, user: User = De
     if not row: raise HTTPException(404,"Customer not found")
     if row.version != payload.version: raise HTTPException(409,"Customer changed; reload before editing")
     before={"name":row.name,"contact_no":row.contact_no,"notes":row.notes}
-    row.name=payload.name; row.contact_no=payload.contact_no; row.notes=payload.notes; row.version += 1
+    row.name=(payload.name or "").strip() or None
+    row.contact_no=(payload.contact_no or "").strip() or None
+    row.notes=(payload.notes or "").strip() or None
+    row.version += 1
     db.add(AuditLog(branch_id=user.branch_id, actor_user_id=user.id, action_type="CUSTOMER_EDITED", entity_type="CUSTOMER", entity_id=row.id, timestamp=datetime.now(timezone.utc), before_json=before, after_json={"name":row.name,"contact_no":row.contact_no,"notes":row.notes}, source_transaction_id=row.id))
     db.commit(); return {"customer_id":str(row.id),"name":row.name,"contact_no":row.contact_no,"notes":row.notes,"version":row.version}
 

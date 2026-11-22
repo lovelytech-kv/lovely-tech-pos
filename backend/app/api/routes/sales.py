@@ -249,6 +249,10 @@ def _approval_matches_sale(approval: ApprovalRequest, payload: SaleIn, user: Use
 def create_sale(payload: SaleIn, user: User = Depends(require_permission("SALE_CREATE")), db: Session = Depends(db_session)):
     if payload.credit_sale and user.role.code.upper() != "ADMIN":
         raise HTTPException(403, "Credit sale is Admin-only")
+    if payload.customer_id is not None:
+        customer = db.scalar(select(Customer).where(Customer.id == payload.customer_id, Customer.is_active.is_(True)))
+        if customer is None:
+            raise HTTPException(404, "Customer not found")
     sale_datetime = payload.sale_datetime
     if sale_datetime is not None:
         now = datetime.now(timezone.utc)
