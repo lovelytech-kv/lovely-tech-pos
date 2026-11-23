@@ -101,6 +101,7 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
   const invoiceNo = sale?.invoice_no || '-';
   const customerName = sale?.customer_name || '';
   const customerContact = sale?.customer_contact || '';
+  const receiptFooter = phone ? `Software by Lovely Tech · ${escapeHtml(phone)}` : 'Software by Lovely Tech';
   const customerLine = (customerName || customerContact)
     ? `<div class="meta">Customer: ${customerName ? escapeHtml(customerName) : ''}${customerName && customerContact ? ' · ' : ''}${customerContact ? escapeHtml(customerContact) : ''}</div>`
     : '';
@@ -116,7 +117,7 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
       .line{padding:2px 0;}
       .total{font-size:15px;font-weight:700;}
       .foot{text-align:center;font-size:11px;margin-top:8px;}
-      .vendor{text-align:center;font-size:9px;color:#888;margin-top:6px;letter-spacing:0.02em;}
+      .receipt-footer{margin-top:16px;padding-top:8px;border-top:1px dashed #ccc;text-align:center;font-size:10px;color:#888;}
       .logo{display:block;margin:0 auto 4px;max-width:80px;max-height:80px;object-fit:contain;}
     </style></head><body>
     ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" class="logo" />` : ''}
@@ -135,7 +136,7 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
     <div class="row total"><span>TOTAL</span><span>Rs. ${escapeHtml(sale?.grand_total || '0')}</span></div>
     <div class="divider"></div>
     <div class="foot">Thank you for shopping at ${escapeHtml(shopName)}!</div>
-    <div class="vendor">Software by Lovely Tech</div>
+    <div class="receipt-footer">${receiptFooter}</div>
     <script>window.onload = function(){ window.print(); };</script>
     </body></html>`;
 }
@@ -144,7 +145,7 @@ function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoD
 export function POSHome({user,onLogout}:{user:User,onLogout:()=>void}) {
   const [tab,setTab]=useState('Dashboard'); const [error,setError]=useState('');
   const isAdmin=user.role.toUpperCase()==='ADMIN';
-  return <DashboardLayout user={user} activeKey={tab} onNavigate={key=>{setTab(key);setError('')}} onLogout={()=>{serverLogout().finally(onLogout)}}>
+  return <DashboardLayout user={user} activeKey={tab} onNavigate={key=>{setTab(key);setError('')}} onLogout={()=>{serverLogout().finally(onLogout)}} headerActions={tab!=='Sales'&&<button type="button" className="app-header-action" onClick={()=>{setTab('Sales');setError('')}}>+ New Sale</button>}>
     {error&&<div className="error-banner" role="alert"><span>{error}</span><button className="error-dismiss" aria-label="Dismiss error" onClick={()=>setError('')}>×</button></div>}
     {tab==='Dashboard'&&<HomeDashboard user={user} onNavigate={setTab}/>} {tab==='Customers'&&<CustomersTab onError={setError}/>} {tab==='Items'&&<ItemsTab isAdmin={isAdmin} onError={setError}/>} {tab==='Sales'&&<SalesTab isAdmin={isAdmin} onError={setError} onNavigate={setTab}/>} {tab==='SalesHistory'&&<SalesHistory isAdmin={isAdmin} onError={setError} onNavigate={setTab} user={user}/>} {tab==='Returns'&&<ReturnsWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Repairs'&&<><RepairForm onError={setError} /><RepairWorkspace isAdmin={isAdmin} onError={setError}/></>} {tab==='Warranty'&&<WarrantyWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Stock'&&<StockTab/>} {tab==='Purchases'&&<Purchases isAdmin={isAdmin} onError={setError}/>} {tab==='Expenses'&&<ExpensesTab onError={setError}/>} {tab==='Cash/Day'&&<DayEnd isAdmin={isAdmin} onError={setError}/>} {tab==='Reports'&&<ReportsTab isAdmin={isAdmin} onError={setError}/>} {tab==='Documents'&&<DocumentsTab onError={setError}/>} {tab==='Settings'&&<SettingsPanel isAdmin={isAdmin}/>} {tab==='Admin'&&isAdmin&&<AdminTab onError={setError}/>} {tab==='Users'&&isAdmin&&<UserManagement isAdmin={isAdmin} onError={setError}/>} {tab==='Backup'&&isAdmin&&<BackupTab onError={setError}/>}
   </DashboardLayout>;

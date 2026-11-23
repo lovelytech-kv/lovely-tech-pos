@@ -303,6 +303,62 @@ html,body,#root{height:100%;max-height:100%}
 .error-banner{display:flex;justify-content:space-between;align-items:center;gap:12px}.error-dismiss{border:0!important;background:transparent!important;color:inherit!important;padding:0 4px!important;font-size:18px!important}.connection-offline .online-dot,.header-offline .online-dot{background:#d9534f!important}.connection-checking .online-dot,.header-checking .online-dot{background:#d6a33d!important}.header-status{transition:.2s}.header-offline{color:#a52b27}.header-checking{color:#987020}
 @media(max-width:900px){.v0-nav{overflow-x:auto;grid-template-columns:repeat(4,minmax(110px,1fr))}.v0-nav button{white-space:nowrap}}
 
+/* ============ SESSION 3B-3 — COLLAPSIBLE SIDEBAR ============ */
+.v0-shell{grid-template-columns:var(--sidebar-width-expanded) minmax(0,1fr);transition:grid-template-columns var(--transition-normal)}
+.v0-shell.sidebar-collapsed{grid-template-columns:var(--sidebar-width-collapsed) minmax(0,1fr)}
+.v0-sidebar{width:100%;padding:16px 12px;transition:padding var(--transition-normal)}
+.v0-sidebar.is-collapsed{padding:14px 6px}
+.v0-sidebar-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding-bottom:10px;border-bottom:1px solid #ededee}
+.v0-sidebar-head .v0-brand{border-bottom:0;padding:4px 2px;min-width:0;flex:1 1 auto}
+.v0-brand .brand-text{min-width:0;overflow:hidden}
+.v0-brand .brand-text strong,.v0-brand .brand-text small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v0-sidebar-toggle{flex:0 0 auto;width:28px;height:28px;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--muted);font-size:14px;line-height:1;transition:color var(--transition-fast),border-color var(--transition-fast),background var(--transition-fast)}
+.v0-sidebar-toggle:hover{color:var(--accent);border-color:var(--accent);background:rgba(var(--accent-rgb),.06)}
+.v0-nav .nav-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v0-sidebar.is-collapsed .v0-sidebar-head{flex-direction:column-reverse;justify-content:center;gap:8px;padding-bottom:8px}
+.v0-sidebar.is-collapsed .v0-brand{flex:0 0 auto;justify-content:center;padding:2px}
+.v0-sidebar.is-collapsed .brand-text{display:none}
+.v0-sidebar.is-collapsed .v0-sidebar-label{height:1px;margin:14px 6px 7px;padding:0;background:var(--line);overflow:hidden;color:transparent;font-size:0;letter-spacing:0}
+.v0-sidebar.is-collapsed .v0-sidebar-label.more-label{margin-top:12px}
+.v0-sidebar.is-collapsed .v0-nav button{justify-content:center;gap:0;padding:11px 0}
+.v0-sidebar.is-collapsed .nav-label,.v0-sidebar.is-collapsed .nav-badge{display:none}
+.v0-sidebar.is-collapsed .nav-icon{width:auto;font-size:17px}
+.v0-sidebar.is-collapsed .v0-connection{justify-content:center;padding:11px 0}
+.v0-sidebar.is-collapsed .v0-connection > span:last-child{display:none}
+.v0-sidebar.is-collapsed .v0-user-mini{grid-template-columns:32px;justify-content:center;gap:0;padding:7px 0}
+.v0-sidebar.is-collapsed .v0-user-mini > span:not(.avatar),.v0-sidebar.is-collapsed .logout-arrow{display:none}
+:root[data-theme="dark"] .v0-sidebar-head{border-color:var(--line)}
+
+/* ============ SESSION 3B-3 — UNIFIED APP HEADER ============ */
+.app-header{height:var(--header-height);min-height:var(--header-height);padding:8px 14px 8px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.app-header-title{display:flex;align-items:baseline;gap:14px;min-width:0}
+.app-header-title h1{font-size:var(--text-xl);font-weight:var(--fw-bold);letter-spacing:-.025em;margin:0;max-width:min(360px,28vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-header-datetime{display:inline-flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.app-header-datetime-sep{color:var(--line)}
+.app-header-actions{display:flex;align-items:center;gap:9px;min-width:0}
+.app-header-user{display:flex;align-items:center;gap:8px;padding-left:10px;border-left:1px solid var(--line);min-width:0}
+.app-header-user-text{min-width:0}
+.app-header-user-text b{display:block;font-size:var(--text-sm);font-weight:var(--fw-semibold);line-height:1.2;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-header-user-text small{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.app-header-user .avatar{width:30px;height:30px;font-size:10px;flex:0 0 auto}
+.app-header-logout{padding:7px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:var(--text-sm);font-weight:var(--fw-semibold);transition:border-color var(--transition-fast),color var(--transition-fast),background var(--transition-fast)}
+.app-header-logout:hover{border-color:var(--accent);color:var(--accent);background:rgba(var(--accent-rgb),.06)}
+.app-header-action{padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:var(--text-sm);font-weight:var(--fw-semibold);white-space:nowrap;transition:border-color var(--transition-fast),color var(--transition-fast),background var(--transition-fast)}
+.app-header-action:hover{border-color:var(--accent);color:var(--accent);background:rgba(var(--accent-rgb),.06)}
+@media(max-width:1400px){.app-header .global-search{width:min(280px,21vw)}.app-header-title h1{max-width:min(260px,22vw)}}
+@media(max-width:1240px){.app-header-user-text{display:none}.app-header .header-status,.app-header-notifications{display:none}}
+@media(max-width:1180px){.app-header .global-search{display:none}.app-header-title h1{max-width:280px}}
+
+/* ============ SESSION 3B-3 — RECEIPT FOOTER ============ */
+.receipt-footer {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px dashed #ccc;
+  text-align: center;
+  font-size: 10px;
+  color: #888;
+}
+
 /* Discovery + Admin manual server fallback */
 .primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s,opacity .15s}
 .primary:hover{filter:brightness(1.06)}
@@ -531,13 +587,34 @@ input:focus:not(:focus-visible) {
 /* ============ DESIGN TOKENS + SALES LAYOUT ============ */
 :root {
   --font-mono: 'JetBrains Mono', 'Consolas', 'Menlo', monospace;
-  --text-xs: 0.75rem; --text-sm: 0.8125rem; --text-base: 0.875rem;
-  --text-md: 0.9375rem; --text-lg: 1.0625rem; --text-xl: 1.25rem;
+
+  /* Typography scale */
+  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-base: 1rem;
+  --text-md: 0.9375rem; --text-lg: 1.125rem; --text-xl: 1.25rem;
   --text-2xl: 1.5rem; --text-3xl: 1.875rem;
   --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
-  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem;
-  --space-4: 1rem; --space-5: 1.25rem; --space-6: 1.5rem;
-  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px;
+
+  /* Spacing scale */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px;
+  --space-4: 16px; --space-5: 24px; --space-6: 32px; --space-8: 48px;
+
+  /* Radius scale */
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+
+  /* Elevation — light theme */
+  --shadow-sm: 0 1px 2px rgba(20, 20, 30, 0.06);
+  --shadow-md: 0 6px 18px rgba(20, 20, 30, 0.08);
+  --shadow-lg: 0 16px 40px rgba(20, 20, 30, 0.12);
+
+  /* App layout */
+  --sidebar-width-expanded: 240px;
+  --sidebar-width-collapsed: 64px;
+  --header-height: 56px;
+
+  /* Motion */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+
   --color-success: #16a34a;
   --color-success-bg: rgba(22, 163, 74, 0.1);
   --color-warning: #ca8a04;
@@ -547,9 +624,24 @@ input:focus:not(:focus-visible) {
   --color-info-bg: rgba(37, 99, 235, 0.1);
 }
 [data-theme="dark"] {
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
   --color-success-bg: rgba(34, 197, 94, 0.15);
   --color-info-bg: rgba(59, 130, 246, 0.15);
   --color-danger-bg: rgba(220, 38, 38, 0.18);
+}
+
+/* Additive layout utilities — new surfaces reference tokens; legacy classes are unchanged. */
+.sidebar {
+  width: var(--sidebar-width-expanded);
+  transition: width var(--transition-normal);
+}
+.header {
+  height: var(--header-height);
+}
+.main-content {
+  min-width: 0;
 }
 
 .sales-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(360px, 0.9fr); gap: var(--space-4); align-items: start; min-height: calc(100vh - 120px); }

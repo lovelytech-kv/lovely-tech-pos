@@ -4,6 +4,7 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 import { NAV_ITEMS, getNavForRole } from '../config/navigation';
 import { loadPermissions, getDefaultPermissions, type Permission } from '../config/permissions';
 import { useShopProfile } from '../features/settings/ShopContext';
+import { AppHeader } from '../components/AppHeader';
 
 type User = { display_name: string; role: string; branch_id: string };
 
@@ -13,10 +14,24 @@ type Props = {
   onNavigate: (key: string) => void;
   onLogout: () => void;
   children: ReactNode;
+  headerActions?: ReactNode;
 };
 
-export function DashboardLayout({ user, activeKey, onNavigate, onLogout, children }: Props) {
+const SIDEBAR_STORAGE_KEY = 'ltpos_sidebar_collapsed';
+
+function loadSidebarCollapsed(): boolean {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    if (raw === null) return true;
+    return raw === '1';
+  } catch {
+    return true;
+  }
+}
+
+export function DashboardLayout({ user, activeKey, onNavigate, onLogout, children, headerActions }: Props) {
   const [serverState, setServerState] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [collapsed, setCollapsed] = useState<boolean>(loadSidebarCollapsed);
   const searchRef = useRef<HTMLInputElement>(null);
   const isAdmin = user.role.toUpperCase() === 'ADMIN';
   const { getShopName, getLogoDataUrl } = useShopProfile();
@@ -50,20 +65,38 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
     return () => { alive = false; window.clearInterval(timer); window.removeEventListener('keydown', focusSearch); };
   }, []);
 
-  const activeLabelSource = isAdmin ? NAV_ITEMS : NAV_ITEMS.filter((item) => !item.adminOnly);
-  const activeLabel = activeLabelSource.find((item) => item.label === activeKey)?.key ?? shopName;
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0');
+    } catch {
+      // ignore storage errors
+    }
+  }, [collapsed]);
+
+  const activeLabel = NAV_ITEMS.find((item) => item.key === activeKey)?.label ?? shopName;
 
   return (
-    <main className="v0-shell">
-      <aside className="v0-sidebar glass-card">
-        <button className="v0-brand" onClick={() => onNavigate('Dashboard')} aria-label="Go to dashboard">
-          {logoUrl ? (
-            <img src={logoUrl} alt="" style={{ width: 39, height: 39, borderRadius: 12, objectFit: 'contain', background: 'var(--surface-2)' }} />
-          ) : (
-            <span className="brand-mark">{shopName.slice(0, 2).toUpperCase()}</span>
-          )}
-          <span><strong>{shopName}</strong><small>POS System</small></span>
-        </button>
+    <main className={`v0-shell${collapsed ? ' sidebar-collapsed' : ''}`}>
+      <aside className={`v0-sidebar glass-card${collapsed ? ' is-collapsed' : ''}`}>
+        <div className="v0-sidebar-head">
+          <button className="v0-brand" onClick={() => onNavigate('Dashboard')} aria-label="Go to dashboard" title={shopName}>
+            {logoUrl ? (
+              <img src={logoUrl} alt="" style={{ width: 39, height: 39, borderRadius: 12, objectFit: 'contain', background: 'var(--surface-2)' }} />
+            ) : (
+              <span className="brand-mark">{shopName.slice(0, 2).toUpperCase()}</span>
+            )}
+            <span className="brand-text"><strong>{shopName}</strong><small>POS System</small></span>
+          </button>
+          <button
+            className="v0-sidebar-toggle"
+            onClick={() => setCollapsed((value) => !value)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? '»' : '«'}
+          </button>
+        </div>
         <div className="v0-sidebar-scroll">
           <div className="v0-sidebar-label">Workspace</div>
           <nav className="v0-nav" aria-label="Main navigation">
@@ -72,23 +105,27 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
                 key={item.key}
                 className={activeKey === item.key ? 'active' : ''}
                 onClick={() => onNavigate(item.key)}
+                title={item.label}
+                aria-current={activeKey === item.key ? 'page' : undefined}
               >
                 <span className="nav-icon">{item.icon}</span>
-                <span>{item.label}</span>
+                <span className="nav-label">{item.label}</span>
                 {item.key === 'Sales' && <b className="nav-badge">POS</b>}
               </button>
             ))}
           </nav>
           <div className="v0-sidebar-label more-label">More</div>
-          <nav className="v0-nav v0-nav-secondary">
+          <nav className="v0-nav v0-nav-secondary" aria-label="Secondary navigation">
             {moreItems.map((item) => (
               <button
                 key={item.key}
                 className={activeKey === item.key ? 'active' : ''}
                 onClick={() => onNavigate(item.key)}
+                title={item.label}
+                aria-current={activeKey === item.key ? 'page' : undefined}
               >
                 <span className="nav-icon">{item.icon}</span>
-                <span>{item.label}</span>
+                <span className="nav-label">{item.label}</span>
               </button>
             ))}
             {adminItems.map((item) => (
@@ -96,30 +133,29 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
                 key={item.key}
                 className={activeKey === item.key ? 'active' : ''}
                 onClick={() => onNavigate(item.key)}
+                title={item.label}
+                aria-current={activeKey === item.key ? 'page' : undefined}
               >
                 <span className="nav-icon">{item.icon}</span>
-                <span>{item.label}</span>
+                <span className="nav-label">{item.label}</span>
               </button>
             ))}
           </nav>
         </div>
         <div className="v0-sidebar-footer">
-          <div className={`v0-connection connection-${serverState}`} aria-live="polite"><span className="online-dot" /><span><b>{serverState === 'online' ? 'LAN connected' : serverState === 'offline' ? 'LAN offline' : 'Checking LAN…'}</b><small>Branch {user.branch_id}</small></span></div>
-          <button className="v0-user-mini" onClick={onLogout}><span className="avatar">{user.display_name.slice(0,2).toUpperCase()}</span><span><b>{user.display_name}</b><small>{user.role} · Logout</small></span><span className="logout-arrow">↗</span></button>
+          <div className={`v0-connection connection-${serverState}`} aria-live="polite" title={serverState === 'online' ? 'LAN connected' : serverState === 'offline' ? 'LAN offline' : 'Checking LAN…'}><span className="online-dot" /><span><b>{serverState === 'online' ? 'LAN connected' : serverState === 'offline' ? 'LAN offline' : 'Checking LAN…'}</b><small>Branch {user.branch_id}</small></span></div>
+          <button className="v0-user-mini" onClick={onLogout} title={`Logout ${user.display_name}`}><span className="avatar">{user.display_name.slice(0,2).toUpperCase()}</span><span><b>{user.display_name}</b><small>{user.role} · Logout</small></span><span className="logout-arrow">↗</span></button>
         </div>
       </aside>
 
       <section className="v0-main">
-        <header className="v0-header glass-card">
-          <div><span className="breadcrumb">{shopName} <b>/</b> {activeLabel}</span><h1>{activeLabel}</h1></div>
-          <div className="v0-header-actions">
-            <label className="global-search"><span>⌕</span><input ref={searchRef} aria-label="Quick search" placeholder="Search products, customers, invoices..." onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLInputElement).blur(); }} /><kbd>Ctrl K</kbd></label>
-            <span className={`header-status header-${serverState}`} aria-live="polite"><i className="online-dot" /> {serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Checking…'}</span>
-            <ThemeToggle />
-            <button className="icon-button" aria-label="Notifications">♢</button>
-            <button className="header-avatar" aria-label="Account" onClick={onLogout}>{user.display_name.slice(0,1).toUpperCase()}</button>
-          </div>
-        </header>
+        <AppHeader title={activeLabel} user={user} onLogout={onLogout}>
+          <label className="global-search"><span>⌕</span><input ref={searchRef} aria-label="Quick search" placeholder="Search products, customers, invoices..." onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLInputElement).blur(); }} /><kbd>Ctrl K</kbd></label>
+          <span className={`header-status header-${serverState}`} aria-live="polite"><i className="online-dot" /> {serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Checking…'}</span>
+          <ThemeToggle />
+          <button className="icon-button app-header-notifications" aria-label="Notifications">♢</button>
+          {headerActions}
+        </AppHeader>
         <div className="v0-content">{children}</div>
       </section>
     </main>
