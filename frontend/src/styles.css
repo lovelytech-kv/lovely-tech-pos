@@ -333,7 +333,8 @@ html,body,#root{height:100%;max-height:100%}
 .app-header{height:var(--header-height);min-height:var(--header-height);padding:8px 14px 8px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .app-header-title{display:flex;align-items:baseline;gap:14px;min-width:0}
 .app-header-title h1{font-size:var(--text-xl);font-weight:var(--fw-bold);letter-spacing:-.025em;margin:0;max-width:min(360px,28vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.app-header-datetime{display:inline-flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.app-header-datetime{display:inline-flex;align-items:center;gap:8px;font-size:var(--text-base);color:var(--text);font-weight:var(--fw-medium);white-space:nowrap;font-variant-numeric:tabular-nums}
+.app-header-datetime time{font-size:var(--text-lg);font-weight:var(--fw-semibold);color:var(--text);letter-spacing:.01em}
 .app-header-datetime-sep{color:var(--line)}
 .app-header-actions{display:flex;align-items:center;gap:9px;min-width:0}
 .app-header-user{display:flex;align-items:center;gap:8px;padding-left:10px;border-left:1px solid var(--line);min-width:0}
