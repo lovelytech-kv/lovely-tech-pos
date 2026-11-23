@@ -85,6 +85,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   const [stockFilter, setStockFilter] = useState<StockFilter>('ALL');
   const [view, setView] = useState<ViewMode>('grid');
   const [modalItem, setModalItem] = useState<ItemRow | 'new' | null>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
 
   async function load() {
     setLoading(true);
@@ -152,11 +153,18 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   }
 
   function openItem(item: ItemRow) {
+    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setModalItem(item);
   }
 
   function addItem() {
+    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setModalItem('new');
+  }
+
+  function closeModal() {
+    setModalItem(null);
+    window.setTimeout(() => triggerRef.current?.focus(), 0);
   }
 
   return (
@@ -251,8 +259,8 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
 
       {loading && (
         <div className={view === 'grid' ? 'items-grid' : 'items-list'} aria-busy="true" aria-live="polite">
-          {Array.from({ length: view === 'grid' ? 8 : 6 }).map((_, index) => (
-            <div key={index} className={view === 'grid' ? 'item-card item-skeleton' : 'items-list-row item-skeleton-row'}>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className={view === 'grid' ? 'inv-card inv-skeleton' : 'items-list-row inv-skeleton-row'}>
               <span className="skeleton-block" />
               <span className="skeleton-line" />
               <span className="skeleton-line short" />
@@ -287,23 +295,23 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             const tileStyle = { '--tile-h': String(tileHue(item.category_id)) } as CSSProperties;
             const categoryName = categoryNames.get(item.category_id) ?? 'Uncategorized';
             return (
-              <article key={item.item_id} className={`item-card tone-${tone}`}>
-                <button type="button" className="item-card-open" onClick={() => openItem(item)} aria-label={`Open ${item.description}`}>
-                  <div className="item-card-media" style={tileStyle}>
-                    <span className="item-card-initial" aria-hidden="true">{initialOf(item.description)}</span>
-                    <span className={`stock-chip tone-${tone}`} title={stock === null ? 'Stock unavailable' : `${stock} in stock`}>
+              <article key={item.item_id} className={`inv-card tone-${tone}`}>
+                <button type="button" className="inv-card-open" onClick={() => openItem(item)} aria-label={`Open ${item.description}`}>
+                  <div className="inv-card-media" style={tileStyle}>
+                    <span className="inv-card-initial" aria-hidden="true">{initialOf(item.description)}</span>
+                    <span className={`inv-stock-chip tone-${tone}`} title={stock === null ? 'Stock unavailable' : `${stock} in stock`}>
                       {stockLabel(stock)}
                     </span>
-                    {tone === 'out' && <span className="item-card-out">Out of stock</span>}
+                    {tone === 'out' && <span className="inv-card-out">Out of stock</span>}
                   </div>
-                  <div className="item-card-body">
-                    <b className="item-card-name" title={item.description}>{item.description}</b>
-                    <span className="item-card-category">{categoryName}</span>
-                    <span className="item-card-price">{item.master_sale_price == null ? 'No price' : `Rs. ${money(item.master_sale_price)}`}</span>
+                  <div className="inv-card-body">
+                    <b className="inv-card-name" title={item.description}>{item.description}</b>
+                    <span className="inv-card-category">{categoryName}</span>
+                    <span className="inv-card-price">{item.master_sale_price == null ? 'No price' : `Rs. ${money(item.master_sale_price)}`}</span>
                   </div>
                 </button>
                 {isAdmin && (
-                  <button type="button" className="item-card-edit" onClick={() => openItem(item)} aria-label={`Edit ${item.description}`}>
+                  <button type="button" className="inv-card-edit" onClick={() => openItem(item)} aria-label={`Edit ${item.description}`}>
                     <span aria-hidden="true">✎</span> Edit
                   </button>
                 )}
@@ -344,7 +352,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           item={modalItem === 'new' ? null : modalItem}
           masters={masters}
           readOnly={!isAdmin}
-          onClose={() => setModalItem(null)}
+          onClose={closeModal}
           onSaved={load}
         />
       )}
@@ -470,6 +478,13 @@ function ItemFormModal({
     }
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
+
+  // Keep the page behind the modal from scrolling (mobile / small laptops).
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
   }, []);
 
   function patch<K extends keyof ItemFormState>(key: K, value: ItemFormState[K]) {
