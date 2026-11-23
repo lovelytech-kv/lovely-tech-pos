@@ -461,6 +461,17 @@ function ItemFormModal({
     return () => window.removeEventListener('keydown', onKeyDown);
   });
 
+  // G3 — warn before the whole app window is closed with unsaved edits.
+  useEffect(() => {
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      if (!dirtyRef.current || busyRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
+
   function patch<K extends keyof ItemFormState>(key: K, value: ItemFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -629,6 +640,9 @@ function ItemFormModal({
             <div className="modal-error-banner" role="alert">
               <div className="modal-error-banner-title"><span>⚠</span> Could not save item</div>
               <div>{serverError}</div>
+              <button type="button" className="ghost item-error-retry" onClick={() => void save()} disabled={busy}>
+                Retry save
+              </button>
             </div>
           )}
 
@@ -646,9 +660,11 @@ function ItemFormModal({
                   disabled={readOnly}
                   placeholder="e.g. iPhone 13 128GB — Midnight"
                   className={showError('description') ? 'input-error' : ''}
+                  aria-invalid={showError('description') || undefined}
+                  aria-describedby={showError('description') ? 'item-name-error' : undefined}
                 />
                 <small className="item-counter">{form.description.length}/255</small>
-                {showError('description') && <span className="item-field-error">{errors.description}</span>}
+                {showError('description') && <span className="item-field-error" id="item-name-error">{errors.description}</span>}
               </div>
 
               <div className="item-form-row">
@@ -661,11 +677,13 @@ function ItemFormModal({
                     onBlur={() => markTouched('category_id')}
                     disabled={readOnly}
                     className={showError('category_id') ? 'input-error' : ''}
+                    aria-invalid={showError('category_id') || undefined}
+                    aria-describedby={showError('category_id') ? 'item-category-error' : undefined}
                   >
                     <option value="">Select category</option>
                     {categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                   </select>
-                  {showError('category_id') && <span className="item-field-error">{errors.category_id}</span>}
+                  {showError('category_id') && <span className="item-field-error" id="item-category-error">{errors.category_id}</span>}
                 </div>
 
                 <div className="item-field">
@@ -677,11 +695,13 @@ function ItemFormModal({
                     onBlur={() => markTouched('item_type_id')}
                     disabled={readOnly}
                     className={showError('item_type_id') ? 'input-error' : ''}
+                    aria-invalid={showError('item_type_id') || undefined}
+                    aria-describedby={showError('item_type_id') ? 'item-type-error' : undefined}
                   >
                     <option value="">Select type</option>
                     {itemTypeOptions.map((type) => <option key={type.id} value={type.id}>{type.name}{type.is_serialized ? ' · IMEI' : ''}</option>)}
                   </select>
-                  {showError('item_type_id') && <span className="item-field-error">{errors.item_type_id}</span>}
+                  {showError('item_type_id') && <span className="item-field-error" id="item-type-error">{errors.item_type_id}</span>}
                 </div>
               </div>
 
@@ -696,9 +716,11 @@ function ItemFormModal({
                       onBlur={() => markTouched('master_sale_price')}
                       disabled={readOnly}
                       placeholder="0.00"
+                      aria-invalid={showError('master_sale_price') || undefined}
+                      aria-describedby={showError('master_sale_price') ? 'item-price-error' : undefined}
                     />
                   </div>
-                  {showError('master_sale_price') && <span className="item-field-error">{errors.master_sale_price}</span>}
+                  {showError('master_sale_price') && <span className="item-field-error" id="item-price-error">{errors.master_sale_price}</span>}
                 </div>
 
                 <div className="item-field">
@@ -714,6 +736,8 @@ function ItemFormModal({
                       disabled={readOnly}
                       placeholder="Scan or type barcode"
                       className={showError('barcode') ? 'input-error' : ''}
+                      aria-invalid={showError('barcode') || undefined}
+                      aria-describedby={showError('barcode') ? 'item-barcode-error' : undefined}
                     />
                     <button
                       type="button"
@@ -725,7 +749,7 @@ function ItemFormModal({
                       Scan
                     </button>
                   </div>
-                  {showError('barcode') && <span className="item-field-error">{errors.barcode}</span>}
+                  {showError('barcode') && <span className="item-field-error" id="item-barcode-error">{errors.barcode}</span>}
                   {item && item.barcodes.length > 0 && (
                     <small className="item-hint">On file: {item.barcodes.join(', ')}</small>
                   )}
@@ -807,7 +831,7 @@ function ItemFormModal({
                     />
                   )}
                 </div>
-                {showError('warranty') && <span className="item-field-error">{errors.warranty}</span>}
+                {showError('warranty') && <span className="item-field-error" id="item-warranty-error">{errors.warranty}</span>}
               </div>
             </div>
 
