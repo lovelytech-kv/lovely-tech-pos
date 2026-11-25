@@ -397,6 +397,16 @@ function buildInitialState(item: ItemRow | null): ItemFormState {
   };
 }
 
+function typeCodeFromName(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 50);
+}
+
 function ItemFormModal({
   item,
   masters,
@@ -428,6 +438,7 @@ function ItemFormModal({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newTypeOpen, setNewTypeOpen] = useState(false);
   const [newTypeCode, setNewTypeCode] = useState('');
+  const [newTypeCodeTouched, setNewTypeCodeTouched] = useState(false);
   const [newTypeName, setNewTypeName] = useState('');
   const [newTypeSerialized, setNewTypeSerialized] = useState(false);
   const [masterBusy, setMasterBusy] = useState(false);
@@ -679,9 +690,10 @@ function ItemFormModal({
   }
 
   async function createTypeInline() {
-    const code = newTypeCode.trim();
     const name = newTypeName.trim();
-    if (!code || !name) { toast.error('Item type code and name are required'); return; }
+    const code = (newTypeCode.trim() || typeCodeFromName(name)).slice(0, 50);
+    if (!name) { toast.error('Item type name is required'); return; }
+    if (!code) { toast.error('Enter an item type code or a name that can generate one'); return; }
     if (masterBusy) return;
     setMasterBusy(true);
     try {
@@ -692,6 +704,7 @@ function ItemFormModal({
       await onRefreshMasters();
       patch('item_type_id', created.id);
       setNewTypeCode('');
+      setNewTypeCodeTouched(false);
       setNewTypeName('');
       setNewTypeSerialized(false);
       setNewTypeOpen(false);
@@ -808,14 +821,18 @@ function ItemFormModal({
                       <div className="item-inline-row">
                         <input
                           value={newTypeCode}
-                          onChange={(event) => setNewTypeCode(event.target.value)}
+                          onChange={(event) => { setNewTypeCode(event.target.value); setNewTypeCodeTouched(true); }}
                           maxLength={50}
-                          placeholder="Code (e.g. PHONE)"
+                          placeholder="Code (auto from name)"
                           aria-label="New item type code"
                         />
                         <input
                           value={newTypeName}
-                          onChange={(event) => setNewTypeName(event.target.value)}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setNewTypeName(value);
+                            if (!newTypeCodeTouched) setNewTypeCode(typeCodeFromName(value));
+                          }}
                           maxLength={120}
                           placeholder="Item type name"
                           aria-label="New item type name"
@@ -823,10 +840,10 @@ function ItemFormModal({
                       </div>
                       <div className="item-inline-row">
                         <label className="check"><input type="checkbox" checked={newTypeSerialized} onChange={(event) => setNewTypeSerialized(event.target.checked)} /> Serialized / IMEI</label>
-                        <button type="button" disabled={masterBusy || !newTypeCode.trim() || !newTypeName.trim()} onClick={() => void createTypeInline()}>
+                        <button type="button" disabled={masterBusy || !newTypeName.trim()} onClick={() => void createTypeInline()}>
                           {masterBusy ? 'Saving…' : 'Add type'}
                         </button>
-                        <button type="button" className="ghost" onClick={() => { setNewTypeOpen(false); setNewTypeCode(''); setNewTypeName(''); setNewTypeSerialized(false); }}>Cancel</button>
+                        <button type="button" className="ghost" onClick={() => { setNewTypeOpen(false); setNewTypeCode(''); setNewTypeCodeTouched(false); setNewTypeName(''); setNewTypeSerialized(false); }}>Cancel</button>
                       </div>
                     </div>
                   )}

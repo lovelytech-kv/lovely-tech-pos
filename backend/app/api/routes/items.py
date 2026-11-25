@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission, require_any_permission
@@ -236,4 +236,10 @@ def create_item_type(payload:dict,user:User=Depends(require_permission('ITEM_EDI
     if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
     code=str(payload.get('code','')).strip(); name=str(payload.get('name','')).strip(); serialized=bool(payload.get('is_serialized',False))
     if not code or not name: raise HTTPException(400,'Item type code and name are required')
-    row=ItemType(code=code,name=name,is_serialized=serialized); db.add(row); db.commit(); return {'id':str(row.id),'code':row.code,'name':row.name,'is_serialized':row.is_serialized}
+    if len(code) > 50 or len(name) > 120: raise HTTPException(400,'Item type code or name is too long')
+    if db.scalar(select(ItemType.id).where(func.lower(ItemType.code) == code.lower())):
+        raise HTTPException(409,'Item type code already exists')
+    row=ItemType(code=code,name=name,is_serialized=serialized); db.add(row)
+    try: db.commit()
+    except IntegrityError: db.rollback(); raise HTTPException(409,'Item type code already exists')
+    return {'id':str(row.id),'code':row.code,'name':row.name,'is_serialized':row.is_serialized}
