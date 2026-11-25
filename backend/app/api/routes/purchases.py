@@ -206,12 +206,8 @@ def list_purchases(q: str = '', user: User = Depends(require_permission('PURCHAS
             .where(PurchaseLine.purchase_id == Purchase.id, Item.item_code.ilike(like) | Item.description.ilike(like))
             .exists()
         )
-        supplier_match = (
-            select(Supplier.id)
-            .where(Supplier.id == Purchase.supplier_id, Supplier.name.ilike(like))
-            .exists()
-        )
-        stmt = stmt.where(Purchase.reference_no.ilike(like) | item_match | supplier_match)
+        supplier_match = Supplier.name.ilike(like)
+        stmt = stmt.where(Purchase.reference_no.ilike(like) | supplier_match | item_match)
     rows = db.execute(
         stmt.order_by(Purchase.purchase_date.desc(), Purchase.created_at.desc()).limit(500)
     ).all()
