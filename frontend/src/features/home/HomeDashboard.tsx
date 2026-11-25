@@ -240,10 +240,8 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
             title="Open the item buy cost review queue"
           >
             <span>Review Queue</span>
-            <b>{reviewCount == null ? '—' : reviewCount}</b>
-            <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
-              {reviewCount ? 'Items missing buy cost' : 'All item costs entered'}
-            </small>
+            <b style={{ color: (reviewCount ?? 0) > 0 ? 'var(--accent)' : 'var(--muted)' }}>{reviewCount ?? 0}</b>
+            <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Items missing buy cost</small>
           </button>
         )}
         <div className="metric metric-animated">
