@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -67,6 +68,22 @@ def pending_review_items(user: User = Depends(require_permission("ITEM_EDIT")), 
             buy_cost=item.buy_cost, low_stock_threshold=item.low_stock_threshold,
         ) for item, category in rows
     ]
+
+
+@router.get("/check-name")
+def check_item_name(name: str = "", exclude_id: str | None = None,
+                    user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
+    """Cheap existence probe used by the item form while typing (case-insensitive)."""
+    term = name.strip()
+    if not term:
+        return {"exists": False}
+    stmt = select(Item.id).where(func.lower(Item.description) == term.lower())
+    if exclude_id:
+        try:
+            stmt = stmt.where(Item.id != uuid.UUID(exclude_id))
+        except ValueError:
+            pass
+    return {"exists": db.scalar(stmt) is not None}
 
 
 @router.patch("/{item_id}/review")

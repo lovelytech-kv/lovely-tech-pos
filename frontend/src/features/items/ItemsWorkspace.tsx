@@ -428,6 +428,8 @@ function ItemFormModal({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [nameCheck, setNameCheck] = useState<{ value: string; exists: boolean; checking: boolean }>({ value: '', exists: false, checking: false });
+  const nameCheckSeq = useRef(0);
   const [busy, setBusy] = useState(false);
   const [variants, setVariants] = useState<VariantRow[]>([]);
   const [variantsLoading, setVariantsLoading] = useState(false);
@@ -467,6 +469,42 @@ function ItemFormModal({
       .finally(() => { if (live) setVariantsLoading(false); });
     return () => { live = false; };
   }, [item]);
+
+  // Debounced duplicate-name probe (also runs on blur). Server 422 remains the final guard.
+  useEffect(() => {
+    if (readOnly) return;
+    const value = form.description.trim();
+    if (!value) {
+      setNameCheck({ value: '', exists: false, checking: false });
+      return;
+    }
+    if (item && value.toLowerCase() === item.description.trim().toLowerCase()) {
+      setNameCheck({ value, exists: false, checking: false });
+      return;
+    }
+    const id = window.setTimeout(() => { void checkName(value); }, 500);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.description, readOnly, item?.item_id]);
+
+  async function checkName(raw: string) {
+    const value = raw.trim();
+    if (!value || (item && value.toLowerCase() === item.description.trim().toLowerCase())) {
+      setNameCheck({ value, exists: false, checking: false });
+      return;
+    }
+    const seq = ++nameCheckSeq.current;
+    setNameCheck({ value, exists: false, checking: true });
+    try {
+      const params = new URLSearchParams({ name: value });
+      if (item) params.set('exclude_id', item.item_id);
+      const result = await api<{ exists: boolean }>(`/items/check-name?${params.toString()}`);
+      if (seq !== nameCheckSeq.current) return;
+      setNameCheck({ value, exists: !!result.exists, checking: false });
+    } catch {
+      if (seq === nameCheckSeq.current) setNameCheck({ value, exists: false, checking: false });
+    }
+  }
 
   async function requestClose() {
     if (busyRef.current || confirmOpenRef.current) return;
@@ -553,9 +591,11 @@ function ItemFormModal({
             ? 'Custom warranty rule is required'
             : null,
   };
-  const canSave = !readOnly && Object.values(errors).every((value) => !value) && !busy;
+  const nameExists = nameCheck.exists && nameCheck.value === form.description.trim();
+  const canSave = !readOnly && !nameExists && Object.values(errors).every((value) => !value) && !busy;
   const showError = (field: keyof typeof errors) => !!errors[field] && (touched[field] || submitAttempted);
-  const duplicateNameError = serverError && /name already exists/i.test(serverError) ? 'Item with this name already exists' : '';
+  const serverDuplicateError = serverError && /name already exists/i.test(serverError) ? 'Item with this name already exists' : '';
+  const duplicateNameError = nameExists ? 'Item with this name already exists' : serverDuplicateError;
   const categoryOptions = useMemo(() => {
     const options = masters.categories.slice();
     if (form.category_id && !options.some((category) => category.id === form.category_id)) {
@@ -758,7 +798,7 @@ function ItemFormModal({
         </div>
 
         <div className="modal-body item-modal-body">
-          {serverError && !duplicateNameError && (
+          {serverError && !serverDuplicateError && (
             <div className="modal-error-banner" role="alert">
               <div className="modal-error-banner-title"><span>⚠</span> Could not save item</div>
               <div>{serverError}</div>
@@ -776,8 +816,16 @@ function ItemFormModal({
                   id="item-name"
                   ref={nameRef}
                   value={form.description}
-                  onChange={(event) => { patch('description', event.target.value); if (serverError) setServerError(''); }}
-                  onBlur={() => markTouched('description')}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    patch('description', value);
+                    if (serverError) setServerError('');
+                    if (nameCheck.exists || nameCheck.checking) {
+                      nameCheckSeq.current += 1;
+                      setNameCheck({ value: value.trim(), exists: false, checking: false });
+                    }
+                  }}
+                  onBlur={() => { markTouched('description'); void checkName(form.description); }}
                   maxLength={255}
                   disabled={readOnly}
                   placeholder="e.g. iPhone 13 128GB — Midnight"
