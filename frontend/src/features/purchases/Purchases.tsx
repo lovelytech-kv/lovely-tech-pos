@@ -246,6 +246,37 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
     setLines(prev => prev.map(line => (line.key === key ? { ...line, ...patch } : line)));
   }
 
+  // Selecting an item that is already on another line merges into that line instead of
+  // creating a duplicate. Serialized items merge their IMEI lists; others add quantities.
+  function pickLineItem(key: string, picked: Item) {
+    const current = lines.find(line => line.key === key);
+    const existing = lines.find(line => line.key !== key && line.item?.item_id === picked.item_id);
+    if (!current) return;
+    if (!existing) {
+      patchLine(key, { item: picked, results: [], search: '' });
+      return;
+    }
+    if (picked.is_serialized) {
+      const mergedSerials = [existing.serials.trim(), current.serials.trim()].filter(Boolean).join('\n');
+      setLines(prev => prev
+        .filter(line => line.key !== key)
+        .map(line => (line.key === existing.key ? { ...line, serials: mergedSerials } : line)));
+    } else {
+      const added = Math.max(0, Math.trunc(Number(current.quantity || 0))) || 1;
+      setLines(prev => prev
+        .filter(line => line.key !== key)
+        .map(line => {
+          if (line.key !== existing.key) return line;
+          const base = Math.max(0, Math.trunc(Number(line.quantity || 0))) || 0;
+          return { ...line, quantity: String(base + added) };
+        }));
+    }
+    const mergedTotal = picked.is_serialized
+      ? parseSerials(`${existing.serials}\n${current.serials}`).length
+      : (Math.max(0, Math.trunc(Number(existing.quantity || 0))) || 0) + (Math.max(0, Math.trunc(Number(current.quantity || 0))) || 1);
+    toast.success(`${picked.item_code} is already on this purchase — merged into one line (${mergedTotal}${picked.is_serialized ? ' IMEI' : ''}).`);
+  }
+
   function addLine() {
     setLines(prev => [...prev, emptyLine()]);
   }
@@ -678,7 +709,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                                         <button
                                           key={item.item_id}
                                           type="button"
-                                          onClick={() => patchLine(line.key, { item, results: [], search: '' })}
+                                          onClick={() => pickLineItem(line.key, item)}
                                         >
                                           <b>{item.item_code}</b> · {item.description} <small>stock {item.stock}</small>
                                         </button>
