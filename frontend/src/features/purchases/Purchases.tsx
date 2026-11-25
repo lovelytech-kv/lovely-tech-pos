@@ -139,6 +139,10 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
   const [saveError, setSaveError] = useState('');
   const [purchaseKey, setPurchaseKey] = useState(() => crypto.randomUUID());
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const [supplierForm, setSupplierForm] = useState({ name: '', contact_no: '', address: '' });
+  const [supplierFormError, setSupplierFormError] = useState('');
+  const [supplierSaving, setSupplierSaving] = useState(false);
 
   // History state
   const [history, setHistory] = useState<PurchaseSummary[]>([]);
@@ -235,6 +239,42 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
       if (!confirmed) return;
     }
     setLines(prev => prev.filter(item => item.key !== key));
+  }
+
+  function openNewSupplier() {
+    setSupplierForm({ name: '', contact_no: '', address: '' });
+    setSupplierFormError('');
+    setSupplierSaving(false);
+    setSupplierModalOpen(true);
+  }
+
+  async function saveSupplier() {
+    if (supplierSaving) return;
+    const name = supplierForm.name.trim();
+    if (!name) { setSupplierFormError('Supplier name is required.'); return; }
+    if (name.length > 180) { setSupplierFormError('Supplier name is too long (max 180 characters).'); return; }
+    if (supplierForm.contact_no.trim().length > 50) { setSupplierFormError('Phone is too long (max 50 characters).'); return; }
+    if (supplierForm.address.trim().length > 500) { setSupplierFormError('Address is too long (max 500 characters).'); return; }
+    setSupplierSaving(true);
+    setSupplierFormError('');
+    try {
+      const created = await api<Supplier>('/admin/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          contact_no: supplierForm.contact_no.trim() || null,
+          address: supplierForm.address.trim() || null,
+        }),
+      });
+      setSuppliers(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setSupplierId(created.supplier_id);
+      setSupplierModalOpen(false);
+      toast.success(`Supplier ${created.name} added.`);
+    } catch (err) {
+      setSupplierFormError((err as Error).message);
+    } finally {
+      setSupplierSaving(false);
+    }
   }
 
   async function searchLineItems(line: DraftLine) {
@@ -451,10 +491,13 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
   }
 
   const supplierOptions = useMemo(() => {
+    if (isAdmin && suppliers.length > 0) {
+      return suppliers.map(supplier => ({ id: supplier.supplier_id, name: supplier.name }));
+    }
     const map = new Map<string, string>();
     history.forEach(row => { if (row.supplier_id && row.supplier_name) map.set(row.supplier_id, row.supplier_name); });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [history]);
+  }, [history, suppliers, isAdmin]);
 
   const filteredHistory = useMemo(() => history.filter(row => {
     if (filterFrom && row.purchase_date < filterFrom) return false;
@@ -507,8 +550,16 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
               </label>
               {isAdmin && (
                 <label>Supplier
-                  <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+                  <select
+                    value={supplierId}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === '__new__') { openNewSupplier(); return; }
+                      setSupplierId(value);
+                    }}
+                  >
                     <option value="">No supplier</option>
+                    <option value="__new__">+ New supplier…</option>
                     {suppliers.map(supplier => <option key={supplier.supplier_id} value={supplier.supplier_id}>{supplier.name}</option>)}
                   </select>
                 </label>
@@ -879,6 +930,74 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
               <div className="modal-actions">
                 <button type="button" className="ghost" onClick={() => setCorrection(null)} disabled={savingCorrection}>Cancel</button>
                 <button type="button" disabled={savingCorrection} onClick={() => void applyCorrection()}>{savingCorrection ? 'Applying…' : 'Apply audited correction'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {supplierModalOpen && (
+        <div
+          className="modal-overlay"
+          onMouseDown={(event) => { backdropDownRef.current = event.target === event.currentTarget; }}
+          onClick={(event) => {
+            if (backdropDownRef.current && event.target === event.currentTarget && !supplierSaving) setSupplierModalOpen(false);
+            backdropDownRef.current = false;
+          }}
+        >
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="quick-supplier-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="quick-supplier-title">New supplier</h3>
+              <button type="button" className="modal-close" onClick={() => setSupplierModalOpen(false)} aria-label="Close" disabled={supplierSaving}>×</button>
+            </div>
+            <div className="modal-body">
+              {supplierFormError && (
+                <div className="modal-error-banner" role="alert">
+                  <div className="modal-error-banner-title"><span>⚠</span> Could not add supplier</div>
+                  <div>{supplierFormError}</div>
+                </div>
+              )}
+              <label className="wide-field">Name *
+                <input
+                  value={supplierForm.name}
+                  onChange={(event) => { setSupplierForm(prev => ({ ...prev, name: event.target.value })); setSupplierFormError(''); }}
+                  maxLength={180}
+                  placeholder="Supplier name"
+                  aria-label="Supplier name"
+                  autoFocus
+                />
+              </label>
+              <label className="wide-field">Phone
+                <input
+                  value={supplierForm.contact_no}
+                  onChange={(event) => setSupplierForm(prev => ({ ...prev, contact_no: event.target.value }))}
+                  maxLength={50}
+                  placeholder="Contact number (optional)"
+                  aria-label="Supplier phone"
+                />
+              </label>
+              <label className="wide-field">Address
+                <textarea
+                  value={supplierForm.address}
+                  onChange={(event) => setSupplierForm(prev => ({ ...prev, address: event.target.value }))}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="Address (optional)"
+                  aria-label="Supplier address"
+                />
+              </label>
+              <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>The new supplier is selected for this purchase. Supplier payment is not part of purchase entry.</p>
+              <div className="modal-actions">
+                <button type="button" className="ghost" onClick={() => setSupplierModalOpen(false)} disabled={supplierSaving}>Cancel</button>
+                <button type="button" disabled={supplierSaving || !supplierForm.name.trim()} onClick={() => void saveSupplier()}>
+                  {supplierSaving ? 'Adding…' : 'Add supplier'}
+                </button>
               </div>
             </div>
           </div>

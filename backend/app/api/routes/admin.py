@@ -253,8 +253,15 @@ def create_expense_category(payload:dict,user:User=Depends(admin_user),db:Sessio
 def create_supplier(payload:dict,user:User=Depends(admin_user),db:Session=Depends(db_session)):
     from app.models.master import Supplier
     name=str(payload.get('name','')).strip()
+    contact=str(payload.get('contact_no') or '').strip() or None
+    address=str(payload.get('address') or '').strip() or None
     if not name: raise HTTPException(400,'Supplier name is required')
-    row=Supplier(name=name,contact_no=payload.get('contact_no'),address=payload.get('address'),is_active=True); db.add(row); db.commit(); return {'supplier_id':str(row.id),'name':row.name,'contact_no':row.contact_no,'address':row.address}
+    if len(name)>180: raise HTTPException(400,'Supplier name is too long (max 180 characters)')
+    if contact and len(contact)>50: raise HTTPException(400,'Supplier phone is too long (max 50 characters)')
+    if address and len(address)>500: raise HTTPException(400,'Supplier address is too long (max 500 characters)')
+    row=Supplier(name=name,contact_no=contact,address=address,is_active=True); db.add(row); db.flush()
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='SUPPLIER_CREATED',entity_type='SUPPLIER',entity_id=row.id,timestamp=datetime.now(timezone.utc),after_json={'name':row.name,'contact_no':row.contact_no,'address':row.address}))
+    db.commit(); return {'supplier_id':str(row.id),'name':row.name,'contact_no':row.contact_no,'address':row.address}
 
 @router.get('/suppliers')
 def suppliers(user:User=Depends(admin_user),db:Session=Depends(db_session)):
