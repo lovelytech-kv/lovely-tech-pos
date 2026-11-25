@@ -445,6 +445,7 @@ function ItemFormModal({
   const [newTypeSerialized, setNewTypeSerialized] = useState(false);
   const [masterBusy, setMasterBusy] = useState(false);
   const masterBackdropDownRef = useRef(false);
+  const masterConfirmRef = useRef(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const confirmOpenRef = useRef(false);
@@ -529,7 +530,7 @@ function ItemFormModal({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      if (masterModal) { setMasterModal(null); setMasterError(''); return; }
+      if (masterModal) { void requestCloseMaster(); return; }
       void requestClose();
     }
     window.addEventListener('keydown', onKeyDown);
@@ -732,6 +733,28 @@ function ItemFormModal({
     setNewTypeCodeTouched(false);
     setNewTypeName('');
     setNewTypeSerialized(false);
+  }
+
+  async function requestCloseMaster() {
+    if (masterBusy || masterConfirmRef.current) return;
+    const hasInput = masterModal === 'category'
+      ? newCategoryName.trim() !== ''
+      : newTypeName.trim() !== '' || newTypeCode.trim() !== '';
+    if (hasInput) {
+      masterConfirmRef.current = true;
+      try {
+        const discard = await modal.confirm({
+          title: 'Discard this entry?',
+          message: 'The new category/type text will be lost.',
+          confirmText: 'Discard',
+          cancelText: 'Keep editing',
+        });
+        if (!discard) return;
+      } finally {
+        masterConfirmRef.current = false;
+      }
+    }
+    closeMaster();
   }
 
   async function createCategoryInline() {
@@ -1076,7 +1099,7 @@ function ItemFormModal({
         style={{ zIndex: 10050 }}
         onMouseDown={(event) => { masterBackdropDownRef.current = event.target === event.currentTarget; }}
         onClick={(event) => {
-          if (masterBackdropDownRef.current && event.target === event.currentTarget) closeMaster();
+          if (masterBackdropDownRef.current && event.target === event.currentTarget) void requestCloseMaster();
           masterBackdropDownRef.current = false;
         }}
       >
@@ -1089,7 +1112,7 @@ function ItemFormModal({
         >
           <div className="modal-header">
             <h3 id="item-master-title">{masterModal === 'category' ? 'New category' : 'New item type'}</h3>
-            <button type="button" className="modal-close" onClick={closeMaster} aria-label="Close" disabled={masterBusy}>×</button>
+            <button type="button" className="modal-close" onClick={() => void requestCloseMaster()} aria-label="Close" disabled={masterBusy}>×</button>
           </div>
           <div className="modal-body">
             {masterError && (
@@ -1145,7 +1168,7 @@ function ItemFormModal({
             )}
 
             <div className="modal-actions">
-              <button type="button" className="ghost" onClick={closeMaster} disabled={masterBusy}>Cancel</button>
+              <button type="button" className="ghost" onClick={() => void requestCloseMaster()} disabled={masterBusy}>Cancel</button>
               <button
                 type="button"
                 className="primary"
