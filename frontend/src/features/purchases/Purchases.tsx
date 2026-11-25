@@ -156,7 +156,9 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
   const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
   const [costBusy, setCostBusy] = useState('');
 
-  // Audited corrections (Admin)
+  // Only a click that both starts and ends on the backdrop may dismiss a modal.
+  // Inner controls (cost/qty inputs, action buttons) must never close it via bubbling.
+  const backdropDownRef = useRef(false);
   const [correction, setCorrection] = useState<CorrectionState | null>(null);
   const [correctionValue, setCorrectionValue] = useState('');
   const [correctionReason, setCorrectionReason] = useState('');
@@ -707,8 +709,21 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
       )}
 
       {detail && (
-        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) setDetail(null); }}>
-          <div className="modal-card purchase-detail-modal" role="dialog" aria-modal="true" aria-labelledby="purchase-detail-title">
+        <div
+          className="modal-overlay"
+          onMouseDown={(event) => { backdropDownRef.current = event.target === event.currentTarget; }}
+          onClick={(event) => {
+            if (backdropDownRef.current && event.target === event.currentTarget) setDetail(null);
+            backdropDownRef.current = false;
+          }}
+        >
+          <div
+            className="modal-card purchase-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="purchase-detail-title"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="modal-header">
               <h3 id="purchase-detail-title">Purchase · {detail.purchase_date}</h3>
               <button type="button" className="modal-close" onClick={() => setDetail(null)} aria-label="Close">×</button>
@@ -795,8 +810,21 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
       )}
 
       {correction && (
-        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget && !savingCorrection) setCorrection(null); }}>
-          <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="purchase-correction-title">
+        <div
+          className="modal-overlay"
+          onMouseDown={(event) => { backdropDownRef.current = event.target === event.currentTarget; }}
+          onClick={(event) => {
+            if (backdropDownRef.current && event.target === event.currentTarget && !savingCorrection) setCorrection(null);
+            backdropDownRef.current = false;
+          }}
+        >
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="purchase-correction-title"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="modal-header">
               <h3 id="purchase-correction-title">{correction.title}</h3>
               <button type="button" className="modal-close" onClick={() => setCorrection(null)} aria-label="Close" disabled={savingCorrection}>×</button>

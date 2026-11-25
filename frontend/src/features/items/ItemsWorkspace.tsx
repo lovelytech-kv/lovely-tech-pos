@@ -718,7 +718,7 @@ function ItemFormModal({
 
   return (
     <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) void requestClose(); }}>
-      <div className="modal-card item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+      <div className="modal-card item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h3 id="item-modal-title">
             {readOnly ? `Item: ${item?.description ?? ''}` : item ? `Edit Item: ${item.description}` : '+ Add New Item'}
