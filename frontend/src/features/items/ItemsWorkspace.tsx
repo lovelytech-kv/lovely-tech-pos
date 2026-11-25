@@ -434,14 +434,15 @@ function ItemFormModal({
   const [variantName, setVariantName] = useState('');
   const [variantValue, setVariantValue] = useState('');
   const [variantBusy, setVariantBusy] = useState(false);
-  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
+  const [masterModal, setMasterModal] = useState<'category' | 'type' | null>(null);
+  const [masterError, setMasterError] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
-  const [newTypeOpen, setNewTypeOpen] = useState(false);
   const [newTypeCode, setNewTypeCode] = useState('');
   const [newTypeCodeTouched, setNewTypeCodeTouched] = useState(false);
   const [newTypeName, setNewTypeName] = useState('');
   const [newTypeSerialized, setNewTypeSerialized] = useState(false);
   const [masterBusy, setMasterBusy] = useState(false);
+  const masterBackdropDownRef = useRef(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const confirmOpenRef = useRef(false);
@@ -490,6 +491,7 @@ function ItemFormModal({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape') return;
       event.preventDefault();
+      if (masterModal) { setMasterModal(null); setMasterError(''); return; }
       void requestClose();
     }
     window.addEventListener('keydown', onKeyDown);
@@ -668,11 +670,36 @@ function ItemFormModal({
     }
   }
 
+  function openMaster(kind: 'category' | 'type') {
+    setMasterModal(kind);
+    setMasterError('');
+    if (kind === 'category') {
+      setNewCategoryName('');
+    } else {
+      setNewTypeCode('');
+      setNewTypeCodeTouched(false);
+      setNewTypeName('');
+      setNewTypeSerialized(false);
+    }
+  }
+
+  function closeMaster() {
+    if (masterBusy) return;
+    setMasterModal(null);
+    setMasterError('');
+    setNewCategoryName('');
+    setNewTypeCode('');
+    setNewTypeCodeTouched(false);
+    setNewTypeName('');
+    setNewTypeSerialized(false);
+  }
+
   async function createCategoryInline() {
     const name = newCategoryName.trim();
-    if (!name) { toast.error('Category name is required'); return; }
+    if (!name) { setMasterError('Category name is required.'); return; }
     if (masterBusy) return;
     setMasterBusy(true);
+    setMasterError('');
     try {
       const created = await api<{ id: string; name: string }>('/items/categories', {
         method: 'POST',
@@ -681,10 +708,10 @@ function ItemFormModal({
       await onRefreshMasters();
       patch('category_id', created.id);
       setNewCategoryName('');
-      setNewCategoryOpen(false);
+      setMasterModal(null);
       toast.success('Category added');
     } catch (err) {
-      toast.error((err as Error).message);
+      setMasterError((err as Error).message);
     } finally {
       setMasterBusy(false);
     }
@@ -694,10 +721,11 @@ function ItemFormModal({
     const name = newTypeName.trim();
     const typedCode = newTypeCode.trim().replace(/\s+/g, '_');
     const code = (typedCode || typeCodeFromName(name)).slice(0, 50);
-    if (!name) { toast.error('Item type name is required'); return; }
-    if (!code) { toast.error('Enter an item type code or a name that can generate one'); return; }
+    if (!name) { setMasterError('Item type name is required.'); return; }
+    if (!code) { setMasterError('Enter an item type code or a name that can generate one.'); return; }
     if (masterBusy) return;
     setMasterBusy(true);
+    setMasterError('');
     try {
       const created = await api<{ id: string }>('/items/item-types', {
         method: 'POST',
@@ -709,16 +737,17 @@ function ItemFormModal({
       setNewTypeCodeTouched(false);
       setNewTypeName('');
       setNewTypeSerialized(false);
-      setNewTypeOpen(false);
+      setMasterModal(null);
       toast.success('Item type added');
     } catch (err) {
-      toast.error((err as Error).message);
+      setMasterError((err as Error).message);
     } finally {
       setMasterBusy(false);
     }
   }
 
   return (
+    <>
     <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) void requestClose(); }}>
       <div className="modal-card item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
@@ -765,7 +794,7 @@ function ItemFormModal({
                 <div className="item-field">
                   <div className="item-label-row">
                     <label htmlFor="item-category">Category *</label>
-                    {!readOnly && <button type="button" className="ghost" onClick={() => setNewCategoryOpen(value => !value)}>+ New</button>}
+                    {!readOnly && <button type="button" className="ghost" onClick={() => openMaster('category')}>+ New</button>}
                   </div>
                   <select
                     id="item-category"
@@ -781,29 +810,12 @@ function ItemFormModal({
                     {categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                   </select>
                   {showError('category_id') && <span className="item-field-error" id="item-category-error">{errors.category_id}</span>}
-                  {!readOnly && newCategoryOpen && (
-                    <div className="item-inline-create">
-                      <div className="item-inline-row">
-                        <input
-                          value={newCategoryName}
-                          onChange={(event) => setNewCategoryName(event.target.value)}
-                          maxLength={120}
-                          placeholder="New category name"
-                          aria-label="New category name"
-                        />
-                        <button type="button" disabled={masterBusy || !newCategoryName.trim()} onClick={() => void createCategoryInline()}>
-                          {masterBusy ? 'Saving…' : 'Add'}
-                        </button>
-                        <button type="button" className="ghost" onClick={() => { setNewCategoryOpen(false); setNewCategoryName(''); }}>Cancel</button>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 <div className="item-field">
                   <div className="item-label-row">
                     <label htmlFor="item-type">Item type *</label>
-                    {!readOnly && <button type="button" className="ghost" onClick={() => setNewTypeOpen(value => !value)}>+ New</button>}
+                    {!readOnly && <button type="button" className="ghost" onClick={() => openMaster('type')}>+ New</button>}
                   </div>
                   <select
                     id="item-type"
@@ -819,37 +831,6 @@ function ItemFormModal({
                     {itemTypeOptions.map((type) => <option key={type.id} value={type.id}>{type.name}{type.is_serialized ? ' · IMEI' : ''}</option>)}
                   </select>
                   {showError('item_type_id') && <span className="item-field-error" id="item-type-error">{errors.item_type_id}</span>}
-                  {!readOnly && newTypeOpen && (
-                    <div className="item-inline-create">
-                      <div className="item-inline-row">
-                        <input
-                          value={newTypeCode}
-                          onChange={(event) => { setNewTypeCode(event.target.value); setNewTypeCodeTouched(true); }}
-                          maxLength={50}
-                          placeholder="Code (auto from name)"
-                          aria-label="New item type code"
-                        />
-                        <input
-                          value={newTypeName}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setNewTypeName(value);
-                            if (!newTypeCodeTouched) setNewTypeCode(typeCodeFromName(value));
-                          }}
-                          maxLength={120}
-                          placeholder="Item type name"
-                          aria-label="New item type name"
-                        />
-                      </div>
-                      <div className="item-inline-row">
-                        <label className="check"><input type="checkbox" checked={newTypeSerialized} onChange={(event) => setNewTypeSerialized(event.target.checked)} /> Serialized / IMEI</label>
-                        <button type="button" disabled={masterBusy || !newTypeName.trim()} onClick={() => void createTypeInline()}>
-                          {masterBusy ? 'Saving…' : 'Add type'}
-                        </button>
-                        <button type="button" className="ghost" onClick={() => { setNewTypeOpen(false); setNewTypeCode(''); setNewTypeCodeTouched(false); setNewTypeName(''); setNewTypeSerialized(false); }}>Cancel</button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1040,5 +1021,96 @@ function ItemFormModal({
         </div>
       </div>
     </div>
+
+    {masterModal && (
+      <div
+        className="modal-overlay"
+        style={{ zIndex: 10050 }}
+        onMouseDown={(event) => { masterBackdropDownRef.current = event.target === event.currentTarget; }}
+        onClick={(event) => {
+          if (masterBackdropDownRef.current && event.target === event.currentTarget) closeMaster();
+          masterBackdropDownRef.current = false;
+        }}
+      >
+        <div
+          className="modal-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="item-master-title"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="modal-header">
+            <h3 id="item-master-title">{masterModal === 'category' ? 'New category' : 'New item type'}</h3>
+            <button type="button" className="modal-close" onClick={closeMaster} aria-label="Close" disabled={masterBusy}>×</button>
+          </div>
+          <div className="modal-body">
+            {masterError && (
+              <div className="modal-error-banner" role="alert">
+                <div className="modal-error-banner-title"><span>⚠</span> Could not save</div>
+                <div>{masterError}</div>
+              </div>
+            )}
+
+            {masterModal === 'category' ? (
+              <label className="wide-field">Category name *
+                <input
+                  value={newCategoryName}
+                  onChange={(event) => { setNewCategoryName(event.target.value); if (masterError) setMasterError(''); }}
+                  maxLength={120}
+                  placeholder="e.g. Phone Accessories"
+                  aria-label="New category name"
+                  autoFocus
+                />
+              </label>
+            ) : (
+              <>
+                <label className="wide-field">Item type name *
+                  <input
+                    value={newTypeName}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setNewTypeName(value);
+                      if (!newTypeCodeTouched) setNewTypeCode(typeCodeFromName(value));
+                      if (masterError) setMasterError('');
+                    }}
+                    maxLength={120}
+                    placeholder="e.g. Mobile Phone"
+                    aria-label="New item type name"
+                    autoFocus
+                  />
+                </label>
+                <label className="wide-field">Code
+                  <input
+                    value={newTypeCode}
+                    onChange={(event) => { setNewTypeCode(event.target.value); setNewTypeCodeTouched(true); }}
+                    maxLength={50}
+                    placeholder="Auto-generated from name"
+                    aria-label="New item type code"
+                  />
+                </label>
+                <label className="check">
+                  <input type="checkbox" checked={newTypeSerialized} onChange={(event) => setNewTypeSerialized(event.target.checked)} />
+                  Serialized / IMEI (one unique serial per unit)
+                </label>
+                <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>The code is generated from the name unless you edit it.</p>
+              </>
+            )}
+
+            <div className="modal-actions">
+              <button type="button" className="ghost" onClick={closeMaster} disabled={masterBusy}>Cancel</button>
+              <button
+                type="button"
+                className="primary"
+                disabled={masterBusy || (masterModal === 'category' ? !newCategoryName.trim() : !newTypeName.trim())}
+                onClick={() => void (masterModal === 'category' ? createCategoryInline() : createTypeInline())}
+              >
+                {masterBusy ? <><span className="spinner" aria-hidden="true" /> Saving…</> : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
