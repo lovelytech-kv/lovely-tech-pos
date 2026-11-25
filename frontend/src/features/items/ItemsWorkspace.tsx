@@ -402,7 +402,7 @@ function typeCodeFromName(name: string): string {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 50);
 }
@@ -692,7 +692,8 @@ function ItemFormModal({
 
   async function createTypeInline() {
     const name = newTypeName.trim();
-    const code = (newTypeCode.trim() || typeCodeFromName(name)).slice(0, 50);
+    const typedCode = newTypeCode.trim().replace(/\s+/g, '_');
+    const code = (typedCode || typeCodeFromName(name)).slice(0, 50);
     if (!name) { toast.error('Item type name is required'); return; }
     if (!code) { toast.error('Enter an item type code or a name that can generate one'); return; }
     if (masterBusy) return;
