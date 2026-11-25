@@ -21,6 +21,7 @@ import { useShopProfile } from '../settings/ShopContext';
 import { PitrRestoreDialog } from './PitrRestoreDialog';
 import { CustomerPickerModal, type PickerCustomer } from './CustomerPickerModal';
 import { ItemsWorkspace } from '../items/ItemsWorkspace';
+import { ItemCostReviewPanel } from '../items/ItemCostReviewPanel';
 
 type User = { display_name:string; role:string; branch_id:string; username?:string };
 type WarrantyDefault = { warranty_type:string; duration_value?:number|null; custom_rule?:string|null };
@@ -1152,6 +1153,7 @@ function AdminTab({onError}:{onError:(x:string)=>void}){
     </div>
   )}
   <div className="glass panel"><div className="section-head"><div><h2>Admin / Controls</h2><p className="muted">Security, users, permissions, suppliers, targets and approvals.</p></div><button onClick={load}>Refresh</button></div></div>
+  <ItemCostReviewPanel onError={onError}/>
   <CategoryTypeManager onError={onError}/>
   <div className="glass panel"><h3>Expense Categories</h3><p className="muted">Admin can add categories beyond the locked defaults.</p><div className="form-grid compact"><input placeholder="New expense category" value={expenseCatName} onChange={e=>setExpenseCatName(e.target.value)}/><button disabled={!expenseCatName.trim()} onClick={addExpenseCategory}>Add Expense Category</button></div>{expenseCats.map(c=><span key={c.id} className="feature-badge" style={{display:'inline-block',margin:'4px'}}>{c.name}</span>)}</div>
   <div className="glass panel"><h3>Suppliers</h3><p className="muted">Admin-only supplier master. Supplier payment is not part of purchase entry.</p><div className="form-grid compact"><input placeholder="Supplier name" value={supplierName} onChange={e=>setSupplierName(e.target.value)}/><input placeholder="Contact no." value={supplierContact} onChange={e=>setSupplierContact(e.target.value)}/><input placeholder="Address (optional)" value={supplierAddress} onChange={e=>setSupplierAddress(e.target.value)}/><button disabled={!supplierName.trim()} onClick={addSupplier}>Add Supplier</button></div>{suppliers.map(s=><div className="stock-row" key={s.supplier_id}><span><b>{s.name}</b> · {s.contact_no||'No contact'} · {s.address||'No address'}</span></div>)}</div>

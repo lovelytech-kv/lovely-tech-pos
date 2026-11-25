@@ -52,6 +52,7 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
   const [dayStatus, setDayStatus] = useState<any>(null);
   const [targets, setTargets] = useState<any[]>([]);
   const [pendingCosts, setPendingCosts] = useState<any[]>([]);
+  const [reviewCount, setReviewCount] = useState<number | null>(null);
   const [lanStatus, setLanStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [hidden, setHidden] = useState<string[]>(loadHidden);
 
@@ -101,6 +102,11 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
           setPendingCosts(await api('/purchases/pending-costs'));
         } catch (e) {
           console.warn('[HomeDashboard] pending-costs failed:', e);
+        }
+        try {
+          setReviewCount((await api<any[]>('/items/pending-review')).length);
+        } catch (e) {
+          console.warn('[HomeDashboard] pending-review failed:', e);
         }
       }
     })();
@@ -211,6 +217,21 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
             {isAdmin ? 'Pending cost entries' : 'Admin only'}
           </small>
         </div>
+        {isAdmin && (
+          <button
+            type="button"
+            className="metric metric-animated"
+            onClick={() => onNavigate('Admin')}
+            style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', border: '1px solid var(--line)' }}
+            title="Open the buy cost review queue"
+          >
+            <span>Review Queue</span>
+            <b>{reviewCount == null ? '—' : reviewCount}</b>
+            <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
+              {reviewCount ? 'Items need a buy cost' : 'All costs entered'}
+            </small>
+          </button>
+        )}
         <div className="metric metric-animated">
           <span>Cash In Hand</span>
           <b>{cashInHand != null ? `Rs. ${money(cashInHand)}` : '—'}</b>

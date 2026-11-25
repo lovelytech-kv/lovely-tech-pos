@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission, require_any_permission
 from app.models.master import User, Item, ItemBarcode, Category, ItemType, WarrantyDefault
 from app.models.security import AuditLog
-from app.schemas.items import ItemCreateIn, ItemUpdateIn, BarcodeIn, WarrantyDefaultIn
+from app.schemas.items import BarcodeIn, ItemCreateIn, ItemReviewIn, ItemUpdateIn, PendingReviewItemOut, WarrantyDefaultIn
 from app.services.numbering import NumberingService
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -38,6 +38,62 @@ def item_masters(user: User = Depends(require_any_permission("ITEM_EDIT", "STOCK
     types = db.scalars(select(ItemType).where(ItemType.is_active.is_(True)).order_by(ItemType.name)).all()
     return {"categories":[{"id":str(x.id),"name":x.name,"parent_id":str(x.parent_id) if x.parent_id else None} for x in cats],
             "item_types":[{"id":str(x.id),"code":x.code,"name":x.name,"is_serialized":x.is_serialized} for x in types]}
+
+
+@router.get("/pending-review", response_model=list[PendingReviewItemOut])
+def pending_review_items(user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
+    """Admin queue: items whose buy cost is still unknown (cashier purchases)."""
+    if user.role.code.upper() != "ADMIN":
+        raise HTTPException(403, "Admin only")
+    rows = db.execute(
+        select(Item, Category)
+        .outerjoin(Category, Category.id == Item.category_id)
+        .where(Item.needs_admin_review.is_(True), Item.is_active.is_(True))
+        .order_by(Item.created_at)
+    ).all()
+    creators: dict = {}
+    if rows:
+        creator_rows = db.execute(
+            select(AuditLog.entity_id, User.display_name)
+            .join(User, User.id == AuditLog.actor_user_id)
+            .where(AuditLog.action_type == "ITEM_CREATED", AuditLog.entity_id.in_([item.id for item, _ in rows]))
+        ).all()
+        creators = {entity_id: name for entity_id, name in creator_rows}
+    return [
+        PendingReviewItemOut(
+            item_id=item.id, item_code=item.item_code, description=item.description,
+            category_name=category.name if category else None,
+            created_by=creators.get(item.id), created_at=item.created_at,
+            buy_cost=item.buy_cost, low_stock_threshold=item.low_stock_threshold,
+        ) for item, category in rows
+    ]
+
+
+@router.patch("/{item_id}/review")
+def review_item_cost(item_id: str, payload: ItemReviewIn, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
+    """Admin enters the missing buy cost and clears the review flag (audited)."""
+    if user.role.code.upper() != "ADMIN":
+        raise HTTPException(403, "Admin only")
+    item = db.scalar(select(Item).where(Item.id == item_id).with_for_update())
+    if not item:
+        raise HTTPException(404, "Item not found")
+    before = {
+        "buy_cost": str(item.buy_cost) if item.buy_cost is not None else None,
+        "needs_admin_review": item.needs_admin_review,
+    }
+    item.buy_cost = payload.buy_cost
+    item.needs_admin_review = False
+    item.version += 1
+    db.add(AuditLog(
+        branch_id=user.branch_id, actor_user_id=user.id, action_type="ITEM_COST_REVIEWED",
+        entity_type="ITEM", entity_id=item.id, timestamp=datetime.now(timezone.utc),
+        before_json=before, after_json={"buy_cost": str(payload.buy_cost), "needs_admin_review": False},
+    ))
+    db.commit()
+    return {
+        "item_id": str(item.id), "buy_cost": item.buy_cost,
+        "needs_admin_review": item.needs_admin_review, "version": item.version,
+    }
 
 
 def _out(item, barcodes):
