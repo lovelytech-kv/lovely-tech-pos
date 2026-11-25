@@ -34,7 +34,13 @@ export function AppHeader({ title, user, onLogout, children }: AppHeaderProps) {
   const localDate = todayLocal(now);
   const [year, month, day] = localDate.split('-').map(Number);
   const dateLabel = DATE_FORMAT.format(new Date(year, month - 1, day));
-  const timeLabel = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  // 12-hour shop clock: 2:35 PM (never 14:35).
+  const hours24 = now.getHours();
+  const hours12 = hours24 % 12 || 12;
+  const minutes = pad2(now.getMinutes());
+  const meridiem = hours24 < 12 ? 'AM' : 'PM';
+  const timeLabel = `${hours12}:${minutes} ${meridiem}`;
+  const isoTime = `${pad2(hours24)}:${minutes}`;
   const initials = user.display_name.slice(0, 2).toUpperCase();
 
   return (
@@ -44,7 +50,7 @@ export function AppHeader({ title, user, onLogout, children }: AppHeaderProps) {
         <span className="app-header-datetime">
           <span>{dateLabel}</span>
           <span className="app-header-datetime-sep" aria-hidden="true">·</span>
-          <time dateTime={`${localDate}T${timeLabel}`}>{timeLabel}</time>
+          <time dateTime={`${localDate}T${isoTime}`} title={timeLabel}>{timeLabel}</time>
         </span>
       </div>
       <div className="app-header-actions">
