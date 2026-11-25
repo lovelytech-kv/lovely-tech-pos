@@ -189,7 +189,7 @@ class PurchaseService:
     def complete_line_cost(self, *, purchase: Purchase, line: PurchaseLine, unit_cost: Decimal, actor_user_id: uuid.UUID | None = None) -> None:
         # H10 — item lock must be held before PurchaseLot creation / negative
         # stock reconciliation. Deterministic order: Item row first.
-        self._lock_item(line.item_id)
+        item = self._lock_item(line.item_id)
         if purchase.status not in {"PENDING_COST", "COMPLETED"}:
             raise ValueError(f"Purchase cannot receive cost in status {purchase.status}")
         if line.quantity <= 0:
@@ -202,6 +202,9 @@ class PurchaseService:
             raise ValueError("Changing an existing purchase cost requires controlled correction/recalculation")
 
         line.unit_cost = unit_cost
+        # Keep the item master in sync: latest known buy cost clears the review flag.
+        item.buy_cost = unit_cost
+        item.needs_admin_review = False
         lot = self.fifo.create_purchase_lot(
             branch_id=purchase.branch_id, purchase_line_id=line.id, item_id=line.item_id,
             quantity=line.quantity, unit_cost=unit_cost, lot_date=line.line_date,
