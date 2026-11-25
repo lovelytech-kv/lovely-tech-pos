@@ -214,8 +214,27 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
     setLines(prev => [...prev, emptyLine()]);
   }
 
-  function removeLine(key: string) {
-    setLines(prev => prev.filter(line => line.key !== key));
+  async function removeLine(key: string) {
+    const line = lines.find(item => item.key === key);
+    if (!line) return;
+    const hasData =
+      line.item !== null ||
+      line.search.trim() !== '' ||
+      line.unitCost.trim() !== '' ||
+      line.serials.trim() !== '' ||
+      line.quantity !== '1';
+    if (hasData) {
+      const confirmed = await modal.confirm({
+        title: 'Remove this line?',
+        message: line.item
+          ? `Remove ${line.item.item_code} · ${line.item.description} from this purchase?`
+          : 'Remove this empty line from the purchase?',
+        confirmText: 'Remove line',
+        cancelText: 'Keep line',
+      });
+      if (!confirmed) return;
+    }
+    setLines(prev => prev.filter(item => item.key !== key));
   }
 
   async function searchLineItems(line: DraftLine) {
@@ -605,7 +624,16 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                             )}
                             {isAdmin && <td className="purchase-line-total">{costValue(line.unitCost) === null ? '—' : `Rs. ${lineTotal(line)}`}</td>}
                             <td>
-                              <button type="button" className="danger-button" onClick={() => removeLine(line.key)} aria-label="Remove line">Remove</button>
+                              <button
+                                type="button"
+                                className="danger-button purchase-line-remove"
+                                onClick={() => void removeLine(line.key)}
+                                aria-label={`Remove line ${line.item?.item_code ?? ''}`.trim()}
+                                title="Remove line"
+                                disabled={busy}
+                              >
+                                🗑
+                              </button>
                             </td>
                           </tr>
                         );
