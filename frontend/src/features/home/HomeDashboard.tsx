@@ -212,20 +212,25 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
           <b>—</b>
           <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Not tracked yet</small>
         </div>
-        <button
-          type="button"
-          className="metric metric-animated"
-          onClick={() => onNavigate('Purchases', { purchasesStatus: 'PENDING' })}
-          style={{ textAlign: 'left', cursor: isAdmin ? 'pointer' : 'default', font: 'inherit', border: '1px solid var(--line)' }}
-          disabled={!isAdmin}
-          title={isAdmin ? 'Open purchase history filtered to lines missing a cost' : 'Admin only'}
-        >
-          <span>Cost Pending</span>
-          <b>{isAdmin ? pendingCosts.length : '—'}</b>
-          <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
-            {isAdmin ? 'Purchase lines missing cost' : 'Admin only'}
-          </small>
-        </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            className="metric metric-animated"
+            onClick={() => onNavigate('Purchases', { purchasesStatus: 'PENDING' })}
+            style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', border: '1px solid var(--line)' }}
+            title="Open purchase history filtered to lines missing a cost"
+          >
+            <span>Cost Pending</span>
+            <b>{pendingCosts.length}</b>
+            <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Purchase lines missing cost</small>
+          </button>
+        ) : (
+          <div className="metric metric-animated">
+            <span>Cost Pending</span>
+            <b>—</b>
+            <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Admin only</small>
+          </div>
+        )}
         {isAdmin && (
           <button
             type="button"
