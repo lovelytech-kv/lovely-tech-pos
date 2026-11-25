@@ -138,6 +138,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
   const [busy, setBusy] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [validationError, setValidationError] = useState<string[]>([]);
   const [purchaseKey, setPurchaseKey] = useState(() => crypto.randomUUID());
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
@@ -219,6 +220,27 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
     const subtotal = moneyAdd(...lines.map(line => lineTotal(line)));
     return { quantity, subtotal };
   }, [lines]);
+
+  function missingPurchaseFields(): string[] {
+    const missing: string[] = [];
+    if (!date) missing.push('purchase date');
+    if (isAdmin && !supplierId) missing.push('supplier');
+    if (!lines.length) missing.push('at least one line');
+    lines.forEach((line, index) => {
+      const errors = validateLine(line, isAdmin);
+      if (errors.item) missing.push(`line ${index + 1} item`);
+      if (errors.quantity) missing.push(`line ${index + 1} quantity`);
+      if (errors.cost) missing.push(`line ${index + 1} unit cost`);
+    });
+    return missing;
+  }
+
+  const canSavePurchase = !busy && missingPurchaseFields().length === 0;
+
+  // Clear the incomplete-purchase banner as soon as the user fixes something.
+  useEffect(() => {
+    setValidationError(prev => (prev.length ? [] : prev));
+  }, [lines, supplierId, date]);
 
   function patchLine(key: string, patch: Partial<DraftLine>) {
     setLines(prev => prev.map(line => (line.key === key ? { ...line, ...patch } : line)));
@@ -324,6 +346,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
     setDate(today());
     setSubmitAttempted(false);
     setSaveError('');
+    setValidationError([]);
     setPurchaseKey(crypto.randomUUID());
   }
 
@@ -342,12 +365,10 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
     if (busy) return;
     setSubmitAttempted(true);
     setSaveError('');
-    if (!lines.length) { onError?.('Add at least one line before saving.'); return; }
-    const invalid = lines.find(line => Object.keys(validateLine(line, isAdmin)).length > 0);
-    if (invalid) {
-      const errors = validateLine(invalid, isAdmin);
-      const message = errors.item || errors.quantity || errors.cost || 'Check the highlighted line.';
-      toast.error(message);
+    const missing = missingPurchaseFields();
+    if (missing.length) {
+      setValidationError(missing);
+      toast.error('Purchase is incomplete — check the highlighted fields.');
       return;
     }
     const allSerials = lines.flatMap(line => (line.item?.is_serialized ? parseSerials(line.serials) : []));
@@ -555,14 +576,14 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
         <>
           <div className="glass panel">
             <div className="purchase-meta-grid">
-              <label>Purchase date
-                <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+              <label>Purchase date *
+                <input type="date" value={date} required onChange={(event) => setDate(event.target.value)} />
               </label>
               <label>Invoice / reference
                 <input value={reference} maxLength={100} onChange={(event) => setReference(event.target.value)} placeholder="Supplier invoice / GRN" />
               </label>
               {isAdmin && (
-                <label>Supplier
+                <label>Supplier *
                   <select
                     value={supplierId}
                     onChange={(event) => {
@@ -571,7 +592,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                       setSupplierId(value);
                     }}
                   >
-                    <option value="">No supplier</option>
+                    <option value="">Select supplier</option>
                     <option value="__new__">+ New supplier…</option>
                     {suppliers.map(supplier => <option key={supplier.supplier_id} value={supplier.supplier_id}>{supplier.name}</option>)}
                   </select>
@@ -582,6 +603,13 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
               <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional purchase note" />
             </label>
           </div>
+
+          {validationError.length > 0 && (
+            <div className="modal-error-banner" role="alert">
+              <div className="modal-error-banner-title"><span>⚠</span> Purchase is incomplete</div>
+              <div>Missing or invalid: {validationError.join('; ')}.</div>
+            </div>
+          )}
 
           {saveError && (
             <div className="modal-error-banner" role="alert">
@@ -594,7 +622,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
           <div className="purchases-entry-grid">
             <div className="glass panel">
               <div className="section-head">
-                <div><h3>Lines</h3><p className="muted">Search an item, set quantity and leave the rest to the summary.</p></div>
+                <div><h3>Lines *</h3><p className="muted">Search an item, set quantity and leave the rest to the summary.</p></div>
                 <span className="feature-badge">{lines.length} line{lines.length === 1 ? '' : 's'}</span>
               </div>
 
@@ -610,8 +638,8 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                   <table className="purchase-line-table">
                     <thead>
                       <tr>
-                        <th>Item</th>
-                        <th>Qty</th>
+                        <th>Item *</th>
+                        <th>Qty *</th>
                         {isAdmin && <th>Unit cost</th>}
                         {isAdmin && <th>Line total</th>}
                         <th aria-label="Actions" />
@@ -620,7 +648,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                     <tbody>
                       {lines.map(line => {
                         const errors = lineErrors[line.key];
-                        const showError = submitAttempted;
+                        const showError = submitAttempted || line.item !== null || line.search.trim() !== '';
                         return (
                           <tr key={line.key}>
                             <td>
@@ -638,6 +666,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                                       onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void searchLineItems(line); } }}
                                       placeholder="Search item code / description"
                                       aria-label="Search item for this line"
+                                      className={showError && errors.item ? 'input-error' : ''}
                                     />
                                     <button type="button" onClick={() => void searchLineItems(line)} disabled={line.searching}>
                                       {line.searching ? '…' : 'Search'}
@@ -669,11 +698,13 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                                     onChange={(event) => patchLine(line.key, { serials: event.target.value })}
                                     placeholder="One IMEI/serial per line"
                                     aria-label="IMEI list for this line"
+                                    className={showError && errors.quantity ? 'input-error' : ''}
                                   />
                                 </div>
                               ) : (
                                 <input
                                   {...intInputProps(line.quantity, (value) => patchLine(line.key, { quantity: value }), 1)}
+                                  className={showError && errors.quantity ? 'input-error' : ''}
                                   style={{ width: 84 }}
                                   aria-label="Line quantity"
                                 />
@@ -682,7 +713,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                             </td>
                             {isAdmin && (
                               <td>
-                                <input {...moneyInputProps(line.unitCost, (value) => patchLine(line.key, { unitCost: value }))} style={{ width: 110 }} placeholder="Pending" aria-label="Unit cost" />
+                                <input {...moneyInputProps(line.unitCost, (value) => patchLine(line.key, { unitCost: value }))} className={showError && errors.cost ? 'input-error' : ''} style={{ width: 110 }} placeholder="Pending" aria-label="Unit cost" />
                                 {showError && errors.cost && <span className="item-field-error">{errors.cost}</span>}
                               </td>
                             )}
@@ -728,9 +759,18 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
               )}
               <div className="form-actions purchase-summary-actions">
                 <button type="button" className="ghost" onClick={() => void cancelEntry()} disabled={busy}>Cancel</button>
-                <button type="button" className="primary" disabled={busy} onClick={() => void save()}>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!canSavePurchase}
+                  title={!canSavePurchase && !busy ? 'Complete the required fields to save' : undefined}
+                  onClick={() => void save()}
+                >
                   {busy ? <><span className="spinner" /> Saving…</> : 'Save Purchase'}
                 </button>
+                {!canSavePurchase && !busy && (
+                  <small className="muted">Required: purchase date, supplier, and every line needs an item and quantity.</small>
+                )}
               </div>
             </aside>
           </div>
