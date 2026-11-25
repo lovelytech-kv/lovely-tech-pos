@@ -79,11 +79,18 @@ class PurchaseService:
         self.session.add(purchase)
         self.session.flush()
         seen_serials: set[str] = set()
+        pending_cost = False
         for raw in lines:
             item_id = raw["item_id"]
             quantity = Decimal(raw["quantity"])
             if quantity <= 0:
                 raise ValueError("Purchase quantity must be greater than zero")
+            # Cashier purchases never carry a buy cost, even if one is posted directly.
+            unit_cost = None
+            if admin_side and raw.get("unit_cost") is not None:
+                unit_cost = Decimal(str(raw["unit_cost"]))
+                if unit_cost < 0:
+                    raise ValueError("Purchase cost cannot be negative")
             item = self.session.scalar(select(Item).where(Item.id == item_id, Item.is_active.is_(True)).with_for_update())
             if not item:
                 raise ValueError("Active item not found")
@@ -91,7 +98,7 @@ class PurchaseService:
             line_date = raw.get("line_date") or purchase_date
             line = PurchaseLine(
                 purchase_id=purchase.id, item_id=item.id, quantity=quantity,
-                unit_cost=None, line_date=line_date, notes=raw.get("notes"),
+                unit_cost=unit_cost, line_date=line_date, notes=raw.get("notes"),
             )
             self.session.add(line)
             self.session.flush()
@@ -105,6 +112,28 @@ class PurchaseService:
                 occurred_at=datetime.combine(line_date, datetime.min.time(), tzinfo=timezone.utc),
                 reason="Purchase entered before cost completion",
             ))
+            if unit_cost is not None:
+                # Admin entered the buy cost during purchase entry: create the FIFO lot in
+                # the same transaction (stock movement already recorded above).
+                lot = self.fifo.create_purchase_lot(
+                    branch_id=branch_id, purchase_line_id=line.id, item_id=item.id,
+                    quantity=quantity, unit_cost=unit_cost, lot_date=line_date,
+                    movement_source_id=purchase.id, create_stock_movement=False,
+                )
+                item.buy_cost = unit_cost
+                item.needs_admin_review = False
+                self.session.add(AuditLog(
+                    branch_id=branch_id, actor_user_id=actor_user_id, action_type="PURCHASE_COST_COMPLETED",
+                    entity_type="PURCHASE_LINE", entity_id=line.id,
+                    timestamp=datetime.now(timezone.utc), after_json={"unit_cost": str(unit_cost), "lot_id": str(lot.id)},
+                    source_transaction_id=purchase.id,
+                ))
+            else:
+                pending_cost = True
+                # No known buy cost: Admin must review the item before profit reporting trusts it.
+                if item.buy_cost is None:
+                    item.needs_admin_review = True
+        purchase.status = "PENDING_COST" if pending_cost else "COMPLETED"
         self.session.add(AuditLog(
             branch_id=branch_id, actor_user_id=actor_user_id, action_type="PURCHASE_CREATED",
             entity_type="PURCHASE", entity_id=purchase.id, timestamp=datetime.now(timezone.utc),

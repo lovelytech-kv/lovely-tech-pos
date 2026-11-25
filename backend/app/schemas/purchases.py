@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, ConfigDict
 class PurchaseLineCreateIn(BaseModel):
     item_id: UUID
     quantity: Decimal = Field(gt=0)
+    # Admin-only: ignored for cashier purchases (defense in depth).
+    unit_cost: Decimal | None = Field(default=None, ge=0)
     line_date: date | None = None
     notes: str | None = None
     # Required for serialized (IMEI/serial tracked) items: exactly one entry per unit purchased.
