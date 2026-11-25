@@ -31,6 +31,7 @@ type PurchaseSummary = {
   total_cost: string | number | null;
   pending_cost_lines: number;
   created_by: string | null;
+  item_search?: string;
 };
 
 type DetailLine = {
@@ -153,6 +154,8 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
   const [filterTo, setFilterTo] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'COMPLETED'>(initialStatusFilter);
+  const [serverQuery, setServerQuery] = useState('');
+  const historyReqRef = useRef(0);
 
   // Detail state
   const [detail, setDetail] = useState<PurchaseDetail | null>(null);
@@ -183,9 +186,16 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
 
   // Deep links from the dashboard open Purchase history directly (e.g. cost-pending queue).
   useEffect(() => {
-    if (view === 'history' && !historyLoaded) void loadHistory();
+    if (view !== 'history') return;
+    void loadHistory(serverQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [view, serverQuery]);
+
+  // Debounce the search box before hitting the server (300 ms).
+  useEffect(() => {
+    const id = window.setTimeout(() => setServerQuery(filterSearch.trim()), 300);
+    return () => window.clearTimeout(id);
+  }, [filterSearch]);
 
   // G3 — warn before the whole app window is closed with an unsaved purchase.
   useEffect(() => {
@@ -304,7 +314,6 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
       resetEntry();
     }
     setView(next);
-    if (next === 'history' && !historyLoaded) void loadHistory();
   }
 
   function resetEntry() {
@@ -380,15 +389,19 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
     }
   }
 
-  async function loadHistory() {
+  async function loadHistory(term?: string) {
+    const requestId = ++historyReqRef.current;
     setHistoryLoading(true);
     try {
-      setHistory(await api<PurchaseSummary[]>('/purchases'));
+      const query = (term ?? serverQuery).trim();
+      const rows = await api<PurchaseSummary[]>(`/purchases${query ? `?q=${encodeURIComponent(query)}` : ''}`);
+      if (requestId !== historyReqRef.current) return;
+      setHistory(rows);
       setHistoryLoaded(true);
     } catch (err) {
-      onError?.((err as Error).message);
+      if (requestId === historyReqRef.current) onError?.((err as Error).message);
     } finally {
-      setHistoryLoading(false);
+      if (requestId === historyReqRef.current) setHistoryLoading(false);
     }
   }
 
@@ -507,7 +520,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
     if (filterStatus === 'COMPLETED' && row.pending_cost_lines > 0) return false;
     const term = filterSearch.trim().toLowerCase();
     if (!term) return true;
-    return [row.reference_no ?? '', row.supplier_name ?? '', row.created_by ?? '', row.purchase_date]
+    return [row.reference_no ?? '', row.supplier_name ?? '', row.created_by ?? '', row.purchase_date, row.item_search ?? '']
       .join(' ').toLowerCase().includes(term);
   }), [history, filterFrom, filterTo, filterSupplier, filterStatus, filterSearch]);
 
@@ -731,7 +744,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
             <button type="button" onClick={() => void loadHistory()} disabled={historyLoading}>{historyLoading ? 'Loading…' : 'Refresh'}</button>
           </div>
           <div className="purchase-history-filters">
-            <input value={filterSearch} onChange={(event) => setFilterSearch(event.target.value)} placeholder="Search invoice, supplier, cashier" aria-label="Search purchases" />
+            <input value={filterSearch} onChange={(event) => setFilterSearch(event.target.value)} placeholder="Search invoice, supplier, item name or code" aria-label="Search purchases" />
             <label>From<input type="date" value={filterFrom} onChange={(event) => setFilterFrom(event.target.value)} /></label>
             <label>To<input type="date" value={filterTo} onChange={(event) => setFilterTo(event.target.value)} /></label>
             <label>Supplier

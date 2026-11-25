@@ -41,6 +41,7 @@ class PurchaseSummaryOut(BaseModel):
     total_cost: Decimal | None
     pending_cost_lines: int
     created_by: str | None
+    item_search: str = ''
 
 
 class PurchaseDetailLineOut(BaseModel):

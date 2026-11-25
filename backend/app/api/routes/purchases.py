@@ -186,15 +186,34 @@ def _created_by_map(db: Session, purchase_ids: list) -> dict:
 
 
 @router.get('', response_model=list[PurchaseSummaryOut], dependencies=[Depends(require_permission('PURCHASE_ENTRY'))])
-def list_purchases(user: User = Depends(require_permission('PURCHASE_ENTRY')), db: Session = Depends(db_session)):
-    """Purchase headers, newest first. Unit costs are returned to Admin only."""
+def list_purchases(q: str = '', user: User = Depends(require_permission('PURCHASE_ENTRY')), db: Session = Depends(db_session)):
+    """Purchase headers, newest first. Unit costs are returned to Admin only.
+
+    `q` matches the invoice reference, supplier name, or any line's item code/description.
+    """
     is_admin = _is_admin(user)
-    rows = db.execute(
+    term = q.strip()
+    stmt = (
         select(Purchase, Supplier)
         .outerjoin(Supplier, Supplier.id == Purchase.supplier_id)
         .where(Purchase.branch_id == user.branch_id)
-        .order_by(Purchase.purchase_date.desc(), Purchase.created_at.desc())
-        .limit(500)
+    )
+    if term:
+        like = f'%{term}%'
+        item_match = (
+            select(PurchaseLine.id)
+            .join(Item, Item.id == PurchaseLine.item_id)
+            .where(PurchaseLine.purchase_id == Purchase.id, Item.item_code.ilike(like) | Item.description.ilike(like))
+            .exists()
+        )
+        supplier_match = (
+            select(Supplier.id)
+            .where(Supplier.id == Purchase.supplier_id, Supplier.name.ilike(like))
+            .exists()
+        )
+        stmt = stmt.where(Purchase.reference_no.ilike(like) | item_match | supplier_match)
+    rows = db.execute(
+        stmt.order_by(Purchase.purchase_date.desc(), Purchase.created_at.desc()).limit(500)
     ).all()
     purchase_ids = [p.id for p, _ in rows]
     aggregates = {}
@@ -212,6 +231,15 @@ def list_purchases(user: User = Depends(require_permission('PURCHASE_ENTRY')), d
         ).all()
         for pid, line_count, total_quantity, total_cost, pending in agg_rows:
             aggregates[pid] = (int(line_count), total_quantity, total_cost, int(pending))
+    item_text: dict = {}
+    if purchase_ids:
+        item_rows = db.execute(
+            select(PurchaseLine.purchase_id, Item.item_code, Item.description)
+            .join(Item, Item.id == PurchaseLine.item_id)
+            .where(PurchaseLine.purchase_id.in_(purchase_ids))
+        ).all()
+        for pid, code, description in item_rows:
+            item_text.setdefault(pid, []).append(f'{code} {description}')
     creators = _created_by_map(db, purchase_ids)
     out = []
     for purchase, supplier in rows:
@@ -221,7 +249,7 @@ def list_purchases(user: User = Depends(require_permission('PURCHASE_ENTRY')), d
             supplier_id=purchase.supplier_id, supplier_name=supplier.name if supplier else None,
             status=purchase.status, line_count=line_count, total_quantity=total_quantity,
             total_cost=Decimal(total_cost) if is_admin else None, pending_cost_lines=pending,
-            created_by=creators.get(purchase.id),
+            created_by=creators.get(purchase.id), item_search=' '.join(item_text.get(purchase.id, [])),
         ))
     return out
 
