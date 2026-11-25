@@ -92,6 +92,11 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
     setSelected(prev => prev.map(x => x.item_id === itemId ? { ...x, serials: text, quantity: String(parseSerials(text).length) } : x));
   }
 
+  // Non-serialized lines edit their own quantity. Serialized lines derive it from IMEIs.
+  function setLineQty(itemId: string, value: string) {
+    setSelected(prev => prev.map(x => x.item_id === itemId && !x.is_serialized ? { ...x, quantity: value } : x));
+  }
+
   function remove(itemId: string) { setSelected(prev => prev.filter(x => x.item_id !== itemId)); }
 
   async function save() {
@@ -166,14 +171,20 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
       <div className="form-grid compact">
         <label>Date<input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
         <label>Reference<input value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier invoice / GRN" /></label>
-        <label>Quantity<input {...intInputProps(quantity, setQuantity, 1)} /></label>
+        <label>Qty for next add<input {...intInputProps(quantity, setQuantity, 1)} /></label>
 
         {isAdmin && <label>Supplier<select value={supplierId} onChange={e => setSupplierId(e.target.value)}><option value="">No supplier</option>{suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}</select></label>}
       </div>
       <label className="wide-field">Notes<textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional purchase note" /></label>
       {selected.length > 0 && <div className="status-strip"><div><span>Lines</span><b>{selected.length}</b></div><div><span>Total quantity</span><b>{selectedQty}</b></div><div><span>Cost visibility</span><b className="status-good">Admin only</b></div></div>}
       {selected.map(item => <div className="stock-row" key={item.item_id} style={item.is_serialized ? { flexDirection: 'column', alignItems: 'stretch', gap: 8 } : undefined}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span><b>{item.item_code}</b> · {item.description} · Qty {qtyOf(item)}{item.is_serialized ? ' · IMEI/serial tracked' : ''}</span><button className="danger-button" onClick={() => remove(item.item_id)}>Remove</button></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span><b>{item.item_code}</b> · {item.description}{item.is_serialized ? ` · Qty ${qtyOf(item)} · IMEI/serial tracked` : ''}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {!item.is_serialized && <label className="inline-control">Qty <input {...intInputProps(String(item.quantity), v => setLineQty(item.item_id, v), 1)} style={{ width: 80 }} aria-label={`Quantity for ${item.item_code}`} /></label>}
+            <button className="danger-button" onClick={() => remove(item.item_id)}>Remove</button>
+          </span>
+        </div>
         {item.is_serialized && <label className="wide-field">IMEI / Serial numbers (one per line — scan each phone) · {qtyOf(item)} entered<textarea aria-label={`IMEI list for ${item.item_code}`} value={item.serials || ''} onChange={e => setSerials(item.item_id, e.target.value)} placeholder="Scan or type one IMEI per line" /></label>}
       </div>)}
       <div className="form-actions"><button disabled={busy || !selected.length} onClick={save}>{busy ? 'Saving…' : 'Save Purchase'}</button><span className="muted">No buy cost is entered in this workspace.</span></div>
