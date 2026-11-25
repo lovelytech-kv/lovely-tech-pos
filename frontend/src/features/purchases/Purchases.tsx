@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
-import { money } from '../../services/money';
+import { money, moneyAdd, moneyTimesQty } from '../../services/money';
 import { moneyInputProps, intInputProps } from '../../utils/numberInput';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
@@ -91,9 +91,19 @@ function lineQuantity(line: DraftLine): number {
   return line.item?.is_serialized ? parseSerials(line.serials).length : Number(line.quantity || 0);
 }
 
-function lineTotal(line: DraftLine): number {
-  const cost = Number(line.unitCost || 0);
-  return Number.isFinite(cost) ? lineQuantity(line) * cost : 0;
+// Money math stays string/bigint based so float artefacts can never reach the UI.
+function costValue(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.endsWith('.') ? trimmed.slice(0, -1) : trimmed;
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
+  return normalized;
+}
+
+function lineTotal(line: DraftLine): string {
+  const cost = costValue(line.unitCost);
+  if (cost === null) return '0.00';
+  return moneyTimesQty(cost, String(lineQuantity(line)));
 }
 
 function validateLine(line: DraftLine, isAdmin: boolean): LineErrors {
@@ -184,7 +194,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
 
   const totals = useMemo(() => {
     const quantity = lines.reduce((sum, line) => sum + lineQuantity(line), 0);
-    const subtotal = lines.reduce((sum, line) => sum + lineTotal(line), 0);
+    const subtotal = moneyAdd(...lines.map(line => lineTotal(line)));
     return { quantity, subtotal };
   }, [lines]);
 
@@ -585,7 +595,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
                                 {showError && errors.cost && <span className="item-field-error">{errors.cost}</span>}
                               </td>
                             )}
-                            {isAdmin && <td className="purchase-line-total">{line.unitCost.trim() === '' ? '—' : `Rs. ${money(lineTotal(line))}`}</td>}
+                            {isAdmin && <td className="purchase-line-total">{costValue(line.unitCost) === null ? '—' : `Rs. ${lineTotal(line)}`}</td>}
                             <td>
                               <button type="button" className="danger-button" onClick={() => removeLine(line.key)} aria-label="Remove line">Remove</button>
                             </td>
@@ -609,8 +619,8 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
               <div className="purchase-summary-row"><span>Total quantity</span><b>{totals.quantity}</b></div>
               {isAdmin ? (
                 <>
-                  <div className="purchase-summary-row"><span>Subtotal</span><b>Rs. {money(totals.subtotal)}</b></div>
-                  <div className="purchase-summary-total"><span>Grand total</span><b>Rs. {money(totals.subtotal)}</b></div>
+                  <div className="purchase-summary-row"><span>Subtotal</span><b>Rs. {totals.subtotal}</b></div>
+                  <div className="purchase-summary-total"><span>Grand total</span><b>Rs. {totals.subtotal}</b></div>
                   <p className="muted">Lines saved without a cost stay in the Admin pending-cost queue.</p>
                 </>
               ) : (
