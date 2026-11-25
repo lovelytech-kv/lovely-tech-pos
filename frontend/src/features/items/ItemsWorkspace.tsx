@@ -111,6 +111,12 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
     }
   }
 
+  async function refreshMasters(): Promise<Masters> {
+    const masterData = await api<Masters>('/items/masters');
+    setMasters(masterData);
+    return masterData;
+  }
+
   useEffect(() => { void load(); }, []);
 
   useEffect(() => {
@@ -354,6 +360,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           readOnly={!isAdmin}
           onClose={closeModal}
           onSaved={load}
+          onRefreshMasters={refreshMasters}
         />
       )}
     </section>
@@ -396,12 +403,14 @@ function ItemFormModal({
   readOnly,
   onClose,
   onSaved,
+  onRefreshMasters,
 }: {
   item: ItemRow | null;
   masters: Masters;
   readOnly: boolean;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
+  onRefreshMasters: () => Promise<Masters>;
 }) {
   const modal = useModal();
   const [form, setForm] = useState<ItemFormState>(() => buildInitialState(item));
@@ -415,6 +424,13 @@ function ItemFormModal({
   const [variantName, setVariantName] = useState('');
   const [variantValue, setVariantValue] = useState('');
   const [variantBusy, setVariantBusy] = useState(false);
+  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newTypeOpen, setNewTypeOpen] = useState(false);
+  const [newTypeCode, setNewTypeCode] = useState('');
+  const [newTypeName, setNewTypeName] = useState('');
+  const [newTypeSerialized, setNewTypeSerialized] = useState(false);
+  const [masterBusy, setMasterBusy] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const confirmOpenRef = useRef(false);
@@ -640,6 +656,53 @@ function ItemFormModal({
     }
   }
 
+  async function createCategoryInline() {
+    const name = newCategoryName.trim();
+    if (!name) { toast.error('Category name is required'); return; }
+    if (masterBusy) return;
+    setMasterBusy(true);
+    try {
+      const created = await api<{ id: string; name: string }>('/items/categories', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      });
+      await onRefreshMasters();
+      patch('category_id', created.id);
+      setNewCategoryName('');
+      setNewCategoryOpen(false);
+      toast.success('Category added');
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setMasterBusy(false);
+    }
+  }
+
+  async function createTypeInline() {
+    const code = newTypeCode.trim();
+    const name = newTypeName.trim();
+    if (!code || !name) { toast.error('Item type code and name are required'); return; }
+    if (masterBusy) return;
+    setMasterBusy(true);
+    try {
+      const created = await api<{ id: string }>('/items/item-types', {
+        method: 'POST',
+        body: JSON.stringify({ code, name, is_serialized: newTypeSerialized }),
+      });
+      await onRefreshMasters();
+      patch('item_type_id', created.id);
+      setNewTypeCode('');
+      setNewTypeName('');
+      setNewTypeSerialized(false);
+      setNewTypeOpen(false);
+      toast.success('Item type added');
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setMasterBusy(false);
+    }
+  }
+
   return (
     <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) void requestClose(); }}>
       <div className="modal-card item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
@@ -684,7 +747,10 @@ function ItemFormModal({
 
               <div className="item-form-row">
                 <div className="item-field">
-                  <label htmlFor="item-category">Category *</label>
+                  <div className="item-label-row">
+                    <label htmlFor="item-category">Category *</label>
+                    {!readOnly && <button type="button" className="ghost" onClick={() => setNewCategoryOpen(value => !value)}>+ New</button>}
+                  </div>
                   <select
                     id="item-category"
                     value={form.category_id}
@@ -699,10 +765,30 @@ function ItemFormModal({
                     {categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                   </select>
                   {showError('category_id') && <span className="item-field-error" id="item-category-error">{errors.category_id}</span>}
+                  {!readOnly && newCategoryOpen && (
+                    <div className="item-inline-create">
+                      <div className="item-inline-row">
+                        <input
+                          value={newCategoryName}
+                          onChange={(event) => setNewCategoryName(event.target.value)}
+                          maxLength={120}
+                          placeholder="New category name"
+                          aria-label="New category name"
+                        />
+                        <button type="button" disabled={masterBusy || !newCategoryName.trim()} onClick={() => void createCategoryInline()}>
+                          {masterBusy ? 'Saving…' : 'Add'}
+                        </button>
+                        <button type="button" className="ghost" onClick={() => { setNewCategoryOpen(false); setNewCategoryName(''); }}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="item-field">
-                  <label htmlFor="item-type">Item type *</label>
+                  <div className="item-label-row">
+                    <label htmlFor="item-type">Item type *</label>
+                    {!readOnly && <button type="button" className="ghost" onClick={() => setNewTypeOpen(value => !value)}>+ New</button>}
+                  </div>
                   <select
                     id="item-type"
                     value={form.item_type_id}
@@ -717,6 +803,33 @@ function ItemFormModal({
                     {itemTypeOptions.map((type) => <option key={type.id} value={type.id}>{type.name}{type.is_serialized ? ' · IMEI' : ''}</option>)}
                   </select>
                   {showError('item_type_id') && <span className="item-field-error" id="item-type-error">{errors.item_type_id}</span>}
+                  {!readOnly && newTypeOpen && (
+                    <div className="item-inline-create">
+                      <div className="item-inline-row">
+                        <input
+                          value={newTypeCode}
+                          onChange={(event) => setNewTypeCode(event.target.value)}
+                          maxLength={50}
+                          placeholder="Code (e.g. PHONE)"
+                          aria-label="New item type code"
+                        />
+                        <input
+                          value={newTypeName}
+                          onChange={(event) => setNewTypeName(event.target.value)}
+                          maxLength={120}
+                          placeholder="Item type name"
+                          aria-label="New item type name"
+                        />
+                      </div>
+                      <div className="item-inline-row">
+                        <label className="check"><input type="checkbox" checked={newTypeSerialized} onChange={(event) => setNewTypeSerialized(event.target.checked)} /> Serialized / IMEI</label>
+                        <button type="button" disabled={masterBusy || !newTypeCode.trim() || !newTypeName.trim()} onClick={() => void createTypeInline()}>
+                          {masterBusy ? 'Saving…' : 'Add type'}
+                        </button>
+                        <button type="button" className="ghost" onClick={() => { setNewTypeOpen(false); setNewTypeCode(''); setNewTypeName(''); setNewTypeSerialized(false); }}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

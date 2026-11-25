@@ -2505,3 +2505,8 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   .purchase-summary { position: static; }
   .purchase-history-filters { grid-template-columns: 1fr 1fr; }
 }
+.item-label-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.item-label-row .ghost { font-size: 0.72rem; padding: 0.15rem 0.4rem; }
+.item-inline-create { margin-top: 0.4rem; padding: 0.55rem; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface-2); display: grid; gap: 0.4rem; }
+.item-inline-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.item-inline-row input:not([type="checkbox"]) { flex: 1; min-width: 110px; }
