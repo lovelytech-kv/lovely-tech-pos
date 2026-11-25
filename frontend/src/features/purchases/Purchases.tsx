@@ -124,9 +124,9 @@ function validateLine(line: DraftLine, isAdmin: boolean): LineErrors {
   return errors;
 }
 
-export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (message: string) => void }) {
+export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { isAdmin: boolean; onError?: (message: string) => void; initialStatusFilter?: 'ALL' | 'PENDING' }) {
   const modal = useModal();
-  const [view, setView] = useState<'entry' | 'history'>('entry');
+  const [view, setView] = useState<'entry' | 'history'>(initialStatusFilter === 'PENDING' ? 'history' : 'entry');
 
   // Entry state
   const [date, setDate] = useState(today());
@@ -148,7 +148,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
-  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'COMPLETED'>(initialStatusFilter);
 
   // Detail state
   const [detail, setDetail] = useState<PurchaseDetail | null>(null);
@@ -174,6 +174,12 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
       catch (err) { onError?.((err as Error).message); }
     })();
   }, [isAdmin]);
+
+  // Deep links from the dashboard open Purchase history directly (e.g. cost-pending queue).
+  useEffect(() => {
+    if (view === 'history' && !historyLoaded) void loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // G3 — warn before the whole app window is closed with an unsaved purchase.
   useEffect(() => {
@@ -654,7 +660,7 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
               </select>
             </label>
             <label>Status
-              <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}>
+              <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value as 'ALL' | 'PENDING' | 'COMPLETED')}>
                 <option value="ALL">All</option>
                 <option value="PENDING">Pending cost</option>
                 <option value="COMPLETED">Completed</option>

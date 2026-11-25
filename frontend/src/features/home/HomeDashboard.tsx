@@ -5,9 +5,11 @@ import { useShopProfile } from '../settings/ShopContext';
 
 type HomeDashboardUser = { display_name: string; role: string; branch_id?: string };
 
+type HomeDashboardNavOptions = { purchasesStatus?: 'PENDING' };
+
 type HomeDashboardProps = {
   user: HomeDashboardUser;
-  onNavigate: (key: string) => void;
+  onNavigate: (key: string, options?: HomeDashboardNavOptions) => void;
 };
 
 const HIDDEN_KEY = 'ltpos_home_hidden_widgets';
@@ -210,25 +212,32 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
           <b>—</b>
           <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Not tracked yet</small>
         </div>
-        <div className="metric metric-animated">
-          <span>Pending</span>
+        <button
+          type="button"
+          className="metric metric-animated"
+          onClick={() => onNavigate('Purchases', { purchasesStatus: 'PENDING' })}
+          style={{ textAlign: 'left', cursor: isAdmin ? 'pointer' : 'default', font: 'inherit', border: '1px solid var(--line)' }}
+          disabled={!isAdmin}
+          title={isAdmin ? 'Open purchase history filtered to lines missing a cost' : 'Admin only'}
+        >
+          <span>Cost Pending</span>
           <b>{isAdmin ? pendingCosts.length : '—'}</b>
           <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
-            {isAdmin ? 'Pending cost entries' : 'Admin only'}
+            {isAdmin ? 'Purchase lines missing cost' : 'Admin only'}
           </small>
-        </div>
+        </button>
         {isAdmin && (
           <button
             type="button"
             className="metric metric-animated"
             onClick={() => onNavigate('Admin')}
             style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', border: '1px solid var(--line)' }}
-            title="Open the buy cost review queue"
+            title="Open the item buy cost review queue"
           >
             <span>Review Queue</span>
             <b>{reviewCount == null ? '—' : reviewCount}</b>
             <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
-              {reviewCount ? 'Items need a buy cost' : 'All costs entered'}
+              {reviewCount ? 'Items missing buy cost' : 'All item costs entered'}
             </small>
           </button>
         )}
@@ -323,7 +332,12 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
 
         {isAdmin && !hidden.includes('pending-costs') && (
           <div className="surface-card" style={{ padding: '1rem' }}>
-            <WidgetHead title="Pending Costs" onClose={() => closeWidget('pending-costs')} />
+            <WidgetHead
+              title="Pending Costs"
+              onClose={() => closeWidget('pending-costs')}
+              actionLabel="Review in Purchases"
+              onAction={() => onNavigate('Purchases', { purchasesStatus: 'PENDING' })}
+            />
             {pendingCosts.length === 0 ? (
               <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>No pending costs.</p>
             ) : (
@@ -352,19 +366,26 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
   );
 }
 
-function WidgetHead({ title, onClose }: { title: string; onClose: () => void }) {
+function WidgetHead({ title, onClose, actionLabel, onAction }: { title: string; onClose: () => void; actionLabel?: string; onAction?: () => void }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
       <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, letterSpacing: '-0.02em' }}>{title}</h3>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={`Hide ${title}`}
-        onClick={onClose}
-        style={{ width: '26px', height: '26px', fontSize: '13px', lineHeight: 1 }}
-      >
-        ×
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        {actionLabel && onAction && (
+          <button type="button" className="ghost" onClick={onAction} style={{ fontSize: '0.72rem' }}>
+            {actionLabel}
+          </button>
+        )}
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={`Hide ${title}`}
+          onClick={onClose}
+          style={{ width: '26px', height: '26px', fontSize: '13px', lineHeight: 1 }}
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }

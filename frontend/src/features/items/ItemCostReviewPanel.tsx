@@ -64,12 +64,13 @@ export function ItemCostReviewPanel({ onError }: { onError: (message: string) =>
   }
 
   return (
-    <div className="glass panel">
+    <div className="glass panel" id="item-cost-review-queue">
       <div className="section-head">
         <div>
           <span className="eyebrow">ADMIN REVIEW</span>
-          <h3>Buy Cost Review Queue</h3>
-          <p className="muted">Items purchased without a known cost. Enter the buy cost to clear the review flag and enable profit reporting.</p>
+          <h3>Item Cost Review Queue</h3>
+          <p className="muted">Items with no known buy cost. Enter the buy cost to clear the review flag and enable profit reporting.</p>
+          <p className="muted" style={{ fontSize: '0.78rem' }}>Purchase-line costs → Purchases History (Status: Pending cost).</p>
         </div>
         <button type="button" onClick={() => void load()} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
       </div>
@@ -77,7 +78,7 @@ export function ItemCostReviewPanel({ onError }: { onError: (message: string) =>
       {!loading && rows.length === 0 && (
         <div className="empty-state purchase-empty">
           <b>Nothing to review</b>
-          <span>Every active item has a recorded buy cost.</span>
+          <span>No active item is missing a buy cost.</span>
         </div>
       )}
 
