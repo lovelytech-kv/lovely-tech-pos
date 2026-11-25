@@ -115,6 +115,9 @@ def _out(item, barcodes):
 def create_item(payload: ItemCreateIn, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
     if not db.get(Category, payload.category_id) or not db.get(ItemType, payload.item_type_id):
         raise HTTPException(400, "Category or item type not found")
+    description = payload.description.strip()
+    if db.scalar(select(Item.id).where(func.lower(Item.description) == description.lower())):
+        raise HTTPException(422, "Item with this name already exists")
     if payload.item_code and user.role.code.upper() != 'ADMIN':
         raise HTTPException(403, 'Preserving an imported item code is Admin-only')
     if payload.item_code:
@@ -129,7 +132,7 @@ def create_item(payload: ItemCreateIn, user: User = Depends(require_permission("
             raise HTTPException(500, "Could not allocate a free item code")
     if db.scalar(select(Item.id).where(Item.item_code==code)):
         raise HTTPException(409, 'Item code already exists')
-    item = Item(item_code=code, description=payload.description.strip(), brand=payload.brand, model=payload.model, compatible_models=(payload.compatible_models or None),
+    item = Item(item_code=code, description=description, brand=payload.brand, model=payload.model, compatible_models=(payload.compatible_models or None),
                 category_id=payload.category_id, item_type_id=payload.item_type_id,
                 master_sale_price=payload.master_sale_price)
     db.add(item); db.flush()
@@ -146,10 +149,16 @@ def update_item(item_id: str, payload: ItemUpdateIn, user: User = Depends(requir
     item = db.scalar(select(Item).where(Item.id == item_id).with_for_update())
     if not item: raise HTTPException(404, "Item not found")
     if item.version != payload.version: raise HTTPException(409, "Item was changed by another user; reload before editing")
+    description = payload.description.strip()
+    duplicate = db.scalar(
+        select(Item.id).where(func.lower(Item.description) == description.lower(), Item.id != item.id)
+    )
+    if duplicate:
+        raise HTTPException(422, "Item with this name already exists")
     before = {"description": item.description, "brand": item.brand, "model": item.model,
               "category_id": str(item.category_id), "item_type_id": str(item.item_type_id),
               "master_sale_price": str(item.master_sale_price) if item.master_sale_price is not None else None}
-    item.description = payload.description.strip(); item.brand = payload.brand; item.model = payload.model; item.compatible_models = (payload.compatible_models or None)
+    item.description = description; item.brand = payload.brand; item.model = payload.model; item.compatible_models = (payload.compatible_models or None)
     item.category_id = payload.category_id; item.item_type_id = payload.item_type_id
     item.master_sale_price = payload.master_sale_price; item.version += 1
     db.add(AuditLog(branch_id=user.branch_id, actor_user_id=user.id, action_type="ITEM_EDITED",

@@ -553,6 +553,7 @@ function ItemFormModal({
   };
   const canSave = !readOnly && Object.values(errors).every((value) => !value) && !busy;
   const showError = (field: keyof typeof errors) => !!errors[field] && (touched[field] || submitAttempted);
+  const duplicateNameError = serverError && /name already exists/i.test(serverError) ? 'Item with this name already exists' : '';
   const categoryOptions = useMemo(() => {
     const options = masters.categories.slice();
     if (form.category_id && !options.some((category) => category.id === form.category_id)) {
@@ -727,7 +728,7 @@ function ItemFormModal({
         </div>
 
         <div className="modal-body item-modal-body">
-          {serverError && (
+          {serverError && !duplicateNameError && (
             <div className="modal-error-banner" role="alert">
               <div className="modal-error-banner-title"><span>⚠</span> Could not save item</div>
               <div>{serverError}</div>
@@ -745,17 +746,18 @@ function ItemFormModal({
                   id="item-name"
                   ref={nameRef}
                   value={form.description}
-                  onChange={(event) => patch('description', event.target.value)}
+                  onChange={(event) => { patch('description', event.target.value); if (serverError) setServerError(''); }}
                   onBlur={() => markTouched('description')}
                   maxLength={255}
                   disabled={readOnly}
                   placeholder="e.g. iPhone 13 128GB — Midnight"
-                  className={showError('description') ? 'input-error' : ''}
-                  aria-invalid={showError('description') || undefined}
-                  aria-describedby={showError('description') ? 'item-name-error' : undefined}
+                  className={showError('description') || duplicateNameError ? 'input-error' : ''}
+                  aria-invalid={showError('description') || !!duplicateNameError || undefined}
+                  aria-describedby={showError('description') || duplicateNameError ? 'item-name-error' : undefined}
                 />
                 <small className="item-counter">{form.description.length}/255</small>
                 {showError('description') && <span className="item-field-error" id="item-name-error">{errors.description}</span>}
+                {!showError('description') && duplicateNameError && <span className="item-field-error" id="item-name-error">{duplicateNameError}</span>}
               </div>
 
               <div className="item-form-row">
