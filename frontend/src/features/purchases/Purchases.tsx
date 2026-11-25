@@ -1,109 +1,274 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { money } from '../../services/money';
 import { moneyInputProps, intInputProps } from '../../utils/numberInput';
+import { toast } from '../../ui/toast';
+import { useModal } from '../../ui/modals';
 
-type Item = { item_id: string; item_code: string; description: string; stock: string | number; sale_price?: string | number | null; is_serialized?: boolean };
-type Line = Item & { quantity: string; serials?: string };
-
-// One IMEI/serial per line (commas/spaces also accepted); duplicates inside the entry are caught client-side.
-export const parseSerials = (text?: string): string[] => (text || '').split(/[\s,;]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+type Item = { item_id: string; item_code: string; description: string; stock: string | number; is_serialized?: boolean };
 type Supplier = { supplier_id: string; name: string; contact_no?: string | null; address?: string | null };
-type Pending = {
-  version: number | null;
-  purchase_version: number | null;
-  purchase_id: string;
-  purchase_line_id: string;
-  purchase_date: string;
-  reference_no?: string | null;
-  item_id: string;
-  quantity: string | number;
-  unit_cost?: string | number | null;
+
+type DraftLine = {
+  key: string;
+  item: Item | null;
+  search: string;
+  results: Item[];
+  searching: boolean;
+  quantity: string;
+  unitCost: string;
+  serials: string;
 };
-type History = Pending & {
-  line_date: string;
-  supplier_id?: string | null;
-  supplier_name?: string | null;
+
+type PurchaseSummary = {
+  purchase_id: string;
+  purchase_date: string;
+  reference_no: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  status: string;
+  line_count: number;
+  total_quantity: string | number;
+  total_cost: string | number | null;
+  pending_cost_lines: number;
+  created_by: string | null;
+};
+
+type DetailLine = {
+  purchase_line_id: string;
+  item_id: string;
   item_code: string;
   item_description: string;
-  status: string;
+  quantity: string | number;
+  unit_cost: string | number | null;
+  line_date: string;
+  line_total: string | number | null;
+  version: number;
 };
 
+type PurchaseDetail = {
+  purchase_id: string;
+  purchase_date: string;
+  reference_no: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  notes: string | null;
+  status: string;
+  version: number;
+  line_count: number;
+  total_quantity: string | number;
+  total_cost: string | number | null;
+  pending_cost_lines: number;
+  created_by: string | null;
+  lines: DetailLine[];
+};
+
+type CorrectionField = 'cost' | 'date' | 'quantity' | 'reference' | 'supplier';
+
+type CorrectionState = {
+  field: CorrectionField;
+  purchaseId: string;
+  purchaseVersion: number;
+  lineId: string | null;
+  lineVersion: number;
+  title: string;
+  initial: string;
+};
+
+type LineErrors = { item?: string; quantity?: string; cost?: string };
+
 const today = () => new Date().toISOString().slice(0, 10);
+const MAX_QTY = 1000000;
+const MAX_COST = 999999999.99;
+
+// One IMEI/serial per line (commas/spaces also accepted); duplicates are caught client-side.
+export const parseSerials = (text?: string): string[] => (text || '').split(/[\s,;]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+
+function emptyLine(): DraftLine {
+  return { key: crypto.randomUUID(), item: null, search: '', results: [], searching: false, quantity: '1', unitCost: '', serials: '' };
+}
+
+function lineQuantity(line: DraftLine): number {
+  return line.item?.is_serialized ? parseSerials(line.serials).length : Number(line.quantity || 0);
+}
+
+function lineTotal(line: DraftLine): number {
+  const cost = Number(line.unitCost || 0);
+  return Number.isFinite(cost) ? lineQuantity(line) * cost : 0;
+}
+
+function validateLine(line: DraftLine, isAdmin: boolean): LineErrors {
+  const errors: LineErrors = {};
+  if (!line.item) errors.item = 'Choose an item';
+  const qty = lineQuantity(line);
+  if (line.item?.is_serialized) {
+    if (qty < 1) errors.quantity = 'Enter at least one IMEI/serial';
+  } else if (!Number.isInteger(qty) || qty < 1) {
+    errors.quantity = 'Qty must be 1 or more';
+  }
+  if (qty > MAX_QTY) errors.quantity = 'Qty is too large';
+  if (isAdmin && line.unitCost.trim() !== '') {
+    const cost = Number(line.unitCost);
+    if (!Number.isFinite(cost) || cost < 0) errors.cost = 'Cost must be 0 or more';
+    else if (cost > MAX_COST) errors.cost = 'Cost is too large';
+  }
+  return errors;
+}
 
 export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (message: string) => void }) {
-  const [query, setQuery] = useState('');
-  const [items, setItems] = useState<Item[]>([]);
-  const [selected, setSelected] = useState<Line[]>([]);
-  const [quantity, setQuantity] = useState('1');
+  const modal = useModal();
+  const [view, setView] = useState<'entry' | 'history'>('entry');
+
+  // Entry state
   const [date, setDate] = useState(today());
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
   const [supplierId, setSupplierId] = useState('');
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [pending, setPending] = useState<Pending[]>([]);
-  const [history, setHistory] = useState<History[]>([]);
-  const [costs, setCosts] = useState<Record<string, string>>({});
-  const [historyStart, setHistoryStart] = useState(today());
-  const [historyEnd, setHistoryEnd] = useState(today());
-  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [lines, setLines] = useState<DraftLine[]>([]);
   const [busy, setBusy] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [purchaseKey, setPurchaseKey] = useState(() => crypto.randomUUID());
-  const [correction, setCorrection] = useState<{ row: History; field: 'cost' | 'date' | 'quantity' | 'reference' | 'supplier' } | null>(null);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  // History state
+  const [history, setHistory] = useState<PurchaseSummary[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
+  const [filterSupplier, setFilterSupplier] = useState('');
+  const [filterStatus, setFilterStatus] = useState('ALL');
+
+  // Detail state
+  const [detail, setDetail] = useState<PurchaseDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
+  const [costBusy, setCostBusy] = useState('');
+
+  // Audited corrections (Admin)
+  const [correction, setCorrection] = useState<CorrectionState | null>(null);
   const [correctionValue, setCorrectionValue] = useState('');
   const [correctionReason, setCorrectionReason] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [savingCorrection, setSavingCorrection] = useState(false);
 
-  const qtyOf = (row: Line) => row.is_serialized ? parseSerials(row.serials).length : Number(row.quantity || 0);
-  const selectedQty = useMemo(() => selected.reduce((sum, row) => sum + qtyOf(row), 0), [selected]);
+  const dirty = lines.length > 0 || reference.trim() !== '' || notes.trim() !== '' || supplierId !== '' || date !== today();
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
 
-  async function search() {
-    try { setItems(await api<Item[]>(`/inventory/items/search?q=${encodeURIComponent(query)}`)); }
-    catch (e) { onError?.((e as Error).message); }
-  }
-
-  async function loadAdminData() {
+  useEffect(() => {
     if (!isAdmin) return;
+    (async () => {
+      try { setSuppliers(await api<Supplier[]>('/admin/suppliers')); }
+      catch (err) { onError?.((err as Error).message); }
+    })();
+  }, [isAdmin]);
+
+  // G3 — warn before the whole app window is closed with an unsaved purchase.
+  useEffect(() => {
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      if (!dirtyRef.current || busy) return;
+      event.preventDefault();
+      event.returnValue = '';
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [busy]);
+
+  const lineErrors = useMemo(() => {
+    const map: Record<string, LineErrors> = {};
+    lines.forEach(line => { map[line.key] = validateLine(line, isAdmin); });
+    return map;
+  }, [lines, isAdmin]);
+
+  const totals = useMemo(() => {
+    const quantity = lines.reduce((sum, line) => sum + lineQuantity(line), 0);
+    const subtotal = lines.reduce((sum, line) => sum + lineTotal(line), 0);
+    return { quantity, subtotal };
+  }, [lines]);
+
+  function patchLine(key: string, patch: Partial<DraftLine>) {
+    setLines(prev => prev.map(line => (line.key === key ? { ...line, ...patch } : line)));
+  }
+
+  function addLine() {
+    setLines(prev => [...prev, emptyLine()]);
+  }
+
+  function removeLine(key: string) {
+    setLines(prev => prev.filter(line => line.key !== key));
+  }
+
+  async function searchLineItems(line: DraftLine) {
+    const term = line.search.trim();
+    if (!term) { patchLine(line.key, { results: [] }); return; }
+    patchLine(line.key, { searching: true });
     try {
-      const [p, s] = await Promise.all([api<Pending[]>('/purchases/pending-costs'), api<Supplier[]>('/admin/suppliers')]);
-      setPending(p); setSuppliers(s);
-    } catch (e) { onError?.((e as Error).message); }
+      const found = await api<Item[]>(`/inventory/items/search?q=${encodeURIComponent(term)}`);
+      patchLine(line.key, { results: found });
+    } catch (err) {
+      onError?.((err as Error).message);
+    } finally {
+      patchLine(line.key, { searching: false });
+    }
   }
 
-  async function loadHistory() {
-    if (!isAdmin) return;
-    try {
-      const rows = await api<History[]>('/purchases/history');
-      const filtered = rows.filter(row => row.purchase_date >= historyStart && row.purchase_date <= historyEnd);
-      setHistory(filtered); setHistoryLoaded(true);
-    } catch (e) { onError?.((e as Error).message); }
+  async function requestView(next: 'entry' | 'history') {
+    if (next === view) return;
+    if (view === 'entry' && dirty) {
+      const discard = await modal.confirm({
+        title: 'Discard this purchase?',
+        message: 'You have lines that are not saved yet. Leave the entry screen and lose them?',
+        confirmText: 'Discard',
+        cancelText: 'Keep editing',
+      });
+      if (!discard) return;
+      resetEntry();
+    }
+    setView(next);
+    if (next === 'history' && !historyLoaded) void loadHistory();
   }
 
-  useEffect(() => { loadAdminData(); }, [isAdmin]);
-
-  function add(item: Item) {
-    setSelected(prev => prev.some(x => x.item_id === item.item_id)
-      ? prev.map(x => x.item_id === item.item_id && !item.is_serialized ? { ...x, quantity } : x)
-      : [...prev, { ...item, quantity: item.is_serialized ? '0' : quantity, serials: '' }]);
+  function resetEntry() {
+    setLines([]);
+    setReference('');
+    setNotes('');
+    setSupplierId('');
+    setDate(today());
+    setSubmitAttempted(false);
+    setSaveError('');
+    setPurchaseKey(crypto.randomUUID());
   }
 
-  function setSerials(itemId: string, text: string) {
-    setSelected(prev => prev.map(x => x.item_id === itemId ? { ...x, serials: text, quantity: String(parseSerials(text).length) } : x));
+  async function cancelEntry() {
+    if (!dirty) { resetEntry(); return; }
+    const discard = await modal.confirm({
+      title: 'Discard this purchase?',
+      message: 'All unsaved lines will be lost.',
+      confirmText: 'Discard',
+      cancelText: 'Keep editing',
+    });
+    if (discard) resetEntry();
   }
-
-  // Non-serialized lines edit their own quantity. Serialized lines derive it from IMEIs.
-  function setLineQty(itemId: string, value: string) {
-    setSelected(prev => prev.map(x => x.item_id === itemId && !x.is_serialized ? { ...x, quantity: value } : x));
-  }
-
-  function remove(itemId: string) { setSelected(prev => prev.filter(x => x.item_id !== itemId)); }
 
   async function save() {
-    if (!selected.length) { onError?.('Add at least one item.'); return; }
-    if (selected.some(x => !Number.isFinite(Number(x.quantity)) || Number(x.quantity) <= 0)) { onError?.('Every purchase quantity must be greater than zero. Phones need their IMEI/serial numbers entered.'); return; }
-    const all = selected.flatMap(x => x.is_serialized ? parseSerials(x.serials) : []);
-    if (new Set(all).size !== all.length) { onError?.('The same IMEI/serial is entered more than once.'); return; }
+    if (busy) return;
+    setSubmitAttempted(true);
+    setSaveError('');
+    if (!lines.length) { onError?.('Add at least one line before saving.'); return; }
+    const invalid = lines.find(line => Object.keys(validateLine(line, isAdmin)).length > 0);
+    if (invalid) {
+      const errors = validateLine(invalid, isAdmin);
+      const message = errors.item || errors.quantity || errors.cost || 'Check the highlighted line.';
+      toast.error(message);
+      return;
+    }
+    const allSerials = lines.flatMap(line => (line.item?.is_serialized ? parseSerials(line.serials) : []));
+    if (new Set(allSerials).size !== allSerials.length) {
+      toast.error('The same IMEI/serial is entered more than once.');
+      return;
+    }
     setBusy(true);
     try {
       await api('/purchases', {
@@ -113,114 +278,540 @@ export function Purchases({ isAdmin, onError }: { isAdmin: boolean; onError?: (m
           reference_no: reference.trim() || null,
           notes: notes.trim() || null,
           supplier_id: isAdmin ? (supplierId || null) : null,
-          lines: selected.map(x => ({ item_id: x.item_id, quantity: x.is_serialized ? String(parseSerials(x.serials).length) : x.quantity, line_date: date, ...(x.is_serialized ? { serial_numbers: parseSerials(x.serials) } : {}) })),
+          lines: lines.map(line => {
+            const serials = line.item?.is_serialized ? parseSerials(line.serials) : [];
+            const payload: Record<string, unknown> = {
+              item_id: line.item?.item_id,
+              quantity: line.item?.is_serialized ? String(serials.length) : line.quantity,
+              line_date: date,
+            };
+            if (serials.length) payload.serial_numbers = serials;
+            if (isAdmin && line.unitCost.trim() !== '') payload.unit_cost = line.unitCost;
+            return payload;
+          }),
           idempotency_key: purchaseKey,
         }),
       });
-      setSelected([]); setReference(''); setNotes(''); setSupplierId(''); setQuantity('1'); setPurchaseKey(crypto.randomUUID());
-      await loadAdminData();
-    } catch (e) { onError?.((e as Error).message); }
-    finally { setBusy(false); }
+      toast.success(`Purchase saved with ${lines.length} line(s).`);
+      resetEntry();
+      if (historyLoaded) void loadHistory();
+    } catch (err) {
+      setSaveError((err as Error).message);
+      onError?.((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function completeCost(row: Pending) {
-    const value = costs[row.purchase_line_id];
-    if (!value || Number(value) < 0) { onError?.('Enter a valid buy cost first.'); return; }
+  async function loadHistory() {
+    setHistoryLoading(true);
     try {
-      await api('/purchases/complete-cost', { method: 'POST', body: JSON.stringify({ version: row.version, purchase_version: row.purchase_version, purchase_id: row.purchase_id, purchase_line_id: row.purchase_line_id, unit_cost: value }) });
-      setCosts(prev => ({ ...prev, [row.purchase_line_id]: '' }));
-      await loadAdminData();
-    } catch (e) { onError?.((e as Error).message); }
+      setHistory(await api<PurchaseSummary[]>('/purchases'));
+      setHistoryLoaded(true);
+    } catch (err) {
+      onError?.((err as Error).message);
+    } finally {
+      setHistoryLoading(false);
+    }
   }
 
-  function openCorrection(row: History, field: 'cost' | 'date' | 'quantity' | 'reference' | 'supplier') {
-    const initial = field === 'cost' ? String(row.unit_cost ?? '') : field === 'date' ? row.line_date : field === 'quantity' ? String(row.quantity) : field === 'reference' ? String(row.reference_no ?? '') : String(row.supplier_id ?? '');
-    setCorrection({ row, field }); setCorrectionValue(initial); setCorrectionReason(''); setAdminPassword('');
+  async function openDetail(purchaseId: string) {
+    setDetailLoading(true);
+    setCostDrafts({});
+    try {
+      setDetail(await api<PurchaseDetail>(`/purchases/${purchaseId}`));
+    } catch (err) {
+      onError?.((err as Error).message);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  async function reloadDetail(purchaseId: string) {
+    try { setDetail(await api<PurchaseDetail>(`/purchases/${purchaseId}`)); }
+    catch (err) { onError?.((err as Error).message); }
+    if (historyLoaded) void loadHistory();
+  }
+
+  async function enterCost(line: DetailLine) {
+    if (!detail || costBusy) return;
+    const value = (costDrafts[line.purchase_line_id] || '').trim();
+    if (value === '' || Number(value) < 0 || !Number.isFinite(Number(value))) {
+      onError?.('Enter a valid buy cost first.');
+      return;
+    }
+    setCostBusy(line.purchase_line_id);
+    try {
+      await api('/purchases/complete-cost', {
+        method: 'POST',
+        body: JSON.stringify({
+          version: line.version,
+          purchase_version: detail.version,
+          purchase_id: detail.purchase_id,
+          purchase_line_id: line.purchase_line_id,
+          unit_cost: value,
+        }),
+      });
+      setCostDrafts(prev => { const next = { ...prev }; delete next[line.purchase_line_id]; return next; });
+      toast.success('Buy cost saved.');
+      await reloadDetail(detail.purchase_id);
+    } catch (err) {
+      onError?.((err as Error).message);
+    } finally {
+      setCostBusy('');
+    }
+  }
+
+  function openCorrection(field: CorrectionField, options: { purchaseId: string; purchaseVersion: number; lineId?: string; lineVersion?: number; initial: string; title: string }) {
+    setCorrection({
+      field, purchaseId: options.purchaseId, purchaseVersion: options.purchaseVersion,
+      lineId: options.lineId ?? null, lineVersion: options.lineVersion ?? 0,
+      title: options.title, initial: options.initial,
+    });
+    setCorrectionValue(options.initial);
+    setCorrectionReason('');
+    setAdminPassword('');
   }
 
   async function applyCorrection() {
-    if (!correction) return;
+    if (!correction || savingCorrection) return;
     if (!correctionReason.trim()) { onError?.('Correction reason is required.'); return; }
     if (!adminPassword) { onError?.('Admin re-authentication password is required.'); return; }
-    const { row, field } = correction;
     setSavingCorrection(true);
     try {
       let path = '';
-      let body: Record<string, string | number | null> = {};
-      if (field === 'cost') { path = '/purchases/correct-cost'; body = { purchase_line_id: row.purchase_line_id, version: row.version ?? 0, unit_cost: correctionValue, reason: correctionReason.trim() }; }
-      if (field === 'date') { path = '/purchases/correct-date'; body = { purchase_line_id: row.purchase_line_id, version: row.version ?? 0, line_date: correctionValue, reason: correctionReason.trim() }; }
-      if (field === 'quantity') { path = '/purchases/correct-quantity'; body = { purchase_line_id: row.purchase_line_id, version: row.version ?? 0, quantity: correctionValue, reason: correctionReason.trim() }; }
-      if (field === 'reference') { path = '/purchases/correct-reference'; body = { purchase_id: row.purchase_id, version: row.purchase_version ?? 0, reference_no: correctionValue.trim() || null, reason: correctionReason.trim() }; }
-      if (field === 'supplier') {
-        const params = new URLSearchParams({ version: String(row.purchase_version ?? 0), admin_password: adminPassword });
+      let body: Record<string, unknown> = {};
+      if (correction.field === 'cost') {
+        path = '/purchases/correct-cost';
+        body = { purchase_line_id: correction.lineId, version: correction.lineVersion, unit_cost: correctionValue, reason: correctionReason.trim() };
+      } else if (correction.field === 'date') {
+        path = '/purchases/correct-date';
+        body = { purchase_line_id: correction.lineId, version: correction.lineVersion, line_date: correctionValue, reason: correctionReason.trim() };
+      } else if (correction.field === 'quantity') {
+        path = '/purchases/correct-quantity';
+        body = { purchase_line_id: correction.lineId, version: correction.lineVersion, quantity: correctionValue, reason: correctionReason.trim() };
+      } else if (correction.field === 'reference') {
+        path = '/purchases/correct-reference';
+        body = { purchase_id: correction.purchaseId, version: correction.purchaseVersion, reference_no: correctionValue.trim() || null, reason: correctionReason.trim() };
+      }
+      if (correction.field === 'supplier') {
+        const params = new URLSearchParams({ version: String(correction.purchaseVersion), admin_password: adminPassword });
         if (correctionValue) params.set('supplier_id', correctionValue);
-        await api(`/purchases/${row.purchase_id}/supplier?${params.toString()}`, { method: 'PUT' });
+        await api(`/purchases/${correction.purchaseId}/supplier?${params.toString()}`, { method: 'PUT' });
       } else {
         await api(`${path}?admin_password=${encodeURIComponent(adminPassword)}`, { method: 'POST', body: JSON.stringify(body) });
       }
-      setCorrection(null); setAdminPassword(''); await loadAdminData(); await loadHistory();
-    } catch (e) { onError?.((e as Error).message); }
-    finally { setSavingCorrection(false); }
+      toast.success('Correction saved (audited).');
+      setCorrection(null);
+      setAdminPassword('');
+      if (detail) await reloadDetail(detail.purchase_id);
+      else if (historyLoaded) void loadHistory();
+    } catch (err) {
+      onError?.((err as Error).message);
+    } finally {
+      setSavingCorrection(false);
+    }
   }
 
-  return <section className="purchases-page">
-    <div className="glass panel">
-      <div className="section-head"><div><span className="eyebrow">INVENTORY IN</span><h2>Purchase Entry</h2><p className="muted">Record supplier, date, reference and quantities. Buy cost stays Admin-only.</p></div><span className="feature-badge">FIFO COST CONTROL</span></div>
-      <div className="search-row"><input autoFocus value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && search()} placeholder="Search item code / description"/><button onClick={search}>Search</button></div>
-      <div className="item-list">{items.map(item => <button className="item-card" key={item.item_id} onClick={() => add(item)}><b>{item.item_code}</b><span>{item.description}</span><small>Current stock: {item.stock}</small></button>)}</div>
-      <div className="form-grid compact">
-        <label>Date<input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
-        <label>Reference<input value={reference} onChange={e => setReference(e.target.value)} placeholder="Supplier invoice / GRN" /></label>
-        <label>Qty for next add<input {...intInputProps(quantity, setQuantity, 1)} /></label>
+  const supplierOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    history.forEach(row => { if (row.supplier_id && row.supplier_name) map.set(row.supplier_id, row.supplier_name); });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [history]);
 
-        {isAdmin && <label>Supplier<select value={supplierId} onChange={e => setSupplierId(e.target.value)}><option value="">No supplier</option>{suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}</select></label>}
-      </div>
-      <label className="wide-field">Notes<textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional purchase note" /></label>
-      {selected.length > 0 && <div className="status-strip"><div><span>Lines</span><b>{selected.length}</b></div><div><span>Total quantity</span><b>{selectedQty}</b></div><div><span>Cost visibility</span><b className="status-good">Admin only</b></div></div>}
-      {selected.map(item => <div className="stock-row" key={item.item_id} style={item.is_serialized ? { flexDirection: 'column', alignItems: 'stretch', gap: 8 } : undefined}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span><b>{item.item_code}</b> · {item.description}{item.is_serialized ? ` · Qty ${qtyOf(item)} · IMEI/serial tracked` : ''}</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {!item.is_serialized && <label className="inline-control">Qty <input {...intInputProps(String(item.quantity), v => setLineQty(item.item_id, v), 1)} style={{ width: 80 }} aria-label={`Quantity for ${item.item_code}`} /></label>}
-            <button className="danger-button" onClick={() => remove(item.item_id)}>Remove</button>
-          </span>
+  const filteredHistory = useMemo(() => history.filter(row => {
+    if (filterFrom && row.purchase_date < filterFrom) return false;
+    if (filterTo && row.purchase_date > filterTo) return false;
+    if (filterSupplier && row.supplier_id !== filterSupplier) return false;
+    if (filterStatus === 'PENDING' && row.pending_cost_lines === 0) return false;
+    if (filterStatus === 'COMPLETED' && row.pending_cost_lines > 0) return false;
+    const term = filterSearch.trim().toLowerCase();
+    if (!term) return true;
+    return [row.reference_no ?? '', row.supplier_name ?? '', row.created_by ?? '', row.purchase_date]
+      .join(' ').toLowerCase().includes(term);
+  }), [history, filterFrom, filterTo, filterSupplier, filterStatus, filterSearch]);
+
+  function statusBadge(row: { pending_cost_lines: number }) {
+    if (row.pending_cost_lines > 0) {
+      return <span className="status-badge status-warning">{isAdmin ? 'Cost Pending' : 'Awaiting admin review'}</span>;
+    }
+    return <span className="status-badge status-success">Completed</span>;
+  }
+
+  return (
+    <section className="purchases-v2">
+      <div className="glass panel">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">INVENTORY IN</span>
+            <h2>Purchases</h2>
+            <p className="muted">
+              {isAdmin
+                ? 'Record supplier invoices with line quantities and buy cost. Costs are Admin-only.'
+                : 'Record supplier deliveries. Buy cost is entered by an Admin after review.'}
+            </p>
+          </div>
+          <div className="button-row">
+            <button type="button" className={view === 'entry' ? 'primary' : ''} onClick={() => void requestView('entry')}>New Purchase</button>
+            <button type="button" className={view === 'history' ? 'primary' : ''} onClick={() => void requestView('history')}>History</button>
+          </div>
         </div>
-        {item.is_serialized && <label className="wide-field">IMEI / Serial numbers (one per line — scan each phone) · {qtyOf(item)} entered<textarea aria-label={`IMEI list for ${item.item_code}`} value={item.serials || ''} onChange={e => setSerials(item.item_id, e.target.value)} placeholder="Scan or type one IMEI per line" /></label>}
-      </div>)}
-      <div className="form-actions"><button disabled={busy || !selected.length} onClick={save}>{busy ? 'Saving…' : 'Save Purchase'}</button><span className="muted">No buy cost is entered in this workspace.</span></div>
-    </div>
-
-    {isAdmin && <>
-      <div className="glass panel">
-        <div className="section-head"><div><h2>Admin · Pending Buy Cost</h2><p className="muted">Complete unresolved unit costs using optimistic-lock versions.</p></div><button onClick={loadAdminData}>Refresh</button></div>
-        {!pending.length ? <p className="muted">No pending purchase costs.</p> : pending.map(row => <div className="pending-cost-row" key={row.purchase_line_id}><div><b>{row.reference_no || 'Purchase'}</b><span>{row.purchase_date} · Qty {row.quantity} · Line v{row.version ?? '—'} / Purchase v{row.purchase_version ?? '—'}</span></div><input {...moneyInputProps(costs[row.purchase_line_id] || '', (v) => setCosts(prev => ({ ...prev, [row.purchase_line_id]: v })))} className="cost-input" placeholder="Buy cost"/><button onClick={() => completeCost(row)}>Complete Cost</button></div>)}
       </div>
 
-      <div className="glass panel">
-        <div className="section-head"><div><h2>Admin · Purchase History</h2><p className="muted">Review recorded supplier, quantity and FIFO cost, then make audited corrections.</p></div><button disabled={!historyLoaded} onClick={() => { setHistoryLoaded(false); loadHistory(); }}>Reload</button></div>
-        <div className="form-grid compact"><label>From<input type="date" value={historyStart} onChange={e => setHistoryStart(e.target.value)} /></label><label>To<input type="date" value={historyEnd} onChange={e => setHistoryEnd(e.target.value)} /></label><button onClick={loadHistory}>Load History</button></div>
-        {!historyLoaded ? <p className="muted">Select a date range and load history.</p> : !history.length ? <p className="muted">No purchase history in this date range.</p> : history.map(row => <div className="purchase-history-row" key={row.purchase_line_id}>
-          <div className="purchase-history-main"><b>{row.item_code} · {row.item_description}</b><span>{row.purchase_date} · Line {row.line_date} · Qty {row.quantity} · {row.reference_no || 'No reference'}</span><small>Supplier: {row.supplier_name || 'No supplier'} · Unit cost: {row.unit_cost == null ? 'Pending' : `Rs. ${money(row.unit_cost)}`} · Versions: line {row.version ?? '—'}, purchase {row.purchase_version ?? '—'}</small></div>
-          <div className="button-row"><button onClick={() => openCorrection(row, 'cost')} disabled={row.unit_cost == null}>Cost</button><button onClick={() => openCorrection(row, 'quantity')}>Qty</button><button onClick={() => openCorrection(row, 'date')}>Date</button><button onClick={() => openCorrection(row, 'reference')}>Reference</button><button onClick={() => openCorrection(row, 'supplier')}>Supplier</button></div>
-        </div>)}
-      </div>
+      {view === 'entry' && (
+        <>
+          <div className="glass panel">
+            <div className="purchase-meta-grid">
+              <label>Purchase date
+                <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+              </label>
+              <label>Invoice / reference
+                <input value={reference} maxLength={100} onChange={(event) => setReference(event.target.value)} placeholder="Supplier invoice / GRN" />
+              </label>
+              {isAdmin && (
+                <label>Supplier
+                  <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+                    <option value="">No supplier</option>
+                    {suppliers.map(supplier => <option key={supplier.supplier_id} value={supplier.supplier_id}>{supplier.name}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+            <label className="wide-field">Notes
+              <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional purchase note" />
+            </label>
+          </div>
 
-      {correction && <div className="glass panel correction-panel"><div className="section-head"><div><span className="eyebrow">ADMIN RE-AUTH</span><h3>Correct {correction.field}</h3><p className="muted">{correction.row.item_code} · audited correction with version check.</p></div><button className="icon-button" onClick={() => setCorrection(null)}>×</button></div>
-        {correction.field === 'supplier' ? (
-          <select value={correctionValue} onChange={e => setCorrectionValue(e.target.value)}><option value="">Clear supplier</option>{suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}</select>
-        ) : correction.field === 'date' ? (
-          <input type="date" value={correctionValue} onChange={e => setCorrectionValue(e.target.value)} />
-        ) : correction.field === 'quantity' ? (
-          <input {...intInputProps(correctionValue, setCorrectionValue, 1)} />
-        ) : correction.field === 'cost' ? (
-          <input {...moneyInputProps(correctionValue, setCorrectionValue)} />
-        ) : (
-          <input type="text" value={correctionValue} onChange={e => setCorrectionValue(e.target.value)} />
-        )}
-        <label className="wide-field">Reason<textarea value={correctionReason} onChange={e => setCorrectionReason(e.target.value)} placeholder="Why is this correction required?" /></label>
-        <label className="wide-field">Admin password<input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="Re-authentication" /></label>
-        <div className="form-actions"><button disabled={savingCorrection} onClick={applyCorrection}>{savingCorrection ? 'Applying…' : 'Apply Audited Correction'}</button><button className="icon-button" onClick={() => setCorrection(null)}>Cancel</button></div>
-      </div>}
-    </>}
-  </section>;
+          {saveError && (
+            <div className="modal-error-banner" role="alert">
+              <div className="modal-error-banner-title"><span>⚠</span> Could not save purchase</div>
+              <div>{saveError}</div>
+              <button type="button" className="ghost" onClick={() => void save()} disabled={busy}>Retry save</button>
+            </div>
+          )}
+
+          <div className="purchases-entry-grid">
+            <div className="glass panel">
+              <div className="section-head">
+                <div><h3>Lines</h3><p className="muted">Search an item, set quantity and leave the rest to the summary.</p></div>
+                <span className="feature-badge">{lines.length} line{lines.length === 1 ? '' : 's'}</span>
+              </div>
+
+              {!lines.length && (
+                <div className="empty-state purchase-empty">
+                  <b>No lines yet</b>
+                  <span>Click “+ Add Line” to begin.</span>
+                </div>
+              )}
+
+              {lines.length > 0 && (
+                <div className="purchase-table-wrap">
+                  <table className="purchase-line-table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        {isAdmin && <th>Unit cost</th>}
+                        {isAdmin && <th>Line total</th>}
+                        <th aria-label="Actions" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map(line => {
+                        const errors = lineErrors[line.key];
+                        const showError = submitAttempted;
+                        return (
+                          <tr key={line.key}>
+                            <td>
+                              {line.item ? (
+                                <div className="purchase-line-item">
+                                  <span><b>{line.item.item_code}</b> · {line.item.description}</span>
+                                  <button type="button" className="ghost" onClick={() => patchLine(line.key, { item: null, results: [], search: '' })}>Change</button>
+                                </div>
+                              ) : (
+                                <div className="purchase-line-search">
+                                  <div className="search-row">
+                                    <input
+                                      value={line.search}
+                                      onChange={(event) => patchLine(line.key, { search: event.target.value })}
+                                      onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void searchLineItems(line); } }}
+                                      placeholder="Search item code / description"
+                                      aria-label="Search item for this line"
+                                    />
+                                    <button type="button" onClick={() => void searchLineItems(line)} disabled={line.searching}>
+                                      {line.searching ? '…' : 'Search'}
+                                    </button>
+                                  </div>
+                                  {line.results.length > 0 && (
+                                    <div className="purchase-line-results">
+                                      {line.results.slice(0, 8).map(item => (
+                                        <button
+                                          key={item.item_id}
+                                          type="button"
+                                          onClick={() => patchLine(line.key, { item, results: [], search: '' })}
+                                        >
+                                          <b>{item.item_code}</b> · {item.description} <small>stock {item.stock}</small>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {showError && errors.item && <span className="item-field-error">{errors.item}</span>}
+                            </td>
+                            <td>
+                              {line.item?.is_serialized ? (
+                                <div className="purchase-serial-cell">
+                                  <span className="feature-badge">{lineQuantity(line)} IMEI</span>
+                                  <textarea
+                                    value={line.serials}
+                                    onChange={(event) => patchLine(line.key, { serials: event.target.value })}
+                                    placeholder="One IMEI/serial per line"
+                                    aria-label="IMEI list for this line"
+                                  />
+                                </div>
+                              ) : (
+                                <input
+                                  {...intInputProps(line.quantity, (value) => patchLine(line.key, { quantity: value }), 1)}
+                                  style={{ width: 84 }}
+                                  aria-label="Line quantity"
+                                />
+                              )}
+                              {showError && errors.quantity && <span className="item-field-error">{errors.quantity}</span>}
+                            </td>
+                            {isAdmin && (
+                              <td>
+                                <input {...moneyInputProps(line.unitCost, (value) => patchLine(line.key, { unitCost: value }))} style={{ width: 110 }} placeholder="Pending" aria-label="Unit cost" />
+                                {showError && errors.cost && <span className="item-field-error">{errors.cost}</span>}
+                              </td>
+                            )}
+                            {isAdmin && <td className="purchase-line-total">{line.unitCost.trim() === '' ? '—' : `Rs. ${money(lineTotal(line))}`}</td>}
+                            <td>
+                              <button type="button" className="danger-button" onClick={() => removeLine(line.key)} aria-label="Remove line">Remove</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="form-actions purchase-line-actions">
+                <button type="button" onClick={addLine}>+ Add Line</button>
+                <span className="muted">Item, quantity and cost are validated per line.</span>
+              </div>
+            </div>
+
+            <aside className="glass panel purchase-summary">
+              <h3>Summary</h3>
+              <div className="purchase-summary-row"><span>Lines</span><b>{lines.length}</b></div>
+              <div className="purchase-summary-row"><span>Total quantity</span><b>{totals.quantity}</b></div>
+              {isAdmin ? (
+                <>
+                  <div className="purchase-summary-row"><span>Subtotal</span><b>Rs. {money(totals.subtotal)}</b></div>
+                  <div className="purchase-summary-total"><span>Grand total</span><b>Rs. {money(totals.subtotal)}</b></div>
+                  <p className="muted">Lines saved without a cost stay in the Admin pending-cost queue.</p>
+                </>
+              ) : (
+                <p className="muted">Buy cost is entered by an Admin. Your purchase will be marked “Awaiting admin review”.</p>
+              )}
+              <div className="form-actions purchase-summary-actions">
+                <button type="button" className="ghost" onClick={() => void cancelEntry()} disabled={busy}>Cancel</button>
+                <button type="button" className="primary" disabled={busy} onClick={() => void save()}>
+                  {busy ? <><span className="spinner" /> Saving…</> : 'Save Purchase'}
+                </button>
+              </div>
+            </aside>
+          </div>
+        </>
+      )}
+
+      {view === 'history' && (
+        <div className="glass panel">
+          <div className="section-head">
+            <div><h3>Purchase history</h3><p className="muted">Each saved purchase is one document. Click a row to open its lines.</p></div>
+            <button type="button" onClick={() => void loadHistory()} disabled={historyLoading}>{historyLoading ? 'Loading…' : 'Refresh'}</button>
+          </div>
+          <div className="purchase-history-filters">
+            <input value={filterSearch} onChange={(event) => setFilterSearch(event.target.value)} placeholder="Search invoice, supplier, cashier" aria-label="Search purchases" />
+            <label>From<input type="date" value={filterFrom} onChange={(event) => setFilterFrom(event.target.value)} /></label>
+            <label>To<input type="date" value={filterTo} onChange={(event) => setFilterTo(event.target.value)} /></label>
+            <label>Supplier
+              <select value={filterSupplier} onChange={(event) => setFilterSupplier(event.target.value)}>
+                <option value="">All suppliers</option>
+                {supplierOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+              </select>
+            </label>
+            <label>Status
+              <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}>
+                <option value="ALL">All</option>
+                <option value="PENDING">Pending cost</option>
+                <option value="COMPLETED">Completed</option>
+              </select>
+            </label>
+          </div>
+
+          {!historyLoaded && !historyLoading && <p className="muted">Loading purchase history…</p>}
+          {historyLoaded && filteredHistory.length === 0 && <p className="muted">No purchases match these filters.</p>}
+          {filteredHistory.length > 0 && (
+            <div className="purchase-table-wrap">
+              <table className="purchase-history-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Supplier</th>
+                    <th>Invoice ref</th>
+                    <th>Lines</th>
+                    {isAdmin && <th>Total</th>}
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.map(row => (
+                    <tr
+                      key={row.purchase_id}
+                      tabIndex={0}
+                      onClick={() => void openDetail(row.purchase_id)}
+                      onKeyDown={(event) => { if (event.key === 'Enter') void openDetail(row.purchase_id); }}
+                    >
+                      <td>{row.purchase_date}</td>
+                      <td>{row.supplier_name || 'No supplier'}</td>
+                      <td>{row.reference_no || '—'}</td>
+                      <td>{row.line_count} · {money(row.total_quantity)} qty</td>
+                      {isAdmin && <td>{row.total_cost == null ? '—' : `Rs. ${money(row.total_cost)}`}</td>}
+                      <td>{statusBadge(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {detail && (
+        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) setDetail(null); }}>
+          <div className="modal-card purchase-detail-modal" role="dialog" aria-modal="true" aria-labelledby="purchase-detail-title">
+            <div className="modal-header">
+              <h3 id="purchase-detail-title">Purchase · {detail.purchase_date}</h3>
+              <button type="button" className="modal-close" onClick={() => setDetail(null)} aria-label="Close">×</button>
+            </div>
+            <div className="modal-body">
+              <div className="purchase-detail-meta">
+                <span><small>Supplier</small><b>{detail.supplier_name || 'No supplier'}</b></span>
+                <span><small>Invoice ref</small><b>{detail.reference_no || '—'}</b></span>
+                <span><small>Recorded by</small><b>{detail.created_by || '—'}</b></span>
+                <span><small>Status</small>{statusBadge(detail)}</span>
+                {isAdmin && <span><small>Total</small><b>{detail.total_cost == null ? '—' : `Rs. ${money(detail.total_cost)}`}</b></span>}
+              </div>
+              {detail.notes && <p className="muted">{detail.notes}</p>}
+
+              <div className="purchase-table-wrap">
+                <table className="purchase-line-table">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Qty</th>
+                      {isAdmin && <th>Unit cost</th>}
+                      {isAdmin && <th>Line total</th>}
+                      {isAdmin && <th>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail.lines.map(line => (
+                      <tr key={line.purchase_line_id}>
+                        <td><b>{line.item_code}</b> · {line.item_description}</td>
+                        <td>{money(line.quantity)}</td>
+                        {isAdmin && (
+                          <td>
+                            {line.unit_cost == null ? (
+                              <div className="purchase-cost-entry">
+                                <input
+                                  {...moneyInputProps(costDrafts[line.purchase_line_id] || '', (value) => setCostDrafts(prev => ({ ...prev, [line.purchase_line_id]: value })))}
+                                  placeholder="Buy cost"
+                                  aria-label={`Buy cost for ${line.item_code}`}
+                                />
+                                <button type="button" disabled={costBusy === line.purchase_line_id} onClick={() => void enterCost(line)}>
+                                  {costBusy === line.purchase_line_id ? 'Saving…' : 'Enter Cost'}
+                                </button>
+                              </div>
+                            ) : `Rs. ${money(line.unit_cost)}`}
+                          </td>
+                        )}
+                        {isAdmin && <td>{line.line_total == null ? '—' : `Rs. ${money(line.line_total)}`}</td>}
+                        {isAdmin && (
+                          <td>
+                            <div className="button-row purchase-row-actions">
+                              <button type="button" disabled={line.unit_cost == null} onClick={() => openCorrection('cost', { purchaseId: detail.purchase_id, purchaseVersion: detail.version, lineId: line.purchase_line_id, lineVersion: line.version, initial: String(line.unit_cost ?? ''), title: `Correct cost · ${line.item_code}` })}>Cost</button>
+                              <button type="button" onClick={() => openCorrection('quantity', { purchaseId: detail.purchase_id, purchaseVersion: detail.version, lineId: line.purchase_line_id, lineVersion: line.version, initial: String(line.quantity), title: `Correct quantity · ${line.item_code}` })}>Qty</button>
+                              <button type="button" onClick={() => openCorrection('date', { purchaseId: detail.purchase_id, purchaseVersion: detail.version, lineId: line.purchase_line_id, lineVersion: line.version, initial: line.line_date, title: `Correct date · ${line.item_code}` })}>Date</button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {isAdmin && (
+                <div className="button-row purchase-detail-admin">
+                  <button type="button" onClick={() => openCorrection('reference', { purchaseId: detail.purchase_id, purchaseVersion: detail.version, initial: detail.reference_no ?? '', title: 'Correct invoice reference' })}>Correct reference</button>
+                  <button type="button" onClick={() => openCorrection('supplier', { purchaseId: detail.purchase_id, purchaseVersion: detail.version, initial: detail.supplier_id ?? '', title: 'Assign supplier' })}>Assign supplier</button>
+                </div>
+              )}
+              <div className="modal-actions">
+                <button type="button" className="ghost" onClick={() => setDetail(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailLoading && (
+        <div className="loading-overlay" aria-live="polite">
+          <div style={{ display: 'grid', placeItems: 'center', gap: 8 }}>
+            <span className="spinner spinner-lg" />
+            <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Loading purchase…</span>
+          </div>
+        </div>
+      )}
+
+      {correction && (
+        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget && !savingCorrection) setCorrection(null); }}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="purchase-correction-title">
+            <div className="modal-header">
+              <h3 id="purchase-correction-title">{correction.title}</h3>
+              <button type="button" className="modal-close" onClick={() => setCorrection(null)} aria-label="Close" disabled={savingCorrection}>×</button>
+            </div>
+            <div className="modal-body">
+              {correction.field === 'supplier' ? (
+                <label className="wide-field">Supplier
+                  <select value={correctionValue} onChange={(event) => setCorrectionValue(event.target.value)}>
+                    <option value="">Clear supplier</option>
+                    {suppliers.map(supplier => <option key={supplier.supplier_id} value={supplier.supplier_id}>{supplier.name}</option>)}
+                  </select>
+                </label>
+              ) : correction.field === 'date' ? (
+                <label className="wide-field">Date<input type="date" value={correctionValue} onChange={(event) => setCorrectionValue(event.target.value)} /></label>
+              ) : correction.field === 'quantity' ? (
+                <label className="wide-field">Quantity<input {...intInputProps(correctionValue, setCorrectionValue, 1)} /></label>
+              ) : correction.field === 'cost' ? (
+                <label className="wide-field">Unit cost<input {...moneyInputProps(correctionValue, setCorrectionValue)} /></label>
+              ) : (
+                <label className="wide-field">Reference<input value={correctionValue} maxLength={100} onChange={(event) => setCorrectionValue(event.target.value)} /></label>
+              )}
+              <label className="wide-field">Reason<textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Why is this correction required?" /></label>
+              <label className="wide-field">Admin password<input type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} placeholder="Re-authentication" /></label>
+              <div className="modal-actions">
+                <button type="button" className="ghost" onClick={() => setCorrection(null)} disabled={savingCorrection}>Cancel</button>
+                <button type="button" disabled={savingCorrection} onClick={() => void applyCorrection()}>{savingCorrection ? 'Applying…' : 'Apply audited correction'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
