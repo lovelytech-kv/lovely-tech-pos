@@ -112,21 +112,19 @@ class RecoveryService:
         normalized_user = username.strip().lower()
         normalized_code = code.strip().upper()
 
-        # Rate limit: 5 invalid attempts per username per hour
-        # Filter in Python to avoid PostgreSQL JSON .astext query issues
+        # Rate limit: 5 invalid attempts per username per hour.
+        # M17: count in SQL so the (action_type, timestamp) index does the work
+        # instead of loading every invalid-attempt row into Python.
         one_hour_ago = now - timedelta(hours=1)
-        attempt_rows = self.session.scalars(
-            select(AuditLog).where(
+        attempts = self.session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
                 AuditLog.action_type == 'RECOVERY_CODE_INVALID_ATTEMPT',
                 AuditLog.timestamp >= one_hour_ago,
+                AuditLog.context_json.op('->>')('username_attempted') == normalized_user,
             )
-        ).all()
-        attempts = sum(
-            1
-            for a in attempt_rows
-            if isinstance(a.context_json, dict)
-            and a.context_json.get('username_attempted') == normalized_user
-        )
+        ) or 0
         if attempts >= 5:
             raise RecoveryError('Too many failed attempts. Try again in 1 hour.')
 
