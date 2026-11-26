@@ -18,6 +18,7 @@ import { escapeHtml } from '../../utils/escapeHtml';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
 import { useShopProfile } from '../settings/ShopContext';
+import { buildReceiptHTML, DEFAULT_TEMPLATES, loadDefaultTemplate, readCachedTemplate, type ReceiptTemplate } from '../receipt/receiptTemplate';
 import { PitrRestoreDialog } from './PitrRestoreDialog';
 import { CustomerPickerModal, type PickerCustomer } from './CustomerPickerModal';
 import { ItemsWorkspace } from '../items/ItemsWorkspace';
@@ -93,57 +94,6 @@ function buildGenericReprintHTML(r: any): string {
     </body></html>`;
 }
 
-function buildReceiptHTML(sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }, fullShop?: any): string {
-  const lines = Array.isArray(sale?.lines) ? sale.lines : [];
-  const shopName = shop.getShopName();
-  const logoUrl = shop.getLogoDataUrl('light');
-  const address = fullShop?.address || '';
-  const phone = fullShop?.phone || '';
-  const email = fullShop?.email || '';
-  const invoiceNo = sale?.invoice_no || '-';
-  const customerName = sale?.customer_name || '';
-  const customerContact = sale?.customer_contact || '';
-  const receiptFooter = phone ? `Software by Lovely Tech · ${escapeHtml(phone)}` : 'Software by Lovely Tech';
-  const customerLine = (customerName || customerContact)
-    ? `<div class="meta">Customer: ${customerName ? escapeHtml(customerName) : ''}${customerName && customerContact ? ' · ' : ''}${customerContact ? escapeHtml(customerContact) : ''}</div>`
-    : '';
-  return `<!DOCTYPE html><html><head><title>Receipt ${escapeHtml(invoiceNo)}</title>
-    <link rel="icon" href="data:," />
-    <style>
-      body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
-      h1{font-size:16px;text-align:center;margin:0 0 4px;}
-      .meta{text-align:center;font-size:11px;color:#333;margin-bottom:4px;}
-      .contact{text-align:center;font-size:10px;color:#555;margin-bottom:8px;line-height:1.35;}
-      .divider{border-top:1px dashed #000;margin:8px 0;}
-      .row{display:flex;justify-content:space-between;gap:8px;}
-      .line{padding:2px 0;}
-      .total{font-size:15px;font-weight:700;}
-      .foot{text-align:center;font-size:11px;margin-top:8px;}
-      .receipt-footer{margin-top:16px;padding-top:8px;border-top:1px dashed #ccc;text-align:center;font-size:10px;color:#888;}
-      .logo{display:block;margin:0 auto 4px;max-width:80px;max-height:80px;object-fit:contain;}
-    </style></head><body>
-    ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" class="logo" />` : ''}
-    <h1>${escapeHtml(shopName)}</h1>
-    ${(address || phone || email) ? `<div class="contact">${address ? escapeHtml(address) + '<br/>' : ''}${phone ? 'Tel: ' + escapeHtml(phone) : ''}${phone && email ? ' · ' : ''}${escapeHtml(email)}</div>` : ''}
-    <div class="meta">Invoice: ${escapeHtml(invoiceNo)}<br/>${new Date().toLocaleString()}</div>
-    ${customerLine}
-    <div class="divider"></div>
-    ${lines.map((l: any) => `
-      <div class="line">
-        <div>${escapeHtml(l.description || l.item_code || '')}</div>
-        <div class="row"><span>${escapeHtml(l.quantity || '1')} × Rs. ${escapeHtml(l.unit_price || '0')}</span><span>Rs. ${escapeHtml(l.final_total || l.line_total || l.unit_price || '0')}</span></div>
-      </div>
-    `).join('')}
-    <div class="divider"></div>
-    <div class="row total"><span>TOTAL</span><span>Rs. ${escapeHtml(sale?.grand_total || '0')}</span></div>
-    <div class="divider"></div>
-    <div class="foot">Thank you for shopping at ${escapeHtml(shopName)}!</div>
-    <div class="receipt-footer">${receiptFooter}</div>
-    <script>window.onload = function(){ window.print(); };</script>
-    </body></html>`;
-}
-
-
 export function POSHome({user,onLogout}:{user:User,onLogout:()=>void}) {
   const [tab,setTab]=useState('Dashboard'); const [error,setError]=useState('');
   const [purchasesNavStatus,setPurchasesNavStatus]=useState<'ALL'|'PENDING'>('ALL');
@@ -182,10 +132,16 @@ function SalesTab({isAdmin,onError,onNavigate}:{isAdmin:boolean,onError:(x:strin
   const checkoutGuardRef = useRef(false);
   const shop = useShopProfile();
 const [fullShop, setFullShop] = useState<any>(null);
+const [invoiceTemplate, setInvoiceTemplate] = useState<ReceiptTemplate>(() => readCachedTemplate('80mm') ?? DEFAULT_TEMPLATES['80mm']);
 useEffect(() => {
   (async () => {
     try { setFullShop(await api('/branch/profile')); } catch { /* ignore */ }
   })();
+}, []);
+useEffect(() => {
+  let alive = true;
+  void loadDefaultTemplate('80mm').then((t) => { if (alive) setInvoiceTemplate(t); });
+  return () => { alive = false; };
 }, []);
   useEffect(() => { cartRef.current = cart; }, [cart]);
   useEffect(() => { itemsRef.current = items; }, [items]);
@@ -378,11 +334,11 @@ useEffect(() => {
   function edit(id:string,k:'quantity'|'price'|'discount',v:string){setCart(c=>c.map(x=>x.line_id===id?{...x,[k]:v}:x))}
   function setWarrantyOverride(id:string, value:string){setCart(c=>c.map(x=>x.line_id===id?{...x,warranty_override:value==='DEFAULT'?null:{...(x.warranty_default||{warranty_type:'NONE'}),warranty_type:value,duration_value:value==='DAYS'||value==='MONTHS'?(x.warranty_override?.duration_value||x.warranty_default?.duration_value||null):null,custom_rule:value==='CUSTOM'?(x.warranty_override?.custom_rule||x.warranty_default?.custom_rule||''):null}}:x))}
 
-  function writeReceipt(w: Window, sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }, fullShop?: any) {
+  function writeReceipt(w: Window, sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }, fullShop?: any, template?: ReceiptTemplate) {
   try {
     if (!w || w.closed) return;
     w.document.open();
-    w.document.write(buildReceiptHTML(sale, shop, fullShop));
+    w.document.write(buildReceiptHTML(sale, shop, fullShop, template ?? invoiceTemplate));
     w.document.close();
   } catch {
     // ignore
@@ -395,7 +351,7 @@ useEffect(() => {
     onError('Print popup was blocked. Please allow popups for this site and try again.');
     return;
   }
-  writeReceipt(w, sale, shop, fullShop);
+  writeReceipt(w, sale, shop, fullShop, invoiceTemplate);
 }
   function openPrintWindow(): Window | null {
     try {
@@ -478,7 +434,7 @@ useEffect(() => {
         setSaleKey(crypto.randomUUID());
         setDoc(getDefaultDocType());
         if (saleDoc === 'SYSTEM_PRINTED' && !saleCredit && preOpenedPrintWindow && !preOpenedPrintWindow.closed) {
-          writeReceipt(preOpenedPrintWindow, result, shop, fullShop);
+          writeReceipt(preOpenedPrintWindow, result, shop, fullShop, invoiceTemplate);
           printed = true;
         }
       } catch(e) {
@@ -973,7 +929,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
       if (r.document_type === 'SALE') {
         try {
           const saleDetail = await api<any>(`/sales/${encodeURIComponent(r.document_no)}`);
-          html = buildReceiptHTML(saleDetail, shop, fullShop);
+          html = buildReceiptHTML(saleDetail, shop, fullShop, await loadDefaultTemplate('80mm'));
         } catch {
           html = buildGenericReprintHTML(r);
         }
