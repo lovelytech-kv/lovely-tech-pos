@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, ConfigDict
 class PurchaseLineCreateIn(BaseModel):
     item_id: UUID
     quantity: Decimal = Field(gt=0)
+    # Admin-only: ignored for cashier purchases (defense in depth).
+    unit_cost: Decimal | None = Field(default=None, ge=0)
     line_date: date | None = None
     notes: str | None = None
     # Required for serialized (IMEI/serial tracked) items: exactly one entry per unit purchased.
@@ -25,6 +27,50 @@ class PurchaseAdminEditIn(BaseModel):
     reference_no: str | None = Field(default=None, max_length=100)
     purchase_date: date | None = None
     notes: str | None = None
+
+
+class PurchaseSummaryOut(BaseModel):
+    purchase_id: UUID
+    purchase_date: date
+    reference_no: str | None
+    supplier_id: UUID | None
+    supplier_name: str | None
+    status: str
+    line_count: int
+    total_quantity: Decimal
+    total_cost: Decimal | None
+    pending_cost_lines: int
+    created_by: str | None
+    item_search: str = ''
+
+
+class PurchaseDetailLineOut(BaseModel):
+    purchase_line_id: UUID
+    item_id: UUID
+    item_code: str
+    item_description: str
+    quantity: Decimal
+    unit_cost: Decimal | None
+    line_date: date
+    line_total: Decimal | None
+    version: int
+
+
+class PurchaseDetailOut(BaseModel):
+    purchase_id: UUID
+    purchase_date: date
+    reference_no: str | None
+    supplier_id: UUID | None
+    supplier_name: str | None
+    notes: str | None
+    status: str
+    version: int
+    line_count: int
+    total_quantity: Decimal
+    total_cost: Decimal | None
+    pending_cost_lines: int
+    created_by: str | None
+    lines: list[PurchaseDetailLineOut]
 
 
 class PurchaseHistoryLineOut(BaseModel):

@@ -1,12 +1,15 @@
 from datetime import datetime, timezone
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission, require_any_permission
 from app.models.master import User, Item, ItemBarcode, Category, ItemType, WarrantyDefault
+from app.models.inventory import Purchase, PurchaseLine, StockMovement
+from app.models.sales import Repair, RepairPart
 from app.models.security import AuditLog
-from app.schemas.items import ItemCreateIn, ItemUpdateIn, BarcodeIn, WarrantyDefaultIn
+from app.schemas.items import BarcodeIn, ItemCreateIn, ItemReviewIn, ItemUpdateIn, PendingReviewItemOut, WarrantyDefaultIn
 from app.services.numbering import NumberingService
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -40,6 +43,78 @@ def item_masters(user: User = Depends(require_any_permission("ITEM_EDIT", "STOCK
             "item_types":[{"id":str(x.id),"code":x.code,"name":x.name,"is_serialized":x.is_serialized} for x in types]}
 
 
+@router.get("/pending-review", response_model=list[PendingReviewItemOut])
+def pending_review_items(user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
+    """Admin queue: items whose buy cost is still unknown (cashier purchases)."""
+    if user.role.code.upper() != "ADMIN":
+        raise HTTPException(403, "Admin only")
+    rows = db.execute(
+        select(Item, Category)
+        .outerjoin(Category, Category.id == Item.category_id)
+        .where(Item.needs_admin_review.is_(True), Item.is_active.is_(True))
+        .order_by(Item.created_at)
+    ).all()
+    creators: dict = {}
+    if rows:
+        creator_rows = db.execute(
+            select(AuditLog.entity_id, User.display_name)
+            .join(User, User.id == AuditLog.actor_user_id)
+            .where(AuditLog.action_type == "ITEM_CREATED", AuditLog.entity_id.in_([item.id for item, _ in rows]))
+        ).all()
+        creators = {entity_id: name for entity_id, name in creator_rows}
+    return [
+        PendingReviewItemOut(
+            item_id=item.id, item_code=item.item_code, description=item.description,
+            category_name=category.name if category else None,
+            created_by=creators.get(item.id), created_at=item.created_at,
+            buy_cost=item.buy_cost, low_stock_threshold=item.low_stock_threshold,
+        ) for item, category in rows
+    ]
+
+
+@router.get("/check-name")
+def check_item_name(name: str = "", exclude_id: str | None = None,
+                    user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
+    """Cheap existence probe used by the item form while typing (case-insensitive)."""
+    term = name.strip()
+    if not term:
+        return {"exists": False}
+    stmt = select(Item.id).where(func.lower(Item.description) == term.lower())
+    if exclude_id:
+        try:
+            stmt = stmt.where(Item.id != uuid.UUID(exclude_id))
+        except ValueError:
+            pass
+    return {"exists": db.scalar(stmt) is not None}
+
+
+@router.patch("/{item_id}/review")
+def review_item_cost(item_id: str, payload: ItemReviewIn, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
+    """Admin enters the missing buy cost and clears the review flag (audited)."""
+    if user.role.code.upper() != "ADMIN":
+        raise HTTPException(403, "Admin only")
+    item = db.scalar(select(Item).where(Item.id == item_id).with_for_update())
+    if not item:
+        raise HTTPException(404, "Item not found")
+    before = {
+        "buy_cost": str(item.buy_cost) if item.buy_cost is not None else None,
+        "needs_admin_review": item.needs_admin_review,
+    }
+    item.buy_cost = payload.buy_cost
+    item.needs_admin_review = False
+    item.version += 1
+    db.add(AuditLog(
+        branch_id=user.branch_id, actor_user_id=user.id, action_type="ITEM_COST_REVIEWED",
+        entity_type="ITEM", entity_id=item.id, timestamp=datetime.now(timezone.utc),
+        before_json=before, after_json={"buy_cost": str(payload.buy_cost), "needs_admin_review": False},
+    ))
+    db.commit()
+    return {
+        "item_id": str(item.id), "buy_cost": item.buy_cost,
+        "needs_admin_review": item.needs_admin_review, "version": item.version,
+    }
+
+
 def _out(item, barcodes):
     # Admin item-master responses may include the active default warranty. Never expose
     # purchase cost or profit through this endpoint.
@@ -59,6 +134,9 @@ def _out(item, barcodes):
 def create_item(payload: ItemCreateIn, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
     if not db.get(Category, payload.category_id) or not db.get(ItemType, payload.item_type_id):
         raise HTTPException(400, "Category or item type not found")
+    description = payload.description.strip()
+    if db.scalar(select(Item.id).where(func.lower(Item.description) == description.lower())):
+        raise HTTPException(422, "Item with this name already exists")
     if payload.item_code and user.role.code.upper() != 'ADMIN':
         raise HTTPException(403, 'Preserving an imported item code is Admin-only')
     if payload.item_code:
@@ -73,7 +151,7 @@ def create_item(payload: ItemCreateIn, user: User = Depends(require_permission("
             raise HTTPException(500, "Could not allocate a free item code")
     if db.scalar(select(Item.id).where(Item.item_code==code)):
         raise HTTPException(409, 'Item code already exists')
-    item = Item(item_code=code, description=payload.description.strip(), brand=payload.brand, model=payload.model, compatible_models=(payload.compatible_models or None),
+    item = Item(item_code=code, description=description, brand=payload.brand, model=payload.model, compatible_models=(payload.compatible_models or None),
                 category_id=payload.category_id, item_type_id=payload.item_type_id,
                 master_sale_price=payload.master_sale_price)
     db.add(item); db.flush()
@@ -90,10 +168,16 @@ def update_item(item_id: str, payload: ItemUpdateIn, user: User = Depends(requir
     item = db.scalar(select(Item).where(Item.id == item_id).with_for_update())
     if not item: raise HTTPException(404, "Item not found")
     if item.version != payload.version: raise HTTPException(409, "Item was changed by another user; reload before editing")
+    description = payload.description.strip()
+    duplicate = db.scalar(
+        select(Item.id).where(func.lower(Item.description) == description.lower(), Item.id != item.id)
+    )
+    if duplicate:
+        raise HTTPException(422, "Item with this name already exists")
     before = {"description": item.description, "brand": item.brand, "model": item.model,
               "category_id": str(item.category_id), "item_type_id": str(item.item_type_id),
               "master_sale_price": str(item.master_sale_price) if item.master_sale_price is not None else None}
-    item.description = payload.description.strip(); item.brand = payload.brand; item.model = payload.model; item.compatible_models = (payload.compatible_models or None)
+    item.description = description; item.brand = payload.brand; item.model = payload.model; item.compatible_models = (payload.compatible_models or None)
     item.category_id = payload.category_id; item.item_type_id = payload.item_type_id
     item.master_sale_price = payload.master_sale_price; item.version += 1
     db.add(AuditLog(branch_id=user.branch_id, actor_user_id=user.id, action_type="ITEM_EDITED",
@@ -102,6 +186,45 @@ def update_item(item_id: str, payload: ItemUpdateIn, user: User = Depends(requir
     db.commit()
     bars=list(db.scalars(select(ItemBarcode).where(ItemBarcode.item_id == item.id)).all())
     return _out(item,bars)
+
+@router.delete('/{item_id}')
+def deactivate_item(item_id: str, user: User = Depends(require_permission('ITEM_EDIT')), db: Session = Depends(db_session)):
+    """Soft delete: hide from POS/masters but keep history. Admin only."""
+    if user.role.code.upper() != 'ADMIN':
+        raise HTTPException(403, 'Admin only')
+    item = db.scalar(select(Item).where(Item.id == item_id).with_for_update())
+    if not item:
+        raise HTTPException(404, 'Item not found')
+    if not item.is_active:
+        return {'item_id': str(item.id), 'is_active': False, 'already_inactive': True}
+    stock = db.scalar(select(func.coalesce(func.sum(StockMovement.quantity_delta), 0)).where(StockMovement.item_id == item.id)) or 0
+    if stock > 0:
+        raise HTTPException(409, f'Cannot deactivate: {stock} unit(s) in stock')
+    pending_lines = db.scalar(
+        select(func.count(PurchaseLine.id))
+        .join(Purchase, Purchase.id == PurchaseLine.purchase_id)
+        .where(PurchaseLine.item_id == item.id, Purchase.status == 'PENDING_COST')
+    ) or 0
+    if pending_lines:
+        raise HTTPException(409, f'Cannot deactivate: item is on {pending_lines} purchase line(s) awaiting cost review')
+    pending_repairs = db.scalar(
+        select(func.count(RepairPart.id))
+        .join(Repair, Repair.id == RepairPart.repair_id)
+        .where(RepairPart.item_id == item.id, Repair.status.notin_(['DELIVERED', 'RETURNED TO CUSTOMER', 'CANCELLED']))
+    ) or 0
+    if pending_repairs:
+        raise HTTPException(409, f'Cannot deactivate: item is used by {pending_repairs} open repair(s)')
+    item.is_active = False
+    item.version += 1
+    db.add(AuditLog(
+        branch_id=user.branch_id, actor_user_id=user.id, action_type='ITEM_DEACTIVATED',
+        entity_type='ITEM', entity_id=item.id, timestamp=datetime.now(timezone.utc),
+        before_json={'item_code': item.item_code, 'description': item.description, 'is_active': True},
+        after_json={'is_active': False, 'stock': str(stock)},
+    ))
+    db.commit()
+    return {'item_id': str(item.id), 'is_active': False}
+
 
 @router.post("/{item_id}/barcodes")
 def add_barcode(item_id: str, payload: BarcodeIn, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
@@ -173,11 +296,102 @@ def create_category(payload:dict,user:User=Depends(require_permission('ITEM_EDIT
     if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
     name=str(payload.get('name','')).strip(); parent_id=payload.get('parent_id')
     if not name: raise HTTPException(400,'Category name is required')
-    row=Category(name=name,parent_id=parent_id or None); db.add(row); db.commit(); return {'id':str(row.id),'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}
+    if len(name) > 120: raise HTTPException(400,'Category name is too long (max 120 characters)')
+    if parent_id and not db.get(Category, parent_id): raise HTTPException(400,'Parent category not found')
+    row=Category(name=name,parent_id=parent_id or None); db.add(row); db.flush()
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='CATEGORY_CREATED',entity_type='CATEGORY',entity_id=row.id,timestamp=datetime.now(timezone.utc),after_json={'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}))
+    try: db.commit()
+    except IntegrityError: db.rollback(); raise HTTPException(409,'Category name already exists under this parent')
+    return {'id':str(row.id),'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}
+
+
+@router.put('/categories/{category_id}')
+def update_category(category_id:str,payload:dict,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
+    if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
+    row=db.get(Category,category_id)
+    if not row: raise HTTPException(404,'Category not found')
+    name=str(payload.get('name','')).strip()
+    if not name: raise HTTPException(400,'Category name is required')
+    if len(name) > 120: raise HTTPException(400,'Category name is too long (max 120 characters)')
+    parent_raw=payload.get('parent_id') or None
+    parent_id=None
+    if parent_raw:
+        if str(parent_raw)==str(row.id): raise HTTPException(400,'A category cannot be its own parent')
+        parent=db.get(Category,parent_raw)
+        if not parent: raise HTTPException(400,'Parent category not found')
+        cursor=parent; seen:set[str]=set()
+        while cursor is not None and str(cursor.id) not in seen:
+            if cursor.id==row.id: raise HTTPException(400,'Category parent would create a loop')
+            seen.add(str(cursor.id))
+            cursor=db.get(Category,cursor.parent_id) if cursor.parent_id else None
+        parent_id=parent.id
+    before={'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}
+    row.name=name; row.parent_id=parent_id; row.version += 1
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='CATEGORY_UPDATED',entity_type='CATEGORY',entity_id=row.id,timestamp=datetime.now(timezone.utc),before_json=before,after_json={'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}))
+    try: db.commit()
+    except IntegrityError: db.rollback(); raise HTTPException(409,'Category name already exists under this parent')
+    return {'id':str(row.id),'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}
+
+
+@router.delete('/categories/{category_id}')
+def delete_category(category_id:str,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
+    if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
+    row=db.get(Category,category_id)
+    if not row: raise HTTPException(404,'Category not found')
+    item_count=db.scalar(select(func.count(Item.id)).where(Item.category_id==row.id)) or 0
+    if item_count: raise HTTPException(409,f'{item_count} item(s) use this category')
+    child_count=db.scalar(select(func.count(Category.id)).where(Category.parent_id==row.id)) or 0
+    if child_count: raise HTTPException(409,f'Category has {child_count} child categor{"y" if child_count==1 else "ies"}')
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='CATEGORY_DELETED',entity_type='CATEGORY',entity_id=row.id,timestamp=datetime.now(timezone.utc),before_json={'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}))
+    db.delete(row); db.commit()
+    return {'id':str(row.id),'deleted':True}
+
 
 @router.post('/item-types')
 def create_item_type(payload:dict,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
     if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
     code=str(payload.get('code','')).strip(); name=str(payload.get('name','')).strip(); serialized=bool(payload.get('is_serialized',False))
     if not code or not name: raise HTTPException(400,'Item type code and name are required')
-    row=ItemType(code=code,name=name,is_serialized=serialized); db.add(row); db.commit(); return {'id':str(row.id),'code':row.code,'name':row.name,'is_serialized':row.is_serialized}
+    if len(code) > 50 or len(name) > 120: raise HTTPException(400,'Item type code or name is too long')
+    if db.scalar(select(ItemType.id).where(func.lower(ItemType.code) == code.lower())):
+        raise HTTPException(409,'Item type code already exists')
+    row=ItemType(code=code,name=name,is_serialized=serialized); db.add(row); db.flush()
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='ITEM_TYPE_CREATED',entity_type='ITEM_TYPE',entity_id=row.id,timestamp=datetime.now(timezone.utc),after_json={'code':row.code,'name':row.name,'is_serialized':row.is_serialized}))
+    try: db.commit()
+    except IntegrityError: db.rollback(); raise HTTPException(409,'Item type code already exists')
+    return {'id':str(row.id),'code':row.code,'name':row.name,'is_serialized':row.is_serialized}
+
+
+@router.put('/item-types/{type_id}')
+def update_item_type(type_id:str,payload:dict,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
+    if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
+    row=db.get(ItemType,type_id)
+    if not row: raise HTTPException(404,'Item type not found')
+    code=str(payload.get('code',row.code)).strip(); name=str(payload.get('name',row.name)).strip()
+    serialized=bool(payload.get('is_serialized',row.is_serialized))
+    if not code or not name: raise HTTPException(400,'Item type code and name are required')
+    if len(code) > 50 or len(name) > 120: raise HTTPException(400,'Item type code or name is too long')
+    duplicate=db.scalar(select(ItemType.id).where(func.lower(ItemType.code)==code.lower(),ItemType.id!=row.id))
+    if duplicate: raise HTTPException(409,'Item type code already exists')
+    item_count=db.scalar(select(func.count(Item.id)).where(Item.item_type_id==row.id)) or 0
+    warning=None
+    if serialized != row.is_serialized and item_count:
+        warning=f'{item_count} item(s) already use this type; changing the serialized setting can affect IMEI handling.'
+    before={'code':row.code,'name':row.name,'is_serialized':row.is_serialized}
+    row.code=code; row.name=name; row.is_serialized=serialized
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='ITEM_TYPE_UPDATED',entity_type='ITEM_TYPE',entity_id=row.id,timestamp=datetime.now(timezone.utc),before_json=before,after_json={'code':row.code,'name':row.name,'is_serialized':row.is_serialized,'item_count':int(item_count)}))
+    try: db.commit()
+    except IntegrityError: db.rollback(); raise HTTPException(409,'Item type code already exists')
+    return {'id':str(row.id),'code':row.code,'name':row.name,'is_serialized':row.is_serialized,'warning':warning}
+
+
+@router.delete('/item-types/{type_id}')
+def delete_item_type(type_id:str,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
+    if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
+    row=db.get(ItemType,type_id)
+    if not row: raise HTTPException(404,'Item type not found')
+    item_count=db.scalar(select(func.count(Item.id)).where(Item.item_type_id==row.id)) or 0
+    if item_count: raise HTTPException(409,f'{item_count} item(s) use this item type')
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='ITEM_TYPE_DELETED',entity_type='ITEM_TYPE',entity_id=row.id,timestamp=datetime.now(timezone.utc),before_json={'code':row.code,'name':row.name,'is_serialized':row.is_serialized}))
+    db.delete(row); db.commit()
+    return {'id':str(row.id),'deleted':True}

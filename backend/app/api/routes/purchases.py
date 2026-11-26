@@ -1,11 +1,13 @@
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission
 from app.models.master import User, Supplier, Item
 from app.models.inventory import Purchase, PurchaseLine
+from app.models.security import AuditLog
 from app.schemas.api import PurchaseCostIn, PendingPurchaseLineOut, PurchaseCostCorrectionIn, PurchaseDateCorrectionIn, PurchaseQuantityCorrectionIn, PurchaseReferenceCorrectionIn
-from app.schemas.purchases import PurchaseCreateIn, PurchaseHistoryLineOut
+from app.schemas.purchases import PurchaseCreateIn, PurchaseDetailLineOut, PurchaseDetailOut, PurchaseHistoryLineOut, PurchaseSummaryOut
 from app.services.purchases import PurchaseService
 from app.security.reauth import require_admin_reauth
 
@@ -166,3 +168,126 @@ def correct_reference(payload: PurchaseReferenceCorrectionIn, admin_password: st
     from datetime import datetime, timezone
     db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='PURCHASE_REFERENCE_CORRECTED',entity_type='PURCHASE',entity_id=purchase.id,timestamp=datetime.now(timezone.utc),reason=payload.reason,before_json={'reference_no':old},after_json={'reference_no':purchase.reference_no},source_transaction_id=purchase.id))
     db.commit(); return {'purchase_id':str(purchase.id),'old_reference_no':old,'reference_no':purchase.reference_no,'status':'CORRECTED'}
+
+
+def _is_admin(user: User) -> bool:
+    return user.role.code.upper() == 'ADMIN'
+
+
+def _created_by_map(db: Session, purchase_ids: list) -> dict:
+    if not purchase_ids:
+        return {}
+    rows = db.execute(
+        select(AuditLog.entity_id, User.display_name)
+        .join(User, User.id == AuditLog.actor_user_id)
+        .where(AuditLog.action_type == 'PURCHASE_CREATED', AuditLog.entity_id.in_(purchase_ids))
+    ).all()
+    return {entity_id: name for entity_id, name in rows}
+
+
+@router.get('', response_model=list[PurchaseSummaryOut], dependencies=[Depends(require_permission('PURCHASE_ENTRY'))])
+def list_purchases(q: str = '', user: User = Depends(require_permission('PURCHASE_ENTRY')), db: Session = Depends(db_session)):
+    """Purchase headers, newest first. Unit costs are returned to Admin only.
+
+    `q` matches the invoice reference, supplier name, or any line's item code/description.
+    """
+    is_admin = _is_admin(user)
+    term = q.strip()
+    stmt = (
+        select(Purchase, Supplier)
+        .outerjoin(Supplier, Supplier.id == Purchase.supplier_id)
+        .where(Purchase.branch_id == user.branch_id)
+    )
+    if term:
+        like = f'%{term}%'
+        item_match = (
+            select(PurchaseLine.id)
+            .join(Item, Item.id == PurchaseLine.item_id)
+            .where(PurchaseLine.purchase_id == Purchase.id, Item.item_code.ilike(like) | Item.description.ilike(like))
+            .exists()
+        )
+        supplier_match = Supplier.name.ilike(like)
+        stmt = stmt.where(Purchase.reference_no.ilike(like) | supplier_match | item_match)
+    rows = db.execute(
+        stmt.order_by(Purchase.purchase_date.desc(), Purchase.created_at.desc()).limit(500)
+    ).all()
+    purchase_ids = [p.id for p, _ in rows]
+    aggregates = {}
+    if purchase_ids:
+        agg_rows = db.execute(
+            select(
+                PurchaseLine.purchase_id,
+                func.count(PurchaseLine.id),
+                func.coalesce(func.sum(PurchaseLine.quantity), 0),
+                func.coalesce(func.sum(case((PurchaseLine.unit_cost.is_(None), 0), else_=PurchaseLine.quantity * PurchaseLine.unit_cost)), 0),
+                func.count(PurchaseLine.id).filter(PurchaseLine.unit_cost.is_(None)),
+            )
+            .where(PurchaseLine.purchase_id.in_(purchase_ids))
+            .group_by(PurchaseLine.purchase_id)
+        ).all()
+        for pid, line_count, total_quantity, total_cost, pending in agg_rows:
+            aggregates[pid] = (int(line_count), total_quantity, total_cost, int(pending))
+    item_text: dict = {}
+    if purchase_ids:
+        item_rows = db.execute(
+            select(PurchaseLine.purchase_id, Item.item_code, Item.description)
+            .join(Item, Item.id == PurchaseLine.item_id)
+            .where(PurchaseLine.purchase_id.in_(purchase_ids))
+        ).all()
+        for pid, code, description in item_rows:
+            item_text.setdefault(pid, []).append(f'{code} {description}')
+    creators = _created_by_map(db, purchase_ids)
+    out = []
+    for purchase, supplier in rows:
+        line_count, total_quantity, total_cost, pending = aggregates.get(purchase.id, (0, Decimal('0'), Decimal('0'), 0))
+        out.append(PurchaseSummaryOut(
+            purchase_id=purchase.id, purchase_date=purchase.purchase_date, reference_no=purchase.reference_no,
+            supplier_id=purchase.supplier_id, supplier_name=supplier.name if supplier else None,
+            status=purchase.status, line_count=line_count, total_quantity=total_quantity,
+            total_cost=Decimal(total_cost) if is_admin else None, pending_cost_lines=pending,
+            created_by=creators.get(purchase.id), item_search=' '.join(item_text.get(purchase.id, [])),
+        ))
+    return out
+
+
+@router.get('/{purchase_id}', response_model=PurchaseDetailOut, dependencies=[Depends(require_permission('PURCHASE_ENTRY'))])
+def purchase_detail(purchase_id: str, user: User = Depends(require_permission('PURCHASE_ENTRY')), db: Session = Depends(db_session)):
+    """One purchase document with its lines. Unit costs are returned to Admin only."""
+    purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id, Purchase.branch_id == user.branch_id))
+    if not purchase:
+        raise HTTPException(404, 'Purchase not found')
+    supplier = db.get(Supplier, purchase.supplier_id) if purchase.supplier_id else None
+    line_rows = db.execute(
+        select(PurchaseLine, Item)
+        .join(Item, Item.id == PurchaseLine.item_id)
+        .where(PurchaseLine.purchase_id == purchase.id)
+        .order_by(PurchaseLine.created_at)
+    ).all()
+    is_admin = _is_admin(user)
+    total_quantity = Decimal('0')
+    total_cost = Decimal('0')
+    pending = 0
+    lines_out = []
+    for line, item in line_rows:
+        total_quantity += line.quantity
+        line_total = None
+        if is_admin and line.unit_cost is not None:
+            line_total = line.quantity * line.unit_cost
+            total_cost += line_total
+        if line.unit_cost is None:
+            pending += 1
+        lines_out.append(PurchaseDetailLineOut(
+            purchase_line_id=line.id, item_id=line.item_id, item_code=item.item_code,
+            item_description=item.description, quantity=line.quantity,
+            unit_cost=line.unit_cost if is_admin else None, line_date=line.line_date,
+            line_total=line_total, version=line.version,
+        ))
+    creators = _created_by_map(db, [purchase.id])
+    return PurchaseDetailOut(
+        purchase_id=purchase.id, purchase_date=purchase.purchase_date, reference_no=purchase.reference_no,
+        supplier_id=purchase.supplier_id, supplier_name=supplier.name if supplier else None,
+        notes=purchase.notes, status=purchase.status, version=purchase.version,
+        line_count=len(lines_out), total_quantity=total_quantity,
+        total_cost=total_cost if is_admin else None, pending_cost_lines=pending,
+        created_by=creators.get(purchase.id), lines=lines_out,
+    )

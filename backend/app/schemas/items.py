@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict
@@ -24,6 +25,22 @@ class ItemUpdateIn(BaseModel):
     compatible_models: str | None = Field(default=None, max_length=1000)   # other models this part fits, comma separated
     master_sale_price: Decimal | None = Field(default=None, ge=0)
     version: int = Field(ge=1)
+
+class ItemReviewIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    buy_cost: Decimal = Field(ge=0)
+
+
+class PendingReviewItemOut(BaseModel):
+    item_id: UUID
+    item_code: str
+    description: str
+    category_name: str | None
+    created_by: str | None
+    created_at: datetime
+    buy_cost: Decimal | None
+    low_stock_threshold: int
+
 
 class BarcodeIn(BaseModel):
     barcode: str = Field(min_length=1, max_length=100)

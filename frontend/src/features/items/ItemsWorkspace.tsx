@@ -84,6 +84,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   const [categoryId, setCategoryId] = useState('');
   const [stockFilter, setStockFilter] = useState<StockFilter>('ALL');
   const [view, setView] = useState<ViewMode>('grid');
+  const [showInactive, setShowInactive] = useState(false);
   const [modalItem, setModalItem] = useState<ItemRow | 'new' | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
 
@@ -111,6 +112,12 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
     }
   }
 
+  async function refreshMasters(): Promise<Masters> {
+    const masterData = await api<Masters>('/items/masters');
+    setMasters(masterData);
+    return masterData;
+  }
+
   useEffect(() => { void load(); }, []);
 
   useEffect(() => {
@@ -127,6 +134,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   const filtered = useMemo(() => {
     const term = debouncedQuery.trim().toLowerCase();
     return rows.filter((item) => {
+      if (!item.is_active && !(isAdmin && showInactive)) return false;
       if (categoryId && item.category_id !== categoryId) return false;
       const stock = stockMap && item.item_id in stockMap ? stockMap[item.item_id] : null;
       if (!stockFilterMatch(stockFilter, stock)) return false;
@@ -141,15 +149,16 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
       ].join(' ').toLowerCase();
       return haystack.includes(term);
     });
-  }, [rows, debouncedQuery, categoryId, stockFilter, stockMap]);
+  }, [rows, debouncedQuery, categoryId, stockFilter, stockMap, isAdmin, showInactive]);
 
-  const hasFilters = !!query.trim() || !!categoryId || stockFilter !== 'ALL';
+  const hasFilters = !!query.trim() || !!categoryId || stockFilter !== 'ALL' || showInactive;
 
   function clearFilters() {
     setQuery('');
     setDebouncedQuery('');
     setCategoryId('');
     setStockFilter('ALL');
+    setShowInactive(false);
   }
 
   function openItem(item: ItemRow) {
@@ -246,6 +255,18 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           </button>
         </div>
 
+        {isAdmin && (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => setShowInactive((value) => !value)}
+            aria-pressed={showInactive}
+            title="Include deactivated items for audit"
+          >
+            {showInactive ? 'Hide inactive' : 'Show inactive'}
+          </button>
+        )}
+
         <button type="button" className="ghost items-refresh" onClick={() => void load()} disabled={loading}>
           {loading ? 'Refreshing…' : '⟳ Refresh'}
         </button>
@@ -295,10 +316,11 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             const tileStyle = { '--tile-h': String(tileHue(item.category_id)) } as CSSProperties;
             const categoryName = categoryNames.get(item.category_id) ?? 'Uncategorized';
             return (
-              <article key={item.item_id} className={`inv-card tone-${tone}`}>
+              <article key={item.item_id} className={`inv-card tone-${tone}${item.is_active ? '' : ' inv-card-inactive'}`}>
                 <button type="button" className="inv-card-open" onClick={() => openItem(item)} aria-label={`Open ${item.description}`}>
                   <div className="inv-card-media" style={tileStyle}>
                     <span className="inv-card-initial" aria-hidden="true">{initialOf(item.description)}</span>
+                    {!item.is_active && <span className="status-badge status-danger inv-inactive-badge">INACTIVE</span>}
                     <span className={`inv-stock-chip tone-${tone}`} title={stock === null ? 'Stock unavailable' : `${stock} in stock`}>
                       {stockLabel(stock)}
                     </span>
@@ -354,6 +376,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           readOnly={!isAdmin}
           onClose={closeModal}
           onSaved={load}
+          onRefreshMasters={refreshMasters}
         />
       )}
     </section>
@@ -390,18 +413,30 @@ function buildInitialState(item: ItemRow | null): ItemFormState {
   };
 }
 
+function typeCodeFromName(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 50);
+}
+
 function ItemFormModal({
   item,
   masters,
   readOnly,
   onClose,
   onSaved,
+  onRefreshMasters,
 }: {
   item: ItemRow | null;
   masters: Masters;
   readOnly: boolean;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
+  onRefreshMasters: () => Promise<Masters>;
 }) {
   const modal = useModal();
   const [form, setForm] = useState<ItemFormState>(() => buildInitialState(item));
@@ -409,12 +444,25 @@ function ItemFormModal({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [deactivating, setDeactivating] = useState(false);
+  const [nameCheck, setNameCheck] = useState<{ value: string; exists: boolean; checking: boolean }>({ value: '', exists: false, checking: false });
+  const nameCheckSeq = useRef(0);
   const [busy, setBusy] = useState(false);
   const [variants, setVariants] = useState<VariantRow[]>([]);
   const [variantsLoading, setVariantsLoading] = useState(false);
   const [variantName, setVariantName] = useState('');
   const [variantValue, setVariantValue] = useState('');
   const [variantBusy, setVariantBusy] = useState(false);
+  const [masterModal, setMasterModal] = useState<'category' | 'type' | null>(null);
+  const [masterError, setMasterError] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newTypeCode, setNewTypeCode] = useState('');
+  const [newTypeCodeTouched, setNewTypeCodeTouched] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [newTypeSerialized, setNewTypeSerialized] = useState(false);
+  const [masterBusy, setMasterBusy] = useState(false);
+  const masterBackdropDownRef = useRef(false);
+  const masterConfirmRef = useRef(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const confirmOpenRef = useRef(false);
@@ -440,6 +488,42 @@ function ItemFormModal({
     return () => { live = false; };
   }, [item]);
 
+  // Debounced duplicate-name probe (also runs on blur). Server 422 remains the final guard.
+  useEffect(() => {
+    if (readOnly) return;
+    const value = form.description.trim();
+    if (!value) {
+      setNameCheck({ value: '', exists: false, checking: false });
+      return;
+    }
+    if (item && value.toLowerCase() === item.description.trim().toLowerCase()) {
+      setNameCheck({ value, exists: false, checking: false });
+      return;
+    }
+    const id = window.setTimeout(() => { void checkName(value); }, 500);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.description, readOnly, item?.item_id]);
+
+  async function checkName(raw: string) {
+    const value = raw.trim();
+    if (!value || (item && value.toLowerCase() === item.description.trim().toLowerCase())) {
+      setNameCheck({ value, exists: false, checking: false });
+      return;
+    }
+    const seq = ++nameCheckSeq.current;
+    setNameCheck({ value, exists: false, checking: true });
+    try {
+      const params = new URLSearchParams({ name: value });
+      if (item) params.set('exclude_id', item.item_id);
+      const result = await api<{ exists: boolean }>(`/items/check-name?${params.toString()}`);
+      if (seq !== nameCheckSeq.current) return;
+      setNameCheck({ value, exists: !!result.exists, checking: false });
+    } catch {
+      if (seq === nameCheckSeq.current) setNameCheck({ value, exists: false, checking: false });
+    }
+  }
+
   async function requestClose() {
     if (busyRef.current || confirmOpenRef.current) return;
     if (dirtyRef.current) {
@@ -463,6 +547,7 @@ function ItemFormModal({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape') return;
       event.preventDefault();
+      if (masterModal) { void requestCloseMaster(); return; }
       void requestClose();
     }
     window.addEventListener('keydown', onKeyDown);
@@ -524,8 +609,11 @@ function ItemFormModal({
             ? 'Custom warranty rule is required'
             : null,
   };
-  const canSave = !readOnly && Object.values(errors).every((value) => !value) && !busy;
+  const nameExists = nameCheck.exists && nameCheck.value === form.description.trim();
+  const canSave = !readOnly && !nameExists && Object.values(errors).every((value) => !value) && !busy;
   const showError = (field: keyof typeof errors) => !!errors[field] && (touched[field] || submitAttempted);
+  const serverDuplicateError = serverError && /name already exists/i.test(serverError) ? 'Item with this name already exists' : '';
+  const duplicateNameError = nameExists ? 'Item with this name already exists' : serverDuplicateError;
   const categoryOptions = useMemo(() => {
     const options = masters.categories.slice();
     if (form.category_id && !options.some((category) => category.id === form.category_id)) {
@@ -621,8 +709,29 @@ function ItemFormModal({
     }
   }
 
-  async function addVariant() {
-    if (!item || !variantName.trim() || !variantValue.trim() || variantBusy) return;
+  async function deactivate() {
+    if (!item || deactivating || busy) return;
+    const confirmed = await modal.confirm({
+      title: 'Deactivate item?',
+      message: 'The item will be hidden from POS and the item list. Sales, purchases and repair history are preserved.',
+      confirmText: 'Deactivate item',
+      cancelText: 'Keep item',
+    });
+    if (!confirmed) return;
+    setDeactivating(true);
+    try {
+      await api(`/items/${item.item_id}`, { method: 'DELETE' });
+      toast.success('Item deactivated');
+      await onSaved();
+      onClose();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setDeactivating(false);
+    }
+  }
+
+  async function addVariant() {    if (!item || !variantName.trim() || !variantValue.trim() || variantBusy) return;
     setVariantBusy(true);
     try {
       const created = await api<VariantRow>(`/items/${item.item_id}/variants`, {
@@ -640,9 +749,108 @@ function ItemFormModal({
     }
   }
 
+  function openMaster(kind: 'category' | 'type') {
+    setMasterModal(kind);
+    setMasterError('');
+    if (kind === 'category') {
+      setNewCategoryName('');
+    } else {
+      setNewTypeCode('');
+      setNewTypeCodeTouched(false);
+      setNewTypeName('');
+      setNewTypeSerialized(false);
+    }
+  }
+
+  function closeMaster() {
+    if (masterBusy) return;
+    setMasterModal(null);
+    setMasterError('');
+    setNewCategoryName('');
+    setNewTypeCode('');
+    setNewTypeCodeTouched(false);
+    setNewTypeName('');
+    setNewTypeSerialized(false);
+  }
+
+  async function requestCloseMaster() {
+    if (masterBusy || masterConfirmRef.current) return;
+    const hasInput = masterModal === 'category'
+      ? newCategoryName.trim() !== ''
+      : newTypeName.trim() !== '' || newTypeCode.trim() !== '';
+    if (hasInput) {
+      masterConfirmRef.current = true;
+      try {
+        const discard = await modal.confirm({
+          title: 'Discard this entry?',
+          message: 'The new category/type text will be lost.',
+          confirmText: 'Discard',
+          cancelText: 'Keep editing',
+        });
+        if (!discard) return;
+      } finally {
+        masterConfirmRef.current = false;
+      }
+    }
+    closeMaster();
+  }
+
+  async function createCategoryInline() {
+    const name = newCategoryName.trim();
+    if (!name) { setMasterError('Category name is required.'); return; }
+    if (masterBusy) return;
+    setMasterBusy(true);
+    setMasterError('');
+    try {
+      const created = await api<{ id: string; name: string }>('/items/categories', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      });
+      await onRefreshMasters();
+      patch('category_id', created.id);
+      setNewCategoryName('');
+      setMasterModal(null);
+      toast.success('Category added');
+    } catch (err) {
+      setMasterError((err as Error).message);
+    } finally {
+      setMasterBusy(false);
+    }
+  }
+
+  async function createTypeInline() {
+    const name = newTypeName.trim();
+    const typedCode = newTypeCode.trim().replace(/\s+/g, '_');
+    const code = (typedCode || typeCodeFromName(name)).slice(0, 50);
+    if (!name) { setMasterError('Item type name is required.'); return; }
+    if (!code) { setMasterError('Enter an item type code or a name that can generate one.'); return; }
+    if (masterBusy) return;
+    setMasterBusy(true);
+    setMasterError('');
+    try {
+      const created = await api<{ id: string }>('/items/item-types', {
+        method: 'POST',
+        body: JSON.stringify({ code, name, is_serialized: newTypeSerialized }),
+      });
+      await onRefreshMasters();
+      patch('item_type_id', created.id);
+      setNewTypeCode('');
+      setNewTypeCodeTouched(false);
+      setNewTypeName('');
+      setNewTypeSerialized(false);
+      setMasterModal(null);
+      toast.success('Item type added');
+    } catch (err) {
+      setMasterError((err as Error).message);
+    } finally {
+      setMasterBusy(false);
+    }
+  }
+
   return (
+    <>
     <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) void requestClose(); }}>
-      <div className="modal-card item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+      <div className="modal-card item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h3 id="item-modal-title">
             {readOnly ? `Item: ${item?.description ?? ''}` : item ? `Edit Item: ${item.description}` : '+ Add New Item'}
@@ -651,7 +859,7 @@ function ItemFormModal({
         </div>
 
         <div className="modal-body item-modal-body">
-          {serverError && (
+          {serverError && !serverDuplicateError && (
             <div className="modal-error-banner" role="alert">
               <div className="modal-error-banner-title"><span>⚠</span> Could not save item</div>
               <div>{serverError}</div>
@@ -669,22 +877,34 @@ function ItemFormModal({
                   id="item-name"
                   ref={nameRef}
                   value={form.description}
-                  onChange={(event) => patch('description', event.target.value)}
-                  onBlur={() => markTouched('description')}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    patch('description', value);
+                    if (serverError) setServerError('');
+                    if (nameCheck.exists || nameCheck.checking) {
+                      nameCheckSeq.current += 1;
+                      setNameCheck({ value: value.trim(), exists: false, checking: false });
+                    }
+                  }}
+                  onBlur={() => { markTouched('description'); void checkName(form.description); }}
                   maxLength={255}
                   disabled={readOnly}
                   placeholder="e.g. iPhone 13 128GB — Midnight"
-                  className={showError('description') ? 'input-error' : ''}
-                  aria-invalid={showError('description') || undefined}
-                  aria-describedby={showError('description') ? 'item-name-error' : undefined}
+                  className={showError('description') || duplicateNameError ? 'input-error' : ''}
+                  aria-invalid={showError('description') || !!duplicateNameError || undefined}
+                  aria-describedby={showError('description') || duplicateNameError ? 'item-name-error' : undefined}
                 />
                 <small className="item-counter">{form.description.length}/255</small>
                 {showError('description') && <span className="item-field-error" id="item-name-error">{errors.description}</span>}
+                {!showError('description') && duplicateNameError && <span className="item-field-error" id="item-name-error">{duplicateNameError}</span>}
               </div>
 
               <div className="item-form-row">
                 <div className="item-field">
-                  <label htmlFor="item-category">Category *</label>
+                  <div className="item-label-row">
+                    <label htmlFor="item-category">Category *</label>
+                    {!readOnly && <button type="button" className="ghost" onClick={() => openMaster('category')}>+ New</button>}
+                  </div>
                   <select
                     id="item-category"
                     value={form.category_id}
@@ -702,7 +922,10 @@ function ItemFormModal({
                 </div>
 
                 <div className="item-field">
-                  <label htmlFor="item-type">Item type *</label>
+                  <div className="item-label-row">
+                    <label htmlFor="item-type">Item type *</label>
+                    {!readOnly && <button type="button" className="ghost" onClick={() => openMaster('type')}>+ New</button>}
+                  </div>
                   <select
                     id="item-type"
                     value={form.item_type_id}
@@ -896,6 +1119,11 @@ function ItemFormModal({
         </div>
 
         <div className="modal-actions">
+          {item && !readOnly && item.is_active && (
+            <button type="button" className="danger-button" onClick={() => void deactivate()} disabled={busy || deactivating}>
+              {deactivating ? 'Deactivating…' : 'Deactivate item'}
+            </button>
+          )}
           <button type="button" className="btn-secondary" onClick={() => void requestClose()} disabled={busy}>
             {readOnly ? 'Close' : 'Cancel'}
           </button>
@@ -907,5 +1135,96 @@ function ItemFormModal({
         </div>
       </div>
     </div>
+
+    {masterModal && (
+      <div
+        className="modal-overlay"
+        style={{ zIndex: 10050 }}
+        onMouseDown={(event) => { masterBackdropDownRef.current = event.target === event.currentTarget; }}
+        onClick={(event) => {
+          if (masterBackdropDownRef.current && event.target === event.currentTarget) void requestCloseMaster();
+          masterBackdropDownRef.current = false;
+        }}
+      >
+        <div
+          className="modal-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="item-master-title"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="modal-header">
+            <h3 id="item-master-title">{masterModal === 'category' ? 'New category' : 'New item type'}</h3>
+            <button type="button" className="modal-close" onClick={() => void requestCloseMaster()} aria-label="Close" disabled={masterBusy}>×</button>
+          </div>
+          <div className="modal-body">
+            {masterError && (
+              <div className="modal-error-banner" role="alert">
+                <div className="modal-error-banner-title"><span>⚠</span> Could not save</div>
+                <div>{masterError}</div>
+              </div>
+            )}
+
+            {masterModal === 'category' ? (
+              <label className="wide-field">Category name *
+                <input
+                  value={newCategoryName}
+                  onChange={(event) => { setNewCategoryName(event.target.value); if (masterError) setMasterError(''); }}
+                  maxLength={120}
+                  placeholder="e.g. Phone Accessories"
+                  aria-label="New category name"
+                  autoFocus
+                />
+              </label>
+            ) : (
+              <>
+                <label className="wide-field">Item type name *
+                  <input
+                    value={newTypeName}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setNewTypeName(value);
+                      if (!newTypeCodeTouched) setNewTypeCode(typeCodeFromName(value));
+                      if (masterError) setMasterError('');
+                    }}
+                    maxLength={120}
+                    placeholder="e.g. Mobile Phone"
+                    aria-label="New item type name"
+                    autoFocus
+                  />
+                </label>
+                <label className="wide-field">Code
+                  <input
+                    value={newTypeCode}
+                    onChange={(event) => { setNewTypeCode(event.target.value); setNewTypeCodeTouched(true); }}
+                    maxLength={50}
+                    placeholder="Auto-generated from name"
+                    aria-label="New item type code"
+                  />
+                </label>
+                <label className="check">
+                  <input type="checkbox" checked={newTypeSerialized} onChange={(event) => setNewTypeSerialized(event.target.checked)} />
+                  Serialized / IMEI (one unique serial per unit)
+                </label>
+                <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>The code is generated from the name unless you edit it.</p>
+              </>
+            )}
+
+            <div className="modal-actions">
+              <button type="button" className="ghost" onClick={() => void requestCloseMaster()} disabled={masterBusy}>Cancel</button>
+              <button
+                type="button"
+                className="primary"
+                disabled={masterBusy || (masterModal === 'category' ? !newCategoryName.trim() : !newTypeName.trim())}
+                onClick={() => void (masterModal === 'category' ? createCategoryInline() : createTypeInline())}
+              >
+                {masterBusy ? <><span className="spinner" aria-hidden="true" /> Saving…</> : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

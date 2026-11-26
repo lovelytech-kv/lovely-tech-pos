@@ -5,9 +5,11 @@ import { useShopProfile } from '../settings/ShopContext';
 
 type HomeDashboardUser = { display_name: string; role: string; branch_id?: string };
 
+type HomeDashboardNavOptions = { purchasesStatus?: 'PENDING' };
+
 type HomeDashboardProps = {
   user: HomeDashboardUser;
-  onNavigate: (key: string) => void;
+  onNavigate: (key: string, options?: HomeDashboardNavOptions) => void;
 };
 
 const HIDDEN_KEY = 'ltpos_home_hidden_widgets';
@@ -52,6 +54,7 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
   const [dayStatus, setDayStatus] = useState<any>(null);
   const [targets, setTargets] = useState<any[]>([]);
   const [pendingCosts, setPendingCosts] = useState<any[]>([]);
+  const [reviewCount, setReviewCount] = useState<number | null>(null);
   const [lanStatus, setLanStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [hidden, setHidden] = useState<string[]>(loadHidden);
 
@@ -101,6 +104,11 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
           setPendingCosts(await api('/purchases/pending-costs'));
         } catch (e) {
           console.warn('[HomeDashboard] pending-costs failed:', e);
+        }
+        try {
+          setReviewCount((await api<any[]>('/items/pending-review')).length);
+        } catch (e) {
+          console.warn('[HomeDashboard] pending-review failed:', e);
         }
       }
     })();
@@ -192,6 +200,48 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
 
       {/* SECTION 2 — Today's stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+        {isAdmin && (
+          <button
+            type="button"
+            className="metric metric-animated"
+            data-queue="cost-pending"
+            onClick={() => onNavigate('Purchases', { purchasesStatus: 'PENDING' })}
+            style={{
+              textAlign: 'left',
+              cursor: 'pointer',
+              font: 'inherit',
+              border: '1px solid var(--line)',
+              borderLeft: `3px solid ${pendingCosts.length > 0 ? 'var(--accent)' : 'var(--line)'}`,
+            }}
+            title="Open purchase history filtered to lines missing a cost"
+          >
+            <small className="eyebrow" style={{ fontSize: '0.58rem' }}>ADMIN QUEUE</small>
+            <span>Cost Pending</span>
+            <b>{pendingCosts.length}</b>
+            <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Purchase lines missing cost</small>
+          </button>
+        )}
+        {isAdmin && (
+          <button
+            type="button"
+            className="metric metric-animated"
+            data-queue="review-queue"
+            onClick={() => onNavigate('Admin')}
+            style={{
+              textAlign: 'left',
+              cursor: 'pointer',
+              font: 'inherit',
+              border: '1px solid var(--line)',
+              borderLeft: `3px solid ${(reviewCount ?? 0) > 0 ? 'var(--accent)' : 'var(--line)'}`,
+            }}
+            title="Open the item buy cost review queue"
+          >
+            <small className="eyebrow" style={{ fontSize: '0.58rem' }}>ADMIN QUEUE</small>
+            <span>Review Queue</span>
+            <b style={{ color: (reviewCount ?? 0) > 0 ? 'var(--accent)' : 'var(--muted)' }}>{reviewCount ?? 0}</b>
+            <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Items missing buy cost</small>
+          </button>
+        )}
         <div className="metric metric-animated">
           <span>Sales Today</span>
           <b>{salesSummary ? salesSummary.sales_count ?? 0 : '—'}</b>
@@ -204,13 +254,13 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
           <b>—</b>
           <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Not tracked yet</small>
         </div>
-        <div className="metric metric-animated">
-          <span>Pending</span>
-          <b>{isAdmin ? pendingCosts.length : '—'}</b>
-          <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
-            {isAdmin ? 'Pending cost entries' : 'Admin only'}
-          </small>
-        </div>
+        {!isAdmin && (
+          <div className="metric metric-animated">
+            <span>Cost Pending</span>
+            <b>—</b>
+            <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Admin only</small>
+          </div>
+        )}
         <div className="metric metric-animated">
           <span>Cash In Hand</span>
           <b>{cashInHand != null ? `Rs. ${money(cashInHand)}` : '—'}</b>
@@ -302,7 +352,13 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
 
         {isAdmin && !hidden.includes('pending-costs') && (
           <div className="surface-card" style={{ padding: '1rem' }}>
-            <WidgetHead title="Pending Costs" onClose={() => closeWidget('pending-costs')} />
+            <WidgetHead
+              title="Purchases — Cost Pending"
+              onClose={() => closeWidget('pending-costs')}
+              actionLabel="Review in Purchases"
+              onAction={() => onNavigate('Purchases', { purchasesStatus: 'PENDING' })}
+            />
+            <p className="muted" style={{ margin: '0 0 0.5rem', fontSize: '0.76rem' }}>Purchase lines missing cost — review in Purchases.</p>
             {pendingCosts.length === 0 ? (
               <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>No pending costs.</p>
             ) : (
@@ -331,19 +387,26 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
   );
 }
 
-function WidgetHead({ title, onClose }: { title: string; onClose: () => void }) {
+function WidgetHead({ title, onClose, actionLabel, onAction }: { title: string; onClose: () => void; actionLabel?: string; onAction?: () => void }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
       <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, letterSpacing: '-0.02em' }}>{title}</h3>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={`Hide ${title}`}
-        onClick={onClose}
-        style={{ width: '26px', height: '26px', fontSize: '13px', lineHeight: 1 }}
-      >
-        ×
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        {actionLabel && onAction && (
+          <button type="button" className="ghost" onClick={onAction} style={{ fontSize: '0.72rem' }}>
+            {actionLabel}
+          </button>
+        )}
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={`Hide ${title}`}
+          onClick={onClose}
+          style={{ width: '26px', height: '26px', fontSize: '13px', lineHeight: 1 }}
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }
