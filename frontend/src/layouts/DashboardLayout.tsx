@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { checkServerHealth } from '../api/client';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { NAV_ITEMS, getNavForRole } from '../config/navigation';
@@ -32,7 +32,6 @@ function loadSidebarCollapsed(): boolean {
 export function DashboardLayout({ user, activeKey, onNavigate, onLogout, children, headerActions }: Props) {
   const [serverState, setServerState] = useState<'checking' | 'online' | 'offline'>('checking');
   const [collapsed, setCollapsed] = useState<boolean>(loadSidebarCollapsed);
-  const searchRef = useRef<HTMLInputElement>(null);
   const isAdmin = user.role.toUpperCase() === 'ADMIN';
   const { getShopName, getLogoDataUrl } = useShopProfile();
 
@@ -54,15 +53,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
     };
     check();
     const timer = window.setInterval(check, 15000);
-    const focusSearch = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
-      }
-    };
-    window.addEventListener('keydown', focusSearch);
-    return () => { alive = false; window.clearInterval(timer); window.removeEventListener('keydown', focusSearch); };
+    return () => { alive = false; window.clearInterval(timer); };
   }, []);
 
   useEffect(() => {
@@ -150,7 +141,6 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
 
       <section className="v0-main">
         <AppHeader title={activeLabel} user={user} onLogout={onLogout}>
-          <label className="global-search"><span>⌕</span><input ref={searchRef} aria-label="Quick search" placeholder="Search products, customers, invoices..." onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLInputElement).blur(); }} /><kbd>Ctrl K</kbd></label>
           <span className={`header-status header-${serverState}`} aria-live="polite"><i className="online-dot" /> {serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Checking…'}</span>
           <ThemeToggle />
           <button className="icon-button app-header-notifications" aria-label="Notifications">♢</button>
