@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, checkServerHealth } from '../../api/client';
 import { money } from '../../services/money';
+import { todayLocal } from '../../utils/date';
 import { useShopProfile } from '../settings/ShopContext';
 
 type HomeDashboardUser = { display_name: string; role: string; branch_id?: string };
@@ -66,7 +67,7 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
 
   // Load dashboard data — one try/catch per endpoint so a single failure cannot crash the screen.
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     (async () => {
       try {
         setSalesSummary(

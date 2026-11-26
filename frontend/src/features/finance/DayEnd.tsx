@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
+import { todayLocal } from '../../utils/date';
 import { moneyInputProps, intInputProps } from '../../utils/numberInput';
 import { useModal } from '../../ui/modals';
 
 const DENOMS = [5000, 2000, 1000, 500, 100, 50, 20] as const;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayLocal();
 type Props = { isAdmin?: boolean; onError?: (message: string) => void };
 
 export function DayEnd({ isAdmin = false, onError }: Props) {

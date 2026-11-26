@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { todayLocal } from '../../utils/date';
 
 type Props = {
   codes: string[];
@@ -43,7 +44,7 @@ export function RecoveryCodesDisplay({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lovely-tech-recovery-codes-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `lovely-tech-recovery-codes-${todayLocal()}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
