@@ -84,6 +84,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   const [categoryId, setCategoryId] = useState('');
   const [stockFilter, setStockFilter] = useState<StockFilter>('ALL');
   const [view, setView] = useState<ViewMode>('grid');
+  const [showInactive, setShowInactive] = useState(false);
   const [modalItem, setModalItem] = useState<ItemRow | 'new' | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
 
@@ -133,6 +134,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   const filtered = useMemo(() => {
     const term = debouncedQuery.trim().toLowerCase();
     return rows.filter((item) => {
+      if (!item.is_active && !(isAdmin && showInactive)) return false;
       if (categoryId && item.category_id !== categoryId) return false;
       const stock = stockMap && item.item_id in stockMap ? stockMap[item.item_id] : null;
       if (!stockFilterMatch(stockFilter, stock)) return false;
@@ -147,15 +149,16 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
       ].join(' ').toLowerCase();
       return haystack.includes(term);
     });
-  }, [rows, debouncedQuery, categoryId, stockFilter, stockMap]);
+  }, [rows, debouncedQuery, categoryId, stockFilter, stockMap, isAdmin, showInactive]);
 
-  const hasFilters = !!query.trim() || !!categoryId || stockFilter !== 'ALL';
+  const hasFilters = !!query.trim() || !!categoryId || stockFilter !== 'ALL' || showInactive;
 
   function clearFilters() {
     setQuery('');
     setDebouncedQuery('');
     setCategoryId('');
     setStockFilter('ALL');
+    setShowInactive(false);
   }
 
   function openItem(item: ItemRow) {
@@ -252,6 +255,18 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           </button>
         </div>
 
+        {isAdmin && (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => setShowInactive((value) => !value)}
+            aria-pressed={showInactive}
+            title="Include deactivated items for audit"
+          >
+            {showInactive ? 'Hide inactive' : 'Show inactive'}
+          </button>
+        )}
+
         <button type="button" className="ghost items-refresh" onClick={() => void load()} disabled={loading}>
           {loading ? 'Refreshing…' : '⟳ Refresh'}
         </button>
@@ -301,10 +316,11 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             const tileStyle = { '--tile-h': String(tileHue(item.category_id)) } as CSSProperties;
             const categoryName = categoryNames.get(item.category_id) ?? 'Uncategorized';
             return (
-              <article key={item.item_id} className={`inv-card tone-${tone}`}>
+              <article key={item.item_id} className={`inv-card tone-${tone}${item.is_active ? '' : ' inv-card-inactive'}`}>
                 <button type="button" className="inv-card-open" onClick={() => openItem(item)} aria-label={`Open ${item.description}`}>
                   <div className="inv-card-media" style={tileStyle}>
                     <span className="inv-card-initial" aria-hidden="true">{initialOf(item.description)}</span>
+                    {!item.is_active && <span className="status-badge status-danger inv-inactive-badge">INACTIVE</span>}
                     <span className={`inv-stock-chip tone-${tone}`} title={stock === null ? 'Stock unavailable' : `${stock} in stock`}>
                       {stockLabel(stock)}
                     </span>
@@ -428,6 +444,7 @@ function ItemFormModal({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [deactivating, setDeactivating] = useState(false);
   const [nameCheck, setNameCheck] = useState<{ value: string; exists: boolean; checking: boolean }>({ value: '', exists: false, checking: false });
   const nameCheckSeq = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -692,8 +709,29 @@ function ItemFormModal({
     }
   }
 
-  async function addVariant() {
-    if (!item || !variantName.trim() || !variantValue.trim() || variantBusy) return;
+  async function deactivate() {
+    if (!item || deactivating || busy) return;
+    const confirmed = await modal.confirm({
+      title: 'Deactivate item?',
+      message: 'The item will be hidden from POS and the item list. Sales, purchases and repair history are preserved.',
+      confirmText: 'Deactivate item',
+      cancelText: 'Keep item',
+    });
+    if (!confirmed) return;
+    setDeactivating(true);
+    try {
+      await api(`/items/${item.item_id}`, { method: 'DELETE' });
+      toast.success('Item deactivated');
+      await onSaved();
+      onClose();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setDeactivating(false);
+    }
+  }
+
+  async function addVariant() {    if (!item || !variantName.trim() || !variantValue.trim() || variantBusy) return;
     setVariantBusy(true);
     try {
       const created = await api<VariantRow>(`/items/${item.item_id}/variants`, {
@@ -1081,6 +1119,11 @@ function ItemFormModal({
         </div>
 
         <div className="modal-actions">
+          {item && !readOnly && item.is_active && (
+            <button type="button" className="danger-button" onClick={() => void deactivate()} disabled={busy || deactivating}>
+              {deactivating ? 'Deactivating…' : 'Deactivate item'}
+            </button>
+          )}
           <button type="button" className="btn-secondary" onClick={() => void requestClose()} disabled={busy}>
             {readOnly ? 'Close' : 'Cancel'}
           </button>

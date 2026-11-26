@@ -6,6 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.api.deps import db_session, require_permission, require_any_permission
 from app.models.master import User, Item, ItemBarcode, Category, ItemType, WarrantyDefault
+from app.models.inventory import Purchase, PurchaseLine, StockMovement
+from app.models.sales import Repair, RepairPart
 from app.models.security import AuditLog
 from app.schemas.items import BarcodeIn, ItemCreateIn, ItemReviewIn, ItemUpdateIn, PendingReviewItemOut, WarrantyDefaultIn
 from app.services.numbering import NumberingService
@@ -184,6 +186,45 @@ def update_item(item_id: str, payload: ItemUpdateIn, user: User = Depends(requir
     db.commit()
     bars=list(db.scalars(select(ItemBarcode).where(ItemBarcode.item_id == item.id)).all())
     return _out(item,bars)
+
+@router.delete('/{item_id}')
+def deactivate_item(item_id: str, user: User = Depends(require_permission('ITEM_EDIT')), db: Session = Depends(db_session)):
+    """Soft delete: hide from POS/masters but keep history. Admin only."""
+    if user.role.code.upper() != 'ADMIN':
+        raise HTTPException(403, 'Admin only')
+    item = db.scalar(select(Item).where(Item.id == item_id).with_for_update())
+    if not item:
+        raise HTTPException(404, 'Item not found')
+    if not item.is_active:
+        return {'item_id': str(item.id), 'is_active': False, 'already_inactive': True}
+    stock = db.scalar(select(func.coalesce(func.sum(StockMovement.quantity_delta), 0)).where(StockMovement.item_id == item.id)) or 0
+    if stock > 0:
+        raise HTTPException(409, f'Cannot deactivate: {stock} unit(s) in stock')
+    pending_lines = db.scalar(
+        select(func.count(PurchaseLine.id))
+        .join(Purchase, Purchase.id == PurchaseLine.purchase_id)
+        .where(PurchaseLine.item_id == item.id, Purchase.status == 'PENDING_COST')
+    ) or 0
+    if pending_lines:
+        raise HTTPException(409, f'Cannot deactivate: item is on {pending_lines} purchase line(s) awaiting cost review')
+    pending_repairs = db.scalar(
+        select(func.count(RepairPart.id))
+        .join(Repair, Repair.id == RepairPart.repair_id)
+        .where(RepairPart.item_id == item.id, Repair.status.notin_(['DELIVERED', 'RETURNED TO CUSTOMER', 'CANCELLED']))
+    ) or 0
+    if pending_repairs:
+        raise HTTPException(409, f'Cannot deactivate: item is used by {pending_repairs} open repair(s)')
+    item.is_active = False
+    item.version += 1
+    db.add(AuditLog(
+        branch_id=user.branch_id, actor_user_id=user.id, action_type='ITEM_DEACTIVATED',
+        entity_type='ITEM', entity_id=item.id, timestamp=datetime.now(timezone.utc),
+        before_json={'item_code': item.item_code, 'description': item.description, 'is_active': True},
+        after_json={'is_active': False, 'stock': str(stock)},
+    ))
+    db.commit()
+    return {'item_id': str(item.id), 'is_active': False}
+
 
 @router.post("/{item_id}/barcodes")
 def add_barcode(item_id: str, payload: BarcodeIn, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
