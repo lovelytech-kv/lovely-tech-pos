@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AdminManualServerPanel } from '../../components/AdminManualServerPanel';
 import { PermissionMatrix } from './PermissionMatrix';
 import { ShopProfile } from './ShopProfile';
+import { InvoiceTemplateEditor } from './InvoiceTemplateEditor';
 import { MachineSettings } from './MachineSettings';
 import { AccentPicker } from './AccentPicker';
 import { SessionTimeoutSettings } from './SessionTimeoutSettings';
@@ -62,6 +63,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
 
     <div className="settings-grid">
       <ShopProfile isAdmin={isAdmin} />
+      {isAdmin && <InvoiceTemplateEditor isAdmin={isAdmin} />}
       <MachineSettings isAdmin={isAdmin} />
       <AccentPicker />
       <div className="glass-panel settings-card">
