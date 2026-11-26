@@ -1,11 +1,13 @@
 """Admin-configurable session timeout settings."""
 from __future__ import annotations
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import db_session, require_permission
 from app.models.master import User
+from app.models.security import AuditLog
 from app.security.reauth import require_admin_reauth
 from app.services.session_settings import get_session_settings, save_session_settings
 
@@ -43,7 +45,18 @@ def update_settings(
 ):
     require_admin_reauth(user=user, password=payload.admin_password, db=db, action='session settings change')
     try:
+        before = get_session_settings(db)
         result = save_session_settings(db, payload.model_dump(exclude={'admin_password'}), user.id)
+        db.add(AuditLog(
+            branch_id=user.branch_id,
+            actor_user_id=user.id,
+            action_type='SESSION_SETTINGS_UPDATED',
+            entity_type='SYSTEM_SETTINGS',
+            entity_id=None,
+            timestamp=datetime.now(timezone.utc),
+            before_json=before,
+            after_json=result,
+        ))
         db.commit()
         return SessionSettingsOut(**result)
     except Exception as e:
