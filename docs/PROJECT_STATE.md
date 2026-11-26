@@ -116,11 +116,10 @@ Dead search bar removed from `DashboardLayout.tsx:153` + dead Ctrl+K handler + C
 18. **Worker = code only; tests via separate test chat (DeepSeek new chat)** — smoke by manager
 19. **Customer on sale = optional** (Walk-in default), phone primary, both-empty rejected
 20. **Buy cost = admin-only** (cashier completely hidden), admin review queue for cashier-created
-21. **Image upload = OPTIONAL per item** (placeholder fallback: category color + initial)
-22. **Image storage = filesystem** at `C:\ProgramData\LovelyTechPOS\item_images\`
-23. **Image backup = 3B-4b-backup** — `.ltbak V3` includes images tar (MUST merge with 3B-4b)
-24. **Frontend dist rebuild after each frontend session** — stale dist = false negative smoke
-25. **Low stock threshold consume in inventory grid = 3D** (3B-4b stores, 3D displays)
+21. Image upload = **DEFERRED to post-v1.0** (not needed for go-live, add later as update)
+22. Item card display = category-color placeholder + initial (no image)
+23. `.ltbak V3` image backup = **DEFERRED** (V2 remains current, images added post-v1.0)
+24. Low stock threshold = **DB column exists (migration 0046)**, grid display = 3D
 
 ---
 
