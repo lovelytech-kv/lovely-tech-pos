@@ -223,7 +223,9 @@ def other_income_decision(other_income_id:str,approve:bool,reason:str|None=None,
 @router.post('/targets')
 def target(payload:TargetIn,user:User=Depends(require_permission('TARGET_MANAGE')),db:Session=Depends(db_session)):
     if payload.period_end < payload.period_start: raise HTTPException(400,'Period end cannot be before start')
-    row=Target(branch_id=user.branch_id,**payload.model_dump()); db.add(row); db.commit(); return {'target_id':str(row.id)}
+    row=Target(branch_id=user.branch_id,**payload.model_dump()); db.add(row); db.flush()
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='TARGET_CREATED',entity_type='TARGET',entity_id=row.id,timestamp=datetime.now(timezone.utc),after_json={'target_type':row.target_type,'target_value':str(row.target_value),'period_type':row.period_type,'period_start':str(row.period_start),'period_end':str(row.period_end)}))
+    db.commit(); return {'target_id':str(row.id)}
 
 @router.get('/targets')
 def targets(user:User=Depends(require_permission('TARGET_MANAGE')),db:Session=Depends(db_session)):
@@ -247,7 +249,9 @@ def reset_user_password(payload: CashierResetIn, user: User=Depends(admin_user),
 def create_expense_category(payload:dict,user:User=Depends(admin_user),db:Session=Depends(db_session)):
     name=str(payload.get('name','')).strip()
     if not name: raise HTTPException(400,'Category name is required')
-    row=ExpenseCategory(name=name,is_system=False,is_active=True); db.add(row); db.commit(); return {'id':str(row.id),'name':row.name}
+    row=ExpenseCategory(name=name,is_system=False,is_active=True); db.add(row); db.flush()
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='EXPENSE_CATEGORY_CREATED',entity_type='EXPENSE_CATEGORY',entity_id=row.id,timestamp=datetime.now(timezone.utc),after_json={'name':row.name,'is_system':row.is_system,'is_active':row.is_active}))
+    db.commit(); return {'id':str(row.id),'name':row.name}
 
 @router.post('/suppliers')
 def create_supplier(payload:dict,user:User=Depends(admin_user),db:Session=Depends(db_session)):

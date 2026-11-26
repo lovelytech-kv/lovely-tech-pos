@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from app.api.deps import db_session, require_permission, require_any_permission
 from app.models.master import User, Item, ItemBarcode, Category, ItemType, WarrantyDefault
 from app.models.inventory import Purchase, PurchaseLine, StockMovement
@@ -17,7 +17,10 @@ router = APIRouter(prefix="/items", tags=["items"])
 @router.get("/admin-list")
 def admin_list_items(q: str = "", active_only: bool = False, user: User = Depends(require_any_permission("ITEM_EDIT", "STOCK_VIEW")), db: Session = Depends(db_session)):
     term = q.strip()
-    stmt = select(Item)
+    stmt = select(Item).options(
+        selectinload(Item.barcodes),
+        selectinload(Item.warranty_defaults),
+    )
     if active_only:
         stmt = stmt.where(Item.is_active.is_(True))
     if term:
@@ -27,10 +30,10 @@ def admin_list_items(q: str = "", active_only: bool = False, user: User = Depend
     rows = db.scalars(stmt.order_by(Item.item_code).limit(200)).all()
     out=[]
     for item in rows:
-        bars=db.scalars(select(ItemBarcode).where(ItemBarcode.item_id==item.id).order_by(ItemBarcode.is_primary.desc(), ItemBarcode.barcode)).all()
-        item._warranty_default = db.scalar(
-            select(WarrantyDefault).where(WarrantyDefault.item_id==item.id, WarrantyDefault.is_active.is_(True))
-            .order_by(WarrantyDefault.created_at.desc())
+        bars=sorted(item.barcodes, key=lambda b: (not b.is_primary, b.barcode))
+        item._warranty_default = next(
+            (w for w in sorted(item.warranty_defaults, key=lambda w: w.created_at, reverse=True) if w.is_active),
+            None,
         )
         out.append(_out(item,bars))
     return out

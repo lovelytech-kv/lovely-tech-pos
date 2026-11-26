@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { money } from '../../services/money';
+import { todayLocal } from '../../utils/date';
 import { intInputProps } from '../../utils/numberInput';
 import { useModal } from '../../ui/modals';
 
@@ -329,5 +330,5 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
 }
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocal();
 }

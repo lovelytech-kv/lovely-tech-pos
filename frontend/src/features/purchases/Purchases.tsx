@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { money, moneyAdd, moneyTimesQty } from '../../services/money';
+import { todayLocal } from '../../utils/date';
 import { moneyInputProps, intInputProps } from '../../utils/numberInput';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
@@ -77,7 +78,7 @@ type CorrectionState = {
 
 type LineErrors = { item?: string; quantity?: string; cost?: string };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayLocal();
 const MAX_QTY = 1000000;
 const MAX_COST = 999999999.99;
 

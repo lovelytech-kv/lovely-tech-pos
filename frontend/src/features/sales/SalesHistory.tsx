@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import { money } from '../../services/money';
 import { useModal } from '../../ui/modals';
 import { toast } from '../../ui/toast';
+import { todayLocal } from '../../utils/date';
 import { escapeHtml } from '../../utils/escapeHtml';
 import { useShopProfile } from '../settings/ShopContext';
 
@@ -67,7 +68,7 @@ type Filters = {
   customer_id: string;
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayLocal();
 const LIMIT = 50;
 
 function customerText(name?: string | null, contact?: string | null): string {
@@ -252,16 +253,16 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
     } else if (kind === 'yesterday') {
       const y = new Date(now);
       y.setDate(y.getDate() - 1);
-      const yStr = y.toISOString().slice(0, 10);
+      const yStr = todayLocal(y);
       setFilters((f) => ({ ...f, date_from: yStr, date_to: yStr }));
     } else if (kind === 'week') {
       const w = new Date(now);
       w.setDate(w.getDate() - 6);
-      setFilters((f) => ({ ...f, date_from: w.toISOString().slice(0, 10), date_to: today() }));
+      setFilters((f) => ({ ...f, date_from: todayLocal(w), date_to: today() }));
     } else {
       const m = new Date(now);
       m.setDate(m.getDate() - 29);
-      setFilters((f) => ({ ...f, date_from: m.toISOString().slice(0, 10), date_to: today() }));
+      setFilters((f) => ({ ...f, date_from: todayLocal(m), date_to: today() }));
     }
   }
 
