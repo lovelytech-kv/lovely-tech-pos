@@ -1,239 +1,199 @@
 # LOVELY TECH POS — MASTER PROJECT STATE
 
-**Last Updated:** 2026-11-18 (after Audit — pre Security Session 1)
-**Version:** Backend 0.5.0 | Migrations: 0045_pitr_base_backups (head)
-**Status:** Phase 2 DR complete (Chunks 1-13, 14a-c-1, 15a, 15b done). Audit found 42 findings. Security Hardening Session 1/2/3 before Chunk 16.
+**Last Updated:** 2026-11-26 (after 3B-4c, pre 3B-4b)
+**Version:** Backend 0.6.0 | Migrations: 0046_item_cost_review_threshold (head)
+**Status:** Sessions 1A→3B-5 merged. 3B-4c pending merge. Next: 3B-4b (image + low-stock) + 3B-4b-backup (V3 backup for images). System NOT live.
 
 ---
 
 ## 1. PROJECT OVERVIEW
 
-**Product:** Mobile phone repair shop POS system (offline-first, LAN, 2+ laptops)
-**Owner:** Lovely Tech (Sri Lanka)
-**Deployment:** Tauri 2 desktop app (Windows), bundled installer planned
-**System status:** NOT LIVE — shop using manual method. No real customer data. Production DB = dev/test data (352 users, mostly TEST_* prefixed).
-
-**Stack:**
-- Backend: FastAPI + Python 3.13 + PostgreSQL 18 + SQLAlchemy 2 + Alembic
-- Frontend: React 19 + Vite 7 + Tailwind v4 + TypeScript 5.9
-- Desktop: Tauri 2 (Windows)
-
-**Architecture:** offline-first, no internet required, server = source of truth, clients proxy to server. Google Drive backup optional (internet needed only for cloud upload). **Google Drive sync is NOT implemented yet — see Roadmap v2.**
+**Product:** Mobile phone repair shop POS (offline-first, LAN, 1 server + 1-3 client laptops, Windows Tauri).
+**Owner:** Lovely Tech (Sri Lanka). **System NOT live** — shop using manual method. No real customer data. Production DB `lovely_tech_pos` = dev/test data.
+**Stack:** FastAPI + Python 3.13 + PostgreSQL 18 + SQLAlchemy 2 + Alembic | React 19 + Vite 7 + Tailwind v4 + TS 5.9 | Tauri 2.
 
 ---
 
 ## 2. LOCATIONS
 
-**Repo:** https://github.com/lovelytech-kv/lovely-tech-pos
-**Local path:** `C:\lovely-tech-pos\`
-- `backend/` — FastAPI | `frontend/` — React+Vite | `desktop/` — Tauri 2 | `scripts/` — utilities | `docs/` — documentation
-**Backend env:** `C:\lovely-tech-pos\backend\.env`
-**DB:** PostgreSQL 18, `lovely_tech_pos` (prod/dev), user `lovely_pos`
-**Backups:** `C:\lovely-tech-pos-backups\` (SQL dumps), `C:\ProgramData\LovelyTechPOS\backups\` (encrypted .ltbak), `C:\ProgramData\LovelyTechPOS\pitr_base\` (PITR base), `C:\ProgramData\LovelyTechPOS\wal_archive\` (WAL files)
-**Logs:** `%LOCALAPPDATA%\LovelyTechPOS\logs\`
+**Repo:** https://github.com/lovelytech-kv/lovely-tech-pos (main = `9bcb269`)
+**Local:** `C:\lovely-tech-pos\`
+**Docs:** `docs/PROJECT_STATE.md` (this file), `docs/audit-2026-11-17.md`
+**Backup:** `C:\lovely-tech-pos-backups\` (chat exports, dumps), `C:\ProgramData\LovelyTechPOS\backups\` (.ltbak), `C:\ProgramData\LovelyTechPOS\wal_archive\` (WAL), `C:\ProgramData\LovelyTechPOS\pitr_base\` (PITR base)
+**Item images (planned 3B-4b):** `C:\ProgramData\LovelyTechPOS\item_images\`
+**Test DB:** `lovely_tech_test15` (`.env` points here)
 
 ---
 
-## 3. HOW TO RUN (DEV MODE)
+## 3. GIT BRANCH STATE
 
-**Backend:** `cd C:\lovely-tech-pos\backend` → `python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`
-**Frontend:** `cd C:\lovely-tech-pos\frontend` → `npm run dev` → `http://localhost:5173/`
-**Tauri:** `cd C:\lovely-tech-pos\desktop` → `cargo tauri dev`
-**Health check:** `curl.exe http://127.0.0.1:8000/api/v1/health`
+| Branch | HEAD | Status |
+|---|---|---|
+| `main` | `9bcb269` | 3B-5 series merged (40 commits) |
+| `fixes-3b4c` | `109783e` | 3B-4c (dead search removal) — **pending merge** |
+| `security-session-1` | old | historical, no action |
+| `purchases-redesign-3b5` | `833d2e9` | 3B-5d, merged to main |
+
+**Next:** merge `fixes-3b4c` → main, then create `image-upload-3b4b` for image work.
 
 ---
 
-## 4. COMPLETED CHUNKS (1 → 15b)
+## 4. COMPLETED SESSIONS
 
-| # | Chunk | Status | Notes |
+### Session 1A + 1B + 2 + 3A — Security Hardening (merged `efbf011`)
+**29 fixes from audit (42 findings total).**
+- 1A (13 findings): C1 documents search, H1 login race, H3 logout scope, H4 absolute expiry, H5+H12+M19 password revoke, H6 session settings reauth, H11 recovery atomic, M18 code scope, M1 no session lock, M16 readable 422, L2 token strip
+- 1B (6 fixes): H2 role reauth, H7 LTPOS_TRUST_LAN flag, H8 approval replay, H9 setup localhost+lock, H16+H18 XSS chain (escapeHtml + token sessionStorage), M7 APP_ENV validation
+- 2 (12 fixes): H10 FIFO race, H13 pg_restore engine dispose, H14 CLIENT fail-closed, H15 report export routing, H17 AbortSignal timeout, M8 manual server persist, M9 repair idempotency, M10 return idempotency, M12+M13 sales sequence guards, M14 identity timeout, M15 promise cache
+- 3A (7 fixes + emergency): E6 reports auto-load, E11 returns search, E4 offline error, C6 cashier read-only, Receipt (shop name + logo), E3 backup retry, E2 add item button
+
+### Session 3B-1 (merged `acd3093`)
+E2-nav (Items tab label), Returns condition selector, Returns Enter key, Cashier Profit hidden, B1 lockout message (HTTP 423), D6 404 (favicon), TEST_* cleanup script (not run)
+
+### Session 3B-2 (merged `b51bb40`)
+**POS Customer Flow:** CustomerPickerModal, quick-add form, SalesTab customer strip, receipt customer line, history filter, auto-print line items, cashier admin options hidden
+
+### Session 3B-3 (merged `0d04c4b`)
+**UI Foundation:** Design tokens (spacing/typography/radius/shadow), collapsible sidebar (default collapsed), AppHeader (active tab name + date/time 24h), receipt footer "Software by Lovely Tech · {phone}", header bug fix (`item.key` not `item.label`)
+
+### Session 3B-4 (merged `3197fd5`)
+**Inventory Redesign:** Card grid (Square/Loyverse style), search/filter, grid/list toggle, modal form, header clock 12h prominent. **Emergency fix bundled:** purchases.payment_method schema drift (test15 + prod ALTER applied)
+
+### Session 3B-5 + 3B-5b + 3B-5c + 3B-5d (merged `9bcb269`, 40 commits)
+**Purchases Redesign + Role Logic + CRUD:**
+- Migration 0046: `items.buy_cost`, `items.needs_admin_review`, `items.low_stock_threshold`, partial index
+- Qty bug fix (frontend staging → per-line input)
+- Purchases full redesign (line entry, history, detail, remove-line, quick-add supplier)
+- Role buy cost: cashier hidden, admin visible, `needs_admin_review` flag logic
+- Admin review queue: dashboard tile (always visible) + Admin panel + `GET /items/pending-review` + `PATCH /items/{id}/review`
+- Inline category/item_type creation
+- Categories/Types CRUD (edit + delete with 409 guards)
+- Items soft-delete (with stock/pending guards)
+- Duplicate name blur check
+- History search by item
+- Queue tiles promoted to first 2 admin positions + widget renamed
+- **Smoke: 8/8 PASS**
+
+### Session 3B-4c (branch `fixes-3b4c`, HEAD `109783e` — **PENDING MERGE**)
+Dead search bar removed from `DashboardLayout.tsx:153` + dead Ctrl+K handler + CSS cleanup (10 locations). Dist rebuilt (1.22 MB). tsc + build pass.
+
+---
+
+## 5. REMAINING ROADMAP
+
+| Session | Scope | Est. | Priority |
 |---|---|---|---|
-| 1-6 | Foundation (theme, nav, dashboard, shortcuts, sales UX) | ✅ | |
-| 7a-7c | Migration bridge, Sales redesign, bug sweep | ✅ | |
-| 8 | Sales History + password security fix | ✅ | |
-| 9a-9c | Shop Profile, Accent/vendor/invoice, Setup Wizard | ✅ | |
-| 10 | User Management + session timeout | ✅ | |
-| 11 | Password Recovery | ✅ | |
-| 12a-12b | Shop Identity + Machine Role | ✅ | |
-| 13 | Client Join Authorization | ✅ | Rate-limited |
-| 14a | Pre-Login Restore + Backup Import (backend) | ✅ | Migration 0043 |
-| 14b | Frontend Restore Flow | ✅ | |
-| 14c-1 | mDNS + shop name fix | ✅ | Migration 0044 |
-| 15a | Backup Integrity (V2 .ltbak, SHA-256, corrupted detection, /setup rate limit) | ✅ | Commit b9bb6d1 |
-| 15b | PITR (WAL archiving, base backup, restore script, frontend dialog) | ✅ | Migration 0045, production WAL enabled 2026-11-16, base backup #1 taken |
+| **Merge 3B-4c** | `fixes-3b4c` → main | 2 min | 🔴 NOW |
+| **3B-4b** | Image upload UI (optional per item) + card image display + low_stock_threshold consume in grid (color-coded chips) | ~3 hrs | 🔴 HIGH |
+| **3B-4b-backup** | `.ltbak` V3: pg_dump + tar.gz(images) in Fernet payload. V2/V1 read preserved. Restore extracts images. **MUST merge with 3B-4b** | ~2-3 hrs | 🔴 HIGH |
+| **Combined test chat** | Full verification 3B-5 + 3B-4c + 3B-4b + 3B-4b-backup (~50 tests) | ~1-2 hrs | 🔴 HIGH |
+| **3C** | Audit mediums (M2-M5, M11, M17, M20, M21) + Invoice/Receipt Template Editor (80mm/A4, header/footer, logo, live preview, locked "Software by Lovely Tech" footer) | ~6-8 hrs | 🟡 MED |
+| **3D** | Final UI polish across all tabs + Category Manager move to Items workspace + Item Type Code simplification + soft-delete reactivate UI + low-stock threshold grid consume + design tokens across remaining tabs | ~4-5 hrs | 🟡 MED |
+| **Final regression** | Full tab walkthrough + audit re-check | ~2 hrs | 🔴 pre-v1.0 |
+| **Chunk 16** | World Standards 1: NTP sync, JSON logging, FK audit, graceful degradation + schema drift check script | ~4 hrs | 🟡 |
+| **Chunk 17** | World Standards 2: Double-entry ledger, restore drills | ~4 hrs | 🟡 |
+| **Chunk 18** | Auto Scheduled Backup **+ Google Drive sync + import** (rclone) | ~5-6 hrs | 🔴 HIGH |
+| **Chunk 19** | Windows startup + update checker (GitHub releases) | ~3 hrs | 🟡 |
+| **Chunk 20** | Auto error logging + crash report | ~2 hrs | 🟢 |
+| **Chunk 22** | Hardware Testing 1 (power-cut, LAN 2-laptop) | ~4 hrs | 🔴 |
+| **Chunk 23** | Hardware Testing 2 (ESC/POS printer, barcode scanner) | ~4 hrs | 🔴 |
+| **Chunk 24** | Full Installer (PyInstaller + PostgreSQL + NSIS) — MUST rebuild dist at install | ~6 hrs | 🔴 |
+| **Chunk 25** | Docs 1: Deploy + DR guide (Sinhala + English) | ~4 hrs | 🟡 |
+| **Chunk 26** | Docs 2: User + admin manuals | ~4 hrs | 🟢 |
 
-**"Chunk 15c" does not exist** — 15a + 15b complete. "15c/16 handoff" in worker report was section naming only.
-
----
-
-## 5. AUDIT (2026-11-17) — 42 VERIFIED FINDINGS
-
-**Auditor:** Gemini Pro + ChatGPT + audit coordinator (static + manual verification)
-**Limitation:** Static only. No runtime, no LAN stress test, no penetration test.
-
-| Severity | Count |
-|---|---|
-| CRITICAL | 1 |
-| HIGH | 18 |
-| MEDIUM | 21 |
-| LOW | 4 |
-| **Total** | **42** (+ 1 FP rejected) |
-
-**Critical combined risk:** H16 (JWT in localStorage) + H18 (unescaped receipt HTML) = live XSS → token theft → admin takeover. **Treat as CRITICAL pair, gate launch on fix.**
-
-**Full findings:** See chat export `C:\lovely-tech-pos-backups\audit-2026-11-17.md` (paste the audit report).
-
-### Manager decisions on 5 open questions:
-1. **H16+H18 = COMBINED CRITICAL** — fix in Security Session 1.
-2. **H7 (machine HTTP) = accepted risk** with `LTPOS_TRUST_LAN` env flag (default true, HTTPS-only when false). Small shop LAN is physically trusted.
-3. **M20 (migration 0032 payment_method) = PENDING user confirmation.** Docstring says "Requirements 08" → likely intentional. Not in Session 1/2 scope.
-4. **M5 (migration 0035 placeholder) = delete placeholder + document.** ImportMapping deferred to Phase 5.
-5. **M7 (APP_ENV validation) = verify in Session 1.** Add startup hook if missing.
+**Total remaining: ~35-45 hrs to v1.0.**
 
 ---
 
-## 6. SECURITY HARDENING SESSIONS (pre-Chunk-16)
+## 6. LOCKED DECISIONS (updated)
 
-| Session | Scope | Est. | Status |
-|---|---|---|---|
-| **Session 1** | CRITICAL + HIGH security: C1, H1-H9, H11, H12, H16, H18, M1, M7, M16, M18, M19, L2 (19 fixes) | ~8-10 hrs | 🔴 NEXT — start now |
-| **Session 2** | Data integrity + frontend routing: H10, H13, H14, H15, H17, M8, M9, M10, M12, M13, M14, M15 (~12 fixes) | ~7-9 hrs | 🔴 HIGH |
-| **Session 3** | Medium + Chunk 21 UI Polish (merged): M2-M5, M11, M17, M20 (pending), M21, L1, L3, L4 + design tokens across all tabs | ~7-9 hrs | 🟡 MED |
-| **Final regression** | Full tab walkthrough + audit re-check | ~2 hrs | 🔴 before v1.0 |
-
-**Total ~24-30 hrs across 3-4 worker sessions.**
-
-### Session 1 status (updated after completion):
-- [ ] In progress — update this line when done
-
----
-
-## 7. ROADMAP v2 (post-audit, updated)
-
-| # | Chunk | Scope | Priority |
-|---|---|---|---|
-| **S1** | Security Session 1 | C1+H1-H9+H11+H12+H16+H18+M1+M7+M16+M18+M19+L2 | 🔴 HIGH |
-| **S2** | Security Session 2 | H10, H13, H14, H15, H17, M8-M10, M12-M15 | 🔴 HIGH |
-| **S3** | Security Session 3 = Chunk 21 merged | M2-M5, M11, M17, M20, M21, L1, L3, L4 + UI Polish | 🟡 MED (was LOW) |
-| **16** | World Standards 1 | NTP sync, JSON logging, FK audit, graceful degradation | 🟡 MED |
-| **17** | World Standards 2 | Double-entry ledger (Cash vs Profit), restore drills | 🟡 MED |
-| **18** | Auto Scheduled Backup **+ Google Drive sync** | Cron backup + cloud upload + cloud import (Phase 5 deferral pulled forward) | 🔴 **HIGH** (was MED) |
-| **19** | Windows Startup + Update Checker | Autostart, GitHub releases version check | 🟡 MED |
-| **20** | Auto Error Logging + Crash Report | Frontend + backend capture | 🟢 LOW |
-| **21** | **MERGED INTO SESSION 3** | UI Polish (design tokens) + audit mediums/lows | — |
-| **22** | Hardware Testing 1 | Power-cut, LAN 2-laptop | 🔴 HIGH |
-| **23** | Hardware Testing 2 | ESC/POS printer, barcode scanner | 🔴 HIGH |
-| **24** | Full Installer (LAST) | PyInstaller + PostgreSQL + NSIS | 🔴 HIGH |
-| **25** | Documentation 1 | Deploy + DR guide (Sinhala + English) | 🟡 MED |
-| **26** | Documentation 2 | User + admin manuals | 🟢 LOW |
-
-**Phase 5 cleanup** (post-v1.0): Admin reauth query-string→body (may move into Session 3), old test DB drops, discovery async refactor, GATE 11 screenshot formalization, WAL archive retention (16b), backup schedule (16b), multi-base-backup selector (16b), quarterly drill setup (16b), Defender pgdata monitor (16b).
+1-12. (from original — shop UUID, machine role, CLIENT auth, rate limits, full installer at end, PyInstaller collect-all, test DB safety, update checker via GitHub, recovery codes hashed, emergency reset localhost, 12 gates, test DB naming)
+13. **`.ltbak` V2 format** (outer SHA-256 + Fernet) — V1 read preserved
+14. **PITR restore manual PowerShell** — UI never auto-executes
+15. **Test cluster 5433 manual `pg_ctl`** — not Windows service
+16. **H7 (LAN HTTP)** accepted risk with `LTPOS_TRUST_LAN` env flag
+17. **opencode + DeepSeek V3/V4 = worker tool** (DeepSeek default; Gemini free tier rate limits = unreliable)
+18. **Worker = code only; tests via separate test chat (DeepSeek new chat)** — smoke by manager
+19. **Customer on sale = optional** (Walk-in default), phone primary, both-empty rejected
+20. **Buy cost = admin-only** (cashier completely hidden), admin review queue for cashier-created
+21. **Image upload = OPTIONAL per item** (placeholder fallback: category color + initial)
+22. **Image storage = filesystem** at `C:\ProgramData\LovelyTechPOS\item_images\`
+23. **Image backup = 3B-4b-backup** — `.ltbak V3` includes images tar (MUST merge with 3B-4b)
+24. **Frontend dist rebuild after each frontend session** — stale dist = false negative smoke
+25. **Low stock threshold consume in inventory grid = 3D** (3B-4b stores, 3D displays)
 
 ---
 
-## 8. WORKER TOOL — CHANGED 2026-11-18
+## 7. 12 QUALITY GATES (MANDATORY — verbatim every worker prompt)
 
-**Old:** DeepSeek web chat (manual paste, context limits)
-**New:** **opencode** (agentic terminal coder) + **DeepSeek API** ($5-10 topup)
-**Reason:** DeepSeek web has new limits (Nov 2025). opencode has full disk access + terminal + no chat limit → 10x faster.
-
-**Safety protocol for opencode:**
-1. `git checkout -b <session-name>` before starting. Main branch protected.
-2. Opencode prompt includes explicit in-scope / out-of-scope file list + "ask before modifying" rule.
-3. Worker stops after each fix, shows diff, user confirms before next.
-4. Tests one at a time; user runs in own terminal/browser, pastes output, confirms pass/fail.
-5. Small commits per logical group; user reviews `git diff` before merge.
-6. Session split: 5 hr limit per opencode session. Commit + review + restart opencode for next batch.
-
-**Budget:** $5-10 per session ($2 too tight for 8-10 hr agentic work — re-reading files, retries, exploration).
+G1 validation | G2 client+server sync | G3 modal safety | G4 loading state | G5 error handling | G6 idempotent migrations | G7 atomic ops | G8 audit log | G9 edge cases | G10 real browser | G11 cross-theme | G12 regression
 
 ---
 
-## 9. 12 QUALITY GATES (MANDATORY — every chunk)
+## 8. WORKER PROMPT STRUCTURE (every session)
 
-G1 validation | G2 client+server sync | G3 modal safety | G4 loading state | G5 error handling | G6 idempotent migrations | G7 atomic operations | G8 audit log | G9 edge cases | G10 real browser test | G11 cross-theme | G12 regression
-
-Non-negotiable. Worker bypass = chunk rejected.
-
----
-
-## 10. LOCKED DECISIONS (DO NOT CHANGE)
-
-1. Shop UUID never regenerates — persists through backup/restore
-2. Machine role ≠ User role — SERVER/CLIENT independent from ADMIN/CASHIER
-3. CLIENT never creates local admin — uses SERVER credentials (Chunk 13)
-4. Rate limit 5/5min per (IP, server_url) on verify-admin (Chunk 13); 5 failures/10min/IP on /setup/* (Chunk 15a, shared bucket, failure-counter, reset on success)
-5. Full installer at END (Chunk 24)
-6. PyInstaller `--collect-all` for FastAPI/Pydantic/SQLAlchemy deps
-7. Test DB for all destructive tests (`lovely_tech_test<N>`)
-8. Update checker via GitHub releases
-9. Recovery codes hashed, shown once
-10. Emergency reset localhost-only + `POS_EMERGENCY_KEY`
-11. 12 Quality Gates every chunk
-12. **`.ltbak` V2 format** (outer SHA-256 + Fernet payload) — V1 read path preserved forever
-13. **PITR restore = manual elevated PowerShell.** UI never auto-executes.
-14. **Test cluster 5433 = manual `pg_ctl`** (not Windows service — port hijack risk)
-15. **Google Drive sync is NOT implemented** — pulled forward to Chunk 18. Phase 2 DR was "complete minus cloud offsite" — that label was misleading; now corrected in roadmap.
-16. **H7 (machine HTTP) = accepted risk** with `LTPOS_TRUST_LAN` flag (small-shop LAN physically trusted)
-17. **opencode + DeepSeek API = worker tool** (replaces DeepSeek web chat, Nov 2025 limits)
+1. ROLE — "Real business software. Quality > speed."
+2. CONTEXT — branch, HEAD, system status
+3. IN-SCOPE FILES (explicit list)
+4. SCOPE — fix-by-fix or phase-by-phase
+5. 12 QUALITY GATES (verbatim)
+6. RULES (no shortcuts, no packages, style, budget)
+7. INVESTIGATION FIRST for complex fixes
+8. OUTPUT FORMAT — code only + completion report
+9. SPLIT RULE — if ~75% used, stop at natural boundary
+10. PRODUCTION SAFETY (read-only only)
 
 ---
 
-## 11. KNOWN DEFERRALS / TECH DEBT
+## 9. KNOWN DEFERRALS / TECH DEBT
 
-**Pre-audit deferrals (still open):**
-- Admin reauth via query string in some old endpoints (Phase 5 / may move to Session 3)
-- 350 TEST_* users still in production (Phase 5 cleanup — or fold into Session 3 before installer)
-- mDNS auto-refresh on shop name change needs backend restart (Phase 5)
-- Multi-base-backup selector in PITR dialog (id=1 hardcoded — Chunk 16b)
-- WAL archive retention policy (Chunk 16b)
-- Base backup scheduled cadence (Chunk 16b)
-- Quarterly restore drill setup (Chunk 16b)
-- Defender pgdata monitor (deferred — monitor)
-- Discovery endpoint async refactor (acceptable for small shop)
-- Old backups pre-14b have null shop metadata (read fallback handles it)
-
-**Post-audit items deferred to later sessions (see Section 6).**
-
-**M20 pending user confirmation:** was migration 0032's removal of purchase `payment_method` intentional?
-
----
-
-## 12. NEXT IMMEDIATE ACTION
-
-**Security Session 1** (CRITICAL + HIGH, 19 fixes):
-- C1 (documents/search 500)
-- H1 (login race), H2 (update_user_role reauth), H3 (logout all sessions), H4 (sliding expiry), H5+H12+M19 (password reset sessions), H6 (session settings reauth), H7 (LAN trust flag), H8 (discount approval replay), H9 (setup localhost + race)
-- H11 (recovery code race), H16+H18 (XSS chain — COMBINED CRITICAL)
-- M1 (deps row lock), M7 (APP_ENV), M16 (422 toast), M18 (recovery code user scope)
-- L2 (token in ltpos_user)
-
-**Test DB:** `lovely_tech_test16` (fresh, migrations to 0045)
-**Branch:** `security-session-1`
-**Tool:** opencode + DeepSeek API
-**Prompt:** Delivered 2026-11-18 in chat (Session 1 prompt with opencode-specific rules)
-
-After Session 1: **Session 2 (Data Integrity)** — H10, H13, H14, H15, H17, M8-M10, M12-M15.
+- WAL retention policy (Chunk 16)
+- Base backup scheduled cadence (Chunk 16)
+- Quarterly restore drill (Chunk 16)
+- Defender pgdata monitor (defer)
+- Multi-base-backup selector in PITR dialog (Chunk 16)
+- Admin reauth query string → body migration (Chunk 16 or 3C)
+- Schema drift detection script (Chunk 16) — from emergency fix
+- `GET /items/admin-list` 200-row cap (pagination — future)
+- Soft-deleted item reactivate UI (3D)
+- Category manager placement move (3D)
+- Item type code auto-handle (3D)
+- Low stock threshold grid display (3D)
+- Test users cleanup (script ready `scripts/cleanup_test_users.py`, not run)
+- Item image backup (3B-4b-backup)
+- Migration drift (test15 + prod — fixed emergency; prevent via schema check script Chunk 16)
 
 ---
 
-## 13. VERSION HISTORY
+## 10. NEXT IMMEDIATE ACTION
 
-- v0.1.0 — Backend foundation (Chunks 1-3)
-- v0.2.0 — UI foundation (Chunks 4-6)
-- v0.3.0 — Bug sweep + redesign (Chunks 7a-7c)
-- v0.4.0 — Full feature set (Chunks 8-11)
-- v0.5.0 — Phase 2 DR complete (Chunks 12-15b) ← CURRENT
-- v0.6.0 (target) — Post-audit security + UI polish (Sessions 1-3)
-- v1.0.0 (target) — Production ready (Chunks 16-26 done)
+1. **Merge `fixes-3b4c` → main** (verified by smoke, dist rebuilt)
+2. **Branch `image-upload-3b4b` from main**
+3. **3B-4b prompt (image upload)** — DeepSeek V4.1, ~3 hrs
+4. **3B-4b-backup prompt (V3 backup)** — same branch, ~2-3 hrs
+5. **Combined smoke + test chat**
+6. **Merge 3B-4b + 3B-4b-backup together** (must be together)
+7. **3C → 3D → Chunk 16-26**
 
 ---
 
-## 14. RESUME NOTES
+## 11. RESUME INSTRUCTIONS — New Manager Chat
 
-**If manager chat hits limit:** Paste this file + "I'm continuing Lovely Tech POS. Last: audit complete, Session 1 starting. Send Session 1 opencode prompt."
+If this chat hits limit:
+1. Open new chat
+2. Paste THIS file
+3. Say: "I'm continuing Lovely Tech POS. Last: 3B-4c about to merge. Next: 3B-4b image upload + 3B-4b-backup V3 backup. Confirm image backup Option B (V3 tar in Fernet) before starting."
+4. New manager will have full context
 
-**If opencode/worker session hits issue:** New opencode session + "resume from branch `<name>` commit `<hash>`". Session 1 prompt has full context.
+**Worker tool:** opencode + DeepSeek V3/V4. Branch strategy in Section 3. Deferred items in Section 9.
 
-**If user returns after rest:** Current state = Section 12. Read Sections 5, 6, 7 for audit + roadmap.
+---
+
+## 12. VERSION HISTORY
+
+- v0.5.0 — Phase 2 DR (Chunks 1-15b)
+- v0.6.0 — Security hardening + UI overhaul (Sessions 1A→3B-5) ← **current**
+- v0.7.0 (target) — Image + backup V3 + audit mediums + polish (3B-4b→3D)
+- v1.0.0 (target) — Chunks 16-26 complete, installer + docs
 
 END OF PROJECT STATE
