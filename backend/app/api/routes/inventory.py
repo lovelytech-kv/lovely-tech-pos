@@ -1,10 +1,10 @@
 from decimal import Decimal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from app.api.deps import db_session, require_permission
 from uuid import UUID
-from app.models.master import User, Item, ItemBarcode, ItemType, WarrantyDefault
+from app.models.master import User, Item, ItemBarcode, ItemType
 from app.models.inventory import StockMovement
 
 router=APIRouter(prefix="/inventory",tags=["inventory"])
@@ -12,16 +12,28 @@ router=APIRouter(prefix="/inventory",tags=["inventory"])
 @router.get("/items/search")
 def search_items(q:str=Query(default="",max_length=120),limit:int=20,user:User=Depends(require_permission("STOCK_VIEW")),db:Session=Depends(db_session)):
     q=q.strip()
-    stmt=select(Item).where(Item.is_active.is_(True))
+    stmt=select(Item).options(selectinload(Item.warranty_defaults)).where(Item.is_active.is_(True))
     serialized_types={t.id for t in db.scalars(select(ItemType).where(ItemType.is_serialized.is_(True)))}
     if q:
         stmt=stmt.outerjoin(ItemBarcode,ItemBarcode.item_id==Item.id).where((Item.item_code.ilike(f"%{q}%")) | (Item.description.ilike(f"%{q}%")) | (Item.brand.ilike(f"%{q}%")) | (Item.model.ilike(f"%{q}%")) | (Item.compatible_models.ilike(f"%{q}%")) | (ItemBarcode.barcode==q))
     stock_expr = func.coalesce(select(func.sum(StockMovement.quantity_delta)).where(StockMovement.branch_id==user.branch_id, StockMovement.item_id==Item.id).scalar_subquery(), 0)
     rows=db.scalars(stmt.order_by((stock_expr <= 0), Item.description).limit(min(limit,50))).all()
+    item_ids=[item.id for item in rows]
+    stock_map: dict = {}
+    if item_ids:
+        stock_rows=db.execute(
+            select(StockMovement.item_id, func.coalesce(func.sum(StockMovement.quantity_delta), 0))
+            .where(StockMovement.branch_id==user.branch_id, StockMovement.item_id.in_(item_ids))
+            .group_by(StockMovement.item_id)
+        ).all()
+        stock_map={item_id: Decimal(total or 0) for item_id, total in stock_rows}
     result=[]
     for item in rows:
-        stock=Decimal(db.scalar(select(func.coalesce(func.sum(StockMovement.quantity_delta),0)).where(StockMovement.branch_id==user.branch_id,StockMovement.item_id==item.id)) or 0)
-        warranty = db.scalar(select(WarrantyDefault).where(WarrantyDefault.item_id==item.id, WarrantyDefault.is_active.is_(True)).order_by(WarrantyDefault.created_at.desc()))
+        stock=stock_map.get(item.id, Decimal(0))
+        warranty=next(
+            (w for w in sorted(item.warranty_defaults, key=lambda w: w.created_at, reverse=True) if w.is_active),
+            None,
+        )
         result.append({"item_id":str(item.id),"item_code":item.item_code,"description":item.description,"brand":item.brand,"model":item.model,"compatible_models":item.compatible_models,"sale_price":item.master_sale_price,"stock":stock,"is_serialized":item.item_type_id in serialized_types,
                        "warranty_default": ({"warranty_type": warranty.warranty_type, "duration_value": warranty.duration_value, "custom_rule": warranty.custom_rule} if warranty else None)})
     return result

@@ -88,6 +88,7 @@ class Item(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     category = relationship(Category)
     item_type = relationship(ItemType)
     barcodes = relationship("ItemBarcode", back_populates="item", cascade="all, delete-orphan")
+    warranty_defaults = relationship("WarrantyDefault", back_populates="item")
     __table_args__ = (
         CheckConstraint("master_sale_price IS NULL OR master_sale_price >= 0", name="ck_items_sale_price_nonnegative"),
         Index("ix_items_search", "description", "brand", "model"),
@@ -116,6 +117,7 @@ class WarrantyDefault(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     duration_value: Mapped[int | None] = mapped_column(Integer)
     custom_rule: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    item = relationship(Item, back_populates="warranty_defaults")
 
 class Supplier(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     __tablename__ = "suppliers"
