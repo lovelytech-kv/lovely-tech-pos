@@ -160,6 +160,7 @@ G1 validation | G2 client+server sync | G3 modal safety | G4 loading state | G5 
 - Low stock threshold grid display (3D)
 - Test users cleanup (script ready `scripts/cleanup_test_users.py`, not run)
 - Item image backup (3B-4b-backup)
+- ImportMapping persistence — feature never shipped; alembic 0035 is a retained no-op placeholder to preserve the chain (deferred post-v1.0)
 - Migration drift (test15 + prod — fixed emergency; prevent via schema check script Chunk 16)
 
 ---

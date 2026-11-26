@@ -1,10 +1,14 @@
-"""Bridge migration for 0035_import_mapping_persistence.
+"""Placeholder — ImportMapping feature never shipped.
 
-The original 0035 migration file was never committed to the repository.
-The schema changes it contained were applied to the live dev DB manually
-(via SQL). This bridge file aligns alembic history so fresh installs work.
+The ImportMapping persistence tables were planned for this revision but the
+feature was never implemented or released. The original migration file was
+never committed; this no-op placeholder is retained only to preserve the
+alembic chain (0034 -> 0035 -> 0036, referenced by revision string in 0036).
 
-No-op for existing DBs.
+No schema changes. Do not delete: existing databases may be stamped at
+revision 0035_import_mapping_persistence.
+
+ImportMapping is deferred to post-v1.0.
 
 Revision ID: 0035_import_mapping_persistence
 Revises: 0034_damage_loss_type
@@ -21,11 +25,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    """No-op — the original 0035 changes were applied manually.
-
-    Tables/columns already exist in the live DB. This bridge only aligns
-    the alembic history so fresh installs (`alembic upgrade head`) succeed.
-    """
+    """No-op — ImportMapping never shipped."""
     pass
 
 
