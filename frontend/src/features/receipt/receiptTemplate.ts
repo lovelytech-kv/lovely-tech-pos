@@ -241,7 +241,7 @@ export function buildReceiptHTML(
   return `<!DOCTYPE html><html><head><title>Receipt ${escapeHtml(invoiceNo)}</title>
     <link rel="icon" href="data:," />
     <style>
-      body{font-family:'Consolas','Menlo',monospace;margin:0 auto;color:#000;background:#fff;}
+      body{font-family:'Consolas','Menlo',monospace;margin:0 auto;color:#000;background:#fff;box-sizing:border-box;}
       h1{font-size:16px;text-align:center;margin:0 0 4px;word-break:break-word;}
       .meta{text-align:center;font-size:10px;color:#333;margin-bottom:4px;}
       .contact{text-align:center;font-size:10px;color:#555;margin-bottom:8px;line-height:1.35;}

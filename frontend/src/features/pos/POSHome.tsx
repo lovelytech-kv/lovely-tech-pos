@@ -434,7 +434,11 @@ useEffect(() => {
         setSaleKey(crypto.randomUUID());
         setDoc(getDefaultDocType());
         if (saleDoc === 'SYSTEM_PRINTED' && !saleCredit && preOpenedPrintWindow && !preOpenedPrintWindow.closed) {
-          writeReceipt(preOpenedPrintWindow, result, shop, fullShop, invoiceTemplate);
+          // Fetch the current default 80mm template at print time so admin edits
+          // apply without restarting the app. Falls back to cache/built-in.
+          const printTemplate = await loadDefaultTemplate('80mm');
+          setInvoiceTemplate(printTemplate);
+          writeReceipt(preOpenedPrintWindow, result, shop, fullShop, printTemplate);
           printed = true;
         }
       } catch(e) {
