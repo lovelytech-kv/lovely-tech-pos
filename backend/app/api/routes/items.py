@@ -255,7 +255,56 @@ def create_category(payload:dict,user:User=Depends(require_permission('ITEM_EDIT
     if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
     name=str(payload.get('name','')).strip(); parent_id=payload.get('parent_id')
     if not name: raise HTTPException(400,'Category name is required')
-    row=Category(name=name,parent_id=parent_id or None); db.add(row); db.commit(); return {'id':str(row.id),'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}
+    if len(name) > 120: raise HTTPException(400,'Category name is too long (max 120 characters)')
+    if parent_id and not db.get(Category, parent_id): raise HTTPException(400,'Parent category not found')
+    row=Category(name=name,parent_id=parent_id or None); db.add(row); db.flush()
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='CATEGORY_CREATED',entity_type='CATEGORY',entity_id=row.id,timestamp=datetime.now(timezone.utc),after_json={'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}))
+    try: db.commit()
+    except IntegrityError: db.rollback(); raise HTTPException(409,'Category name already exists under this parent')
+    return {'id':str(row.id),'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}
+
+
+@router.put('/categories/{category_id}')
+def update_category(category_id:str,payload:dict,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
+    if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
+    row=db.get(Category,category_id)
+    if not row: raise HTTPException(404,'Category not found')
+    name=str(payload.get('name','')).strip()
+    if not name: raise HTTPException(400,'Category name is required')
+    if len(name) > 120: raise HTTPException(400,'Category name is too long (max 120 characters)')
+    parent_raw=payload.get('parent_id') or None
+    parent_id=None
+    if parent_raw:
+        if str(parent_raw)==str(row.id): raise HTTPException(400,'A category cannot be its own parent')
+        parent=db.get(Category,parent_raw)
+        if not parent: raise HTTPException(400,'Parent category not found')
+        cursor=parent; seen:set[str]=set()
+        while cursor is not None and str(cursor.id) not in seen:
+            if cursor.id==row.id: raise HTTPException(400,'Category parent would create a loop')
+            seen.add(str(cursor.id))
+            cursor=db.get(Category,cursor.parent_id) if cursor.parent_id else None
+        parent_id=parent.id
+    before={'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}
+    row.name=name; row.parent_id=parent_id; row.version += 1
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='CATEGORY_UPDATED',entity_type='CATEGORY',entity_id=row.id,timestamp=datetime.now(timezone.utc),before_json=before,after_json={'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}))
+    try: db.commit()
+    except IntegrityError: db.rollback(); raise HTTPException(409,'Category name already exists under this parent')
+    return {'id':str(row.id),'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}
+
+
+@router.delete('/categories/{category_id}')
+def delete_category(category_id:str,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
+    if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
+    row=db.get(Category,category_id)
+    if not row: raise HTTPException(404,'Category not found')
+    item_count=db.scalar(select(func.count(Item.id)).where(Item.category_id==row.id)) or 0
+    if item_count: raise HTTPException(409,f'{item_count} item(s) use this category')
+    child_count=db.scalar(select(func.count(Category.id)).where(Category.parent_id==row.id)) or 0
+    if child_count: raise HTTPException(409,f'Category has {child_count} child categor{"y" if child_count==1 else "ies"}')
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='CATEGORY_DELETED',entity_type='CATEGORY',entity_id=row.id,timestamp=datetime.now(timezone.utc),before_json={'name':row.name,'parent_id':str(row.parent_id) if row.parent_id else None}))
+    db.delete(row); db.commit()
+    return {'id':str(row.id),'deleted':True}
+
 
 @router.post('/item-types')
 def create_item_type(payload:dict,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
@@ -265,7 +314,43 @@ def create_item_type(payload:dict,user:User=Depends(require_permission('ITEM_EDI
     if len(code) > 50 or len(name) > 120: raise HTTPException(400,'Item type code or name is too long')
     if db.scalar(select(ItemType.id).where(func.lower(ItemType.code) == code.lower())):
         raise HTTPException(409,'Item type code already exists')
-    row=ItemType(code=code,name=name,is_serialized=serialized); db.add(row)
+    row=ItemType(code=code,name=name,is_serialized=serialized); db.add(row); db.flush()
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='ITEM_TYPE_CREATED',entity_type='ITEM_TYPE',entity_id=row.id,timestamp=datetime.now(timezone.utc),after_json={'code':row.code,'name':row.name,'is_serialized':row.is_serialized}))
     try: db.commit()
     except IntegrityError: db.rollback(); raise HTTPException(409,'Item type code already exists')
     return {'id':str(row.id),'code':row.code,'name':row.name,'is_serialized':row.is_serialized}
+
+
+@router.put('/item-types/{type_id}')
+def update_item_type(type_id:str,payload:dict,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
+    if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
+    row=db.get(ItemType,type_id)
+    if not row: raise HTTPException(404,'Item type not found')
+    code=str(payload.get('code',row.code)).strip(); name=str(payload.get('name',row.name)).strip()
+    serialized=bool(payload.get('is_serialized',row.is_serialized))
+    if not code or not name: raise HTTPException(400,'Item type code and name are required')
+    if len(code) > 50 or len(name) > 120: raise HTTPException(400,'Item type code or name is too long')
+    duplicate=db.scalar(select(ItemType.id).where(func.lower(ItemType.code)==code.lower(),ItemType.id!=row.id))
+    if duplicate: raise HTTPException(409,'Item type code already exists')
+    item_count=db.scalar(select(func.count(Item.id)).where(Item.item_type_id==row.id)) or 0
+    warning=None
+    if serialized != row.is_serialized and item_count:
+        warning=f'{item_count} item(s) already use this type; changing the serialized setting can affect IMEI handling.'
+    before={'code':row.code,'name':row.name,'is_serialized':row.is_serialized}
+    row.code=code; row.name=name; row.is_serialized=serialized
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='ITEM_TYPE_UPDATED',entity_type='ITEM_TYPE',entity_id=row.id,timestamp=datetime.now(timezone.utc),before_json=before,after_json={'code':row.code,'name':row.name,'is_serialized':row.is_serialized,'item_count':int(item_count)}))
+    try: db.commit()
+    except IntegrityError: db.rollback(); raise HTTPException(409,'Item type code already exists')
+    return {'id':str(row.id),'code':row.code,'name':row.name,'is_serialized':row.is_serialized,'warning':warning}
+
+
+@router.delete('/item-types/{type_id}')
+def delete_item_type(type_id:str,user:User=Depends(require_permission('ITEM_EDIT')),db:Session=Depends(db_session)):
+    if user.role.code.upper()!='ADMIN': raise HTTPException(403,'Admin only')
+    row=db.get(ItemType,type_id)
+    if not row: raise HTTPException(404,'Item type not found')
+    item_count=db.scalar(select(func.count(Item.id)).where(Item.item_type_id==row.id)) or 0
+    if item_count: raise HTTPException(409,f'{item_count} item(s) use this item type')
+    db.add(AuditLog(branch_id=user.branch_id,actor_user_id=user.id,action_type='ITEM_TYPE_DELETED',entity_type='ITEM_TYPE',entity_id=row.id,timestamp=datetime.now(timezone.utc),before_json={'code':row.code,'name':row.name,'is_serialized':row.is_serialized}))
+    db.delete(row); db.commit()
+    return {'id':str(row.id),'deleted':True}
