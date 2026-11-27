@@ -4,6 +4,7 @@ import { money } from '../../services/money';
 import { moneyInputProps } from '../../utils/numberInput';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
+import { CategoryTypeManager } from './CategoryTypeManager';
 
 type Category = { id: string; name: string; parent_id: string | null };
 type ItemType = { id: string; code: string; name: string; is_serialized: boolean };
@@ -86,7 +87,9 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   const [view, setView] = useState<ViewMode>('grid');
   const [showInactive, setShowInactive] = useState(false);
   const [modalItem, setModalItem] = useState<ItemRow | 'new' | null>(null);
+  const [masterManagerOpen, setMasterManagerOpen] = useState(false);
   const triggerRef = useRef<HTMLElement | null>(null);
+  const masterManagerTriggerRef = useRef<HTMLElement | null>(null);
 
   async function load() {
     setLoading(true);
@@ -176,6 +179,16 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
     window.setTimeout(() => triggerRef.current?.focus(), 0);
   }
 
+  function openMasterManager() {
+    masterManagerTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setMasterManagerOpen(true);
+  }
+
+  function closeMasterManager() {
+    setMasterManagerOpen(false);
+    window.setTimeout(() => masterManagerTriggerRef.current?.focus(), 0);
+  }
+
   return (
     <section className="items-page">
       <div className="glass panel page-intro rise-in">
@@ -190,6 +203,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             </p>
           </div>
           <div className="button-row">
+            {isAdmin && <button className="ghost" onClick={openMasterManager}>Manage Categories &amp; Types</button>}
             {isAdmin && <button className="primary" onClick={addItem}>+ Add Item</button>}
             <span className="feature-badge">FIFO • IMEI • BARCODE</span>
           </div>
@@ -377,6 +391,14 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           onClose={closeModal}
           onSaved={load}
           onRefreshMasters={refreshMasters}
+        />
+      )}
+
+      {masterManagerOpen && (
+        <CategoryTypeManager
+          onClose={closeMasterManager}
+          onError={onError}
+          onChanged={async () => { await refreshMasters(); }}
         />
       )}
     </section>
