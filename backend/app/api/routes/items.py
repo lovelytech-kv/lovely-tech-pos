@@ -229,6 +229,28 @@ def deactivate_item(item_id: str, user: User = Depends(require_permission('ITEM_
     return {'item_id': str(item.id), 'is_active': False}
 
 
+@router.post('/{item_id}/reactivate')
+def reactivate_item(item_id: str, user: User = Depends(require_permission('ITEM_EDIT')), db: Session = Depends(db_session)):
+    """Restore a soft-deleted item to the active master. Admin only, audited."""
+    if user.role.code.upper() != 'ADMIN':
+        raise HTTPException(403, 'Admin only')
+    item = db.scalar(select(Item).where(Item.id == item_id).with_for_update())
+    if not item:
+        raise HTTPException(404, 'Item not found')
+    if item.is_active:
+        return {'item_id': str(item.id), 'is_active': True, 'already_active': True}
+    item.is_active = True
+    item.version += 1
+    db.add(AuditLog(
+        branch_id=user.branch_id, actor_user_id=user.id, action_type='ITEM_REACTIVATED',
+        entity_type='ITEM', entity_id=item.id, timestamp=datetime.now(timezone.utc),
+        before_json={'item_code': item.item_code, 'description': item.description, 'is_active': False},
+        after_json={'is_active': True, 'needs_admin_review': item.needs_admin_review},
+    ))
+    db.commit()
+    return {'item_id': str(item.id), 'is_active': True}
+
+
 @router.post("/{item_id}/barcodes")
 def add_barcode(item_id: str, payload: BarcodeIn, user: User = Depends(require_permission("ITEM_EDIT")), db: Session = Depends(db_session)):
     item=db.scalar(select(Item).where(Item.id==item_id).with_for_update())

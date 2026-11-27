@@ -2556,3 +2556,11 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 .category-manager-type-row .category-manager-actions{margin-left:auto}
 .category-manager-advanced-toggle{white-space:nowrap}
 @media (max-width:900px){.category-manager-grid{grid-template-columns:minmax(0,1fr)}.category-manager-list{max-height:none}}
+
+/* ============ SESSION 3D-2 — REACTIVATE SOFT-DELETED ITEMS ============ */
+.inv-card-inactive .inv-card-reactivate{opacity:1;transform:none;background:var(--color-success);color:#fff;border-color:transparent}
+.inv-card-reactivate,.inv-card-reactivate:hover{background:var(--color-success);color:#fff;border-color:transparent}
+.inv-card-reactivate:hover:not(:disabled){filter:brightness(1.06);color:#fff}
+.inv-card-reactivate:disabled{opacity:.6;cursor:not-allowed}
+.items-reactivate-btn{padding:7px 11px;font-size:var(--text-xs);white-space:nowrap}
+[data-theme="dark"] .inv-card-reactivate{background:var(--color-success);color:#fff}

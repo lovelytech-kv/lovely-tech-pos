@@ -76,6 +76,7 @@ function stockFilterMatch(filter: StockFilter, stock: number | null): boolean {
 }
 
 export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError: (message: string) => void }) {
+  const modal = useModal();
   const [rows, setRows] = useState<ItemRow[]>([]);
   const [masters, setMasters] = useState<Masters>(EMPTY_MASTERS);
   const [stockMap, setStockMap] = useState<Record<string, number> | null>(null);
@@ -88,6 +89,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   const [showInactive, setShowInactive] = useState(false);
   const [modalItem, setModalItem] = useState<ItemRow | 'new' | null>(null);
   const [masterManagerOpen, setMasterManagerOpen] = useState(false);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const masterManagerTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -187,6 +189,27 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   function closeMasterManager() {
     setMasterManagerOpen(false);
     window.setTimeout(() => masterManagerTriggerRef.current?.focus(), 0);
+  }
+
+  async function reactivateItem(item: ItemRow) {
+    if (reactivatingId) return;
+    const confirmed = await modal.confirm({
+      title: 'Reactivate item?',
+      message: `“${item.description}” will be active again in the item list and POS. Stock and history are unchanged.`,
+      confirmText: 'Reactivate item',
+      cancelText: 'Keep inactive',
+    });
+    if (!confirmed) return;
+    setReactivatingId(item.item_id);
+    try {
+      await api(`/items/${item.item_id}/reactivate`, { method: 'POST' });
+      await load();
+      toast.success('Item reactivated');
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setReactivatingId(null);
+    }
   }
 
   return (
@@ -347,9 +370,21 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                   </div>
                 </button>
                 {isAdmin && (
-                  <button type="button" className="inv-card-edit" onClick={() => openItem(item)} aria-label={`Edit ${item.description}`}>
-                    <span aria-hidden="true">✎</span> Edit
-                  </button>
+                  item.is_active ? (
+                    <button type="button" className="inv-card-edit" onClick={() => openItem(item)} aria-label={`Edit ${item.description}`}>
+                      <span aria-hidden="true">✎</span> Edit
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inv-card-edit inv-card-reactivate"
+                      onClick={() => void reactivateItem(item)}
+                      disabled={reactivatingId !== null}
+                      aria-label={`Reactivate ${item.description}`}
+                    >
+                      {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                    </button>
+                  )
                 )}
               </article>
             );
@@ -376,7 +411,20 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                 <span className="items-list-category">{categoryNames.get(item.category_id) ?? 'Uncategorized'}</span>
                 <span className={`items-list-stock tone-${tone}`}>{stock === null ? '—' : `${stock} in stock`}</span>
                 <span className="items-list-price">{item.master_sale_price == null ? 'No price' : `Rs. ${money(item.master_sale_price)}`}</span>
-                {isAdmin && <button type="button" className="ghost" onClick={() => openItem(item)}>Edit</button>}
+                {isAdmin && (
+                  item.is_active ? (
+                    <button type="button" className="ghost" onClick={() => openItem(item)}>Edit</button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="primary items-reactivate-btn"
+                      onClick={() => void reactivateItem(item)}
+                      disabled={reactivatingId !== null}
+                    >
+                      {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                    </button>
+                  )
+                )}
               </div>
             );
           })}
@@ -467,6 +515,7 @@ function ItemFormModal({
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [serverError, setServerError] = useState('');
   const [deactivating, setDeactivating] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
   const [nameCheck, setNameCheck] = useState<{ value: string; exists: boolean; checking: boolean }>({ value: '', exists: false, checking: false });
   const nameCheckSeq = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -751,6 +800,28 @@ function ItemFormModal({
       toast.error((err as Error).message);
     } finally {
       setDeactivating(false);
+    }
+  }
+
+  async function reactivate() {
+    if (!item || reactivating || busy) return;
+    const confirmed = await modal.confirm({
+      title: 'Reactivate item?',
+      message: 'The item will return to the item list and POS. Stock and sales history are unchanged.',
+      confirmText: 'Reactivate item',
+      cancelText: 'Keep inactive',
+    });
+    if (!confirmed) return;
+    setReactivating(true);
+    try {
+      await api(`/items/${item.item_id}/reactivate`, { method: 'POST' });
+      toast.success('Item reactivated');
+      await onSaved();
+      onClose();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setReactivating(false);
     }
   }
 
@@ -1148,6 +1219,11 @@ function ItemFormModal({
           {item && !readOnly && item.is_active && (
             <button type="button" className="danger-button" onClick={() => void deactivate()} disabled={busy || deactivating}>
               {deactivating ? 'Deactivating…' : 'Deactivate item'}
+            </button>
+          )}
+          {item && !readOnly && !item.is_active && (
+            <button type="button" className="primary inv-card-reactivate" onClick={() => void reactivate()} disabled={busy || reactivating}>
+              {reactivating ? 'Reactivating…' : 'Reactivate item'}
             </button>
           )}
           <button type="button" className="btn-secondary" onClick={() => void requestClose()} disabled={busy}>
