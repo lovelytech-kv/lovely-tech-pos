@@ -125,6 +125,7 @@ def _out(item, barcodes):
     return {"item_id": str(item.id), "item_code": item.item_code, "description": item.description,
             "brand": item.brand, "model": item.model, "compatible_models": item.compatible_models, "category_id": str(item.category_id),
             "item_type_id": str(item.item_type_id), "master_sale_price": item.master_sale_price,
+            "low_stock_threshold": item.low_stock_threshold,
             "version": item.version, "is_active": item.is_active,
             "barcodes": [b.barcode for b in barcodes],
             "warranty_default": (
@@ -156,7 +157,7 @@ def create_item(payload: ItemCreateIn, user: User = Depends(require_permission("
         raise HTTPException(409, 'Item code already exists')
     item = Item(item_code=code, description=description, brand=payload.brand, model=payload.model, compatible_models=(payload.compatible_models or None),
                 category_id=payload.category_id, item_type_id=payload.item_type_id,
-                master_sale_price=payload.master_sale_price)
+                master_sale_price=payload.master_sale_price, low_stock_threshold=payload.low_stock_threshold)
     db.add(item); db.flush()
     if payload.barcode:
         db.add(ItemBarcode(item_id=item.id, barcode=payload.barcode.strip(), is_primary=True))
@@ -179,13 +180,16 @@ def update_item(item_id: str, payload: ItemUpdateIn, user: User = Depends(requir
         raise HTTPException(422, "Item with this name already exists")
     before = {"description": item.description, "brand": item.brand, "model": item.model,
               "category_id": str(item.category_id), "item_type_id": str(item.item_type_id),
-              "master_sale_price": str(item.master_sale_price) if item.master_sale_price is not None else None}
+              "master_sale_price": str(item.master_sale_price) if item.master_sale_price is not None else None,
+              "low_stock_threshold": item.low_stock_threshold}
     item.description = description; item.brand = payload.brand; item.model = payload.model; item.compatible_models = (payload.compatible_models or None)
     item.category_id = payload.category_id; item.item_type_id = payload.item_type_id
-    item.master_sale_price = payload.master_sale_price; item.version += 1
+    item.master_sale_price = payload.master_sale_price
+    item.low_stock_threshold = payload.low_stock_threshold
+    item.version += 1
     db.add(AuditLog(branch_id=user.branch_id, actor_user_id=user.id, action_type="ITEM_EDITED",
                     entity_type="ITEM", entity_id=item.id, timestamp=datetime.now(timezone.utc),
-                    before_json=before, after_json={"version": item.version}))
+                    before_json=before, after_json={"version": item.version, "low_stock_threshold": item.low_stock_threshold}))
     db.commit()
     bars=list(db.scalars(select(ItemBarcode).where(ItemBarcode.item_id == item.id)).all())
     return _out(item,bars)
@@ -227,6 +231,28 @@ def deactivate_item(item_id: str, user: User = Depends(require_permission('ITEM_
     ))
     db.commit()
     return {'item_id': str(item.id), 'is_active': False}
+
+
+@router.post('/{item_id}/reactivate')
+def reactivate_item(item_id: str, user: User = Depends(require_permission('ITEM_EDIT')), db: Session = Depends(db_session)):
+    """Restore a soft-deleted item to the active master. Admin only, audited."""
+    if user.role.code.upper() != 'ADMIN':
+        raise HTTPException(403, 'Admin only')
+    item = db.scalar(select(Item).where(Item.id == item_id).with_for_update())
+    if not item:
+        raise HTTPException(404, 'Item not found')
+    if item.is_active:
+        return {'item_id': str(item.id), 'is_active': True, 'already_active': True}
+    item.is_active = True
+    item.version += 1
+    db.add(AuditLog(
+        branch_id=user.branch_id, actor_user_id=user.id, action_type='ITEM_REACTIVATED',
+        entity_type='ITEM', entity_id=item.id, timestamp=datetime.now(timezone.utc),
+        before_json={'item_code': item.item_code, 'description': item.description, 'is_active': False},
+        after_json={'is_active': True, 'needs_admin_review': item.needs_admin_review},
+    ))
+    db.commit()
+    return {'item_id': str(item.id), 'is_active': True}
 
 
 @router.post("/{item_id}/barcodes")

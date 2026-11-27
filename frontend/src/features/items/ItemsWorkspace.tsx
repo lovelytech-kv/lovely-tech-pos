@@ -4,6 +4,7 @@ import { money } from '../../services/money';
 import { moneyInputProps } from '../../utils/numberInput';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
+import { CategoryTypeManager } from './CategoryTypeManager';
 
 type Category = { id: string; name: string; parent_id: string | null };
 type ItemType = { id: string; code: string; name: string; is_serialized: boolean };
@@ -19,6 +20,7 @@ type ItemRow = {
   category_id: string;
   item_type_id: string;
   master_sale_price: string | number | null;
+  low_stock_threshold: number;
   version: number;
   is_active: boolean;
   barcodes: string[];
@@ -30,7 +32,7 @@ type StockRow = { item_id: string; stock: string | number };
 type StockFilter = 'ALL' | 'IN' | 'LOW' | 'OUT';
 type ViewMode = 'grid' | 'list';
 
-const LOW_STOCK_MAX = 10;
+const DEFAULT_LOW_STOCK = 5;
 const TILE_HUES = [6, 28, 45, 88, 148, 192, 216, 262, 312];
 const EMPTY_MASTERS: Masters = { categories: [], item_types: [] };
 
@@ -52,29 +54,35 @@ function numericStock(value: string | number | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function stockTone(stock: number | null): 'ok' | 'low' | 'out' | 'unknown' {
+function lowStockThreshold(item: Pick<ItemRow, 'low_stock_threshold'>): number {
+  const value = Number(item.low_stock_threshold);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : DEFAULT_LOW_STOCK;
+}
+
+function stockTone(stock: number | null, threshold: number): 'ok' | 'low' | 'out' | 'unknown' {
   if (stock === null) return 'unknown';
   if (stock <= 0) return 'out';
-  if (stock <= LOW_STOCK_MAX) return 'low';
+  if (stock <= threshold) return 'low';
   return 'ok';
 }
 
-function stockLabel(stock: number | null): string {
+function stockLabel(stock: number | null, threshold: number): string {
   if (stock === null) return '—';
   if (stock <= 0) return 'Out';
-  if (stock <= LOW_STOCK_MAX) return `${stock} left`;
+  if (stock <= threshold) return `${stock} left`;
   return String(stock);
 }
 
-function stockFilterMatch(filter: StockFilter, stock: number | null): boolean {
+function stockFilterMatch(filter: StockFilter, stock: number | null, threshold: number): boolean {
   if (filter === 'ALL') return true;
   if (stock === null) return false;
   if (filter === 'OUT') return stock <= 0;
-  if (filter === 'LOW') return stock > 0 && stock <= LOW_STOCK_MAX;
-  return stock > LOW_STOCK_MAX;
+  if (filter === 'LOW') return stock > 0 && stock <= threshold;
+  return stock > threshold;
 }
 
 export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError: (message: string) => void }) {
+  const modal = useModal();
   const [rows, setRows] = useState<ItemRow[]>([]);
   const [masters, setMasters] = useState<Masters>(EMPTY_MASTERS);
   const [stockMap, setStockMap] = useState<Record<string, number> | null>(null);
@@ -86,7 +94,10 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
   const [view, setView] = useState<ViewMode>('grid');
   const [showInactive, setShowInactive] = useState(false);
   const [modalItem, setModalItem] = useState<ItemRow | 'new' | null>(null);
+  const [masterManagerOpen, setMasterManagerOpen] = useState(false);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  const masterManagerTriggerRef = useRef<HTMLElement | null>(null);
 
   async function load() {
     setLoading(true);
@@ -137,7 +148,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
       if (!item.is_active && !(isAdmin && showInactive)) return false;
       if (categoryId && item.category_id !== categoryId) return false;
       const stock = stockMap && item.item_id in stockMap ? stockMap[item.item_id] : null;
-      if (!stockFilterMatch(stockFilter, stock)) return false;
+      if (!stockFilterMatch(stockFilter, stock, lowStockThreshold(item))) return false;
       if (!term) return true;
       const haystack = [
         item.description,
@@ -176,6 +187,37 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
     window.setTimeout(() => triggerRef.current?.focus(), 0);
   }
 
+  function openMasterManager() {
+    masterManagerTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setMasterManagerOpen(true);
+  }
+
+  function closeMasterManager() {
+    setMasterManagerOpen(false);
+    window.setTimeout(() => masterManagerTriggerRef.current?.focus(), 0);
+  }
+
+  async function reactivateItem(item: ItemRow) {
+    if (reactivatingId) return;
+    const confirmed = await modal.confirm({
+      title: 'Reactivate item?',
+      message: `“${item.description}” will be active again in the item list and POS. Stock and history are unchanged.`,
+      confirmText: 'Reactivate item',
+      cancelText: 'Keep inactive',
+    });
+    if (!confirmed) return;
+    setReactivatingId(item.item_id);
+    try {
+      await api(`/items/${item.item_id}/reactivate`, { method: 'POST' });
+      await load();
+      toast.success('Item reactivated');
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setReactivatingId(null);
+    }
+  }
+
   return (
     <section className="items-page">
       <div className="glass panel page-intro rise-in">
@@ -190,6 +232,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             </p>
           </div>
           <div className="button-row">
+            {isAdmin && <button className="ghost" onClick={openMasterManager}>Manage Categories &amp; Types</button>}
             {isAdmin && <button className="primary" onClick={addItem}>+ Add Item</button>}
             <span className="feature-badge">FIFO • IMEI • BARCODE</span>
           </div>
@@ -231,8 +274,8 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           title={stockMap === null ? 'Stock levels are unavailable for this account' : undefined}
         >
           <option value="ALL">All stock</option>
-          <option value="IN">In stock (11+)</option>
-          <option value="LOW">Low stock (1–10)</option>
+          <option value="IN">In stock</option>
+          <option value="LOW">Low stock (at or below alert)</option>
           <option value="OUT">Out of stock</option>
         </select>
 
@@ -312,7 +355,11 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
         <div className="items-grid">
           {filtered.map((item) => {
             const stock = stockMap && item.item_id in stockMap ? stockMap[item.item_id] : null;
-            const tone = stockTone(stock);
+            const threshold = lowStockThreshold(item);
+            const tone = stockTone(stock, threshold);
+            const stockTitle = stock === null
+              ? 'Stock unavailable'
+              : `${stock} unit${stock === 1 ? '' : 's'} in stock · low stock threshold: ${threshold}${stock > 0 && stock <= threshold ? ` · Low stock alert (≤${threshold})` : ''}`;
             const tileStyle = { '--tile-h': String(tileHue(item.category_id)) } as CSSProperties;
             const categoryName = categoryNames.get(item.category_id) ?? 'Uncategorized';
             return (
@@ -321,8 +368,8 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                   <div className="inv-card-media" style={tileStyle}>
                     <span className="inv-card-initial" aria-hidden="true">{initialOf(item.description)}</span>
                     {!item.is_active && <span className="status-badge status-danger inv-inactive-badge">INACTIVE</span>}
-                    <span className={`inv-stock-chip tone-${tone}`} title={stock === null ? 'Stock unavailable' : `${stock} in stock`}>
-                      {stockLabel(stock)}
+                    <span className={`inv-stock-chip tone-${tone}`} title={stockTitle}>
+                      {stockLabel(stock, threshold)}
                     </span>
                     {tone === 'out' && <span className="inv-card-out">Out of stock</span>}
                   </div>
@@ -333,9 +380,21 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                   </div>
                 </button>
                 {isAdmin && (
-                  <button type="button" className="inv-card-edit" onClick={() => openItem(item)} aria-label={`Edit ${item.description}`}>
-                    <span aria-hidden="true">✎</span> Edit
-                  </button>
+                  item.is_active ? (
+                    <button type="button" className="inv-card-edit" onClick={() => openItem(item)} aria-label={`Edit ${item.description}`}>
+                      <span aria-hidden="true">✎</span> Edit
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inv-card-edit inv-card-reactivate"
+                      onClick={() => void reactivateItem(item)}
+                      disabled={reactivatingId !== null}
+                      aria-label={`Reactivate ${item.description}`}
+                    >
+                      {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                    </button>
+                  )
                 )}
               </article>
             );
@@ -347,7 +406,11 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
         <div className="glass panel items-list">
           {filtered.map((item) => {
             const stock = stockMap && item.item_id in stockMap ? stockMap[item.item_id] : null;
-            const tone = stockTone(stock);
+            const threshold = lowStockThreshold(item);
+            const tone = stockTone(stock, threshold);
+            const stockTitle = stock === null
+              ? 'Stock unavailable'
+              : `${stock} unit${stock === 1 ? '' : 's'} in stock · low stock threshold: ${threshold}`;
             return (
               <div key={item.item_id} className="items-list-row">
                 <button type="button" className="items-list-main" onClick={() => openItem(item)}>
@@ -360,9 +423,22 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                   </span>
                 </button>
                 <span className="items-list-category">{categoryNames.get(item.category_id) ?? 'Uncategorized'}</span>
-                <span className={`items-list-stock tone-${tone}`}>{stock === null ? '—' : `${stock} in stock`}</span>
+                <span className={`items-list-stock tone-${tone}`} title={stockTitle}>{stock === null ? '—' : `${stock} in stock`}</span>
                 <span className="items-list-price">{item.master_sale_price == null ? 'No price' : `Rs. ${money(item.master_sale_price)}`}</span>
-                {isAdmin && <button type="button" className="ghost" onClick={() => openItem(item)}>Edit</button>}
+                {isAdmin && (
+                  item.is_active ? (
+                    <button type="button" className="ghost" onClick={() => openItem(item)}>Edit</button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="primary items-reactivate-btn"
+                      onClick={() => void reactivateItem(item)}
+                      disabled={reactivatingId !== null}
+                    >
+                      {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                    </button>
+                  )
+                )}
               </div>
             );
           })}
@@ -379,6 +455,14 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           onRefreshMasters={refreshMasters}
         />
       )}
+
+      {masterManagerOpen && (
+        <CategoryTypeManager
+          onClose={closeMasterManager}
+          onError={onError}
+          onChanged={async () => { await refreshMasters(); }}
+        />
+      )}
     </section>
   );
 }
@@ -391,6 +475,7 @@ type ItemFormState = {
   model: string;
   compatible_models: string;
   master_sale_price: string;
+  low_stock_threshold: string;
   barcode: string;
   warranty_type: string;
   duration_value: string;
@@ -406,6 +491,7 @@ function buildInitialState(item: ItemRow | null): ItemFormState {
     model: item?.model ?? '',
     compatible_models: item?.compatible_models ?? '',
     master_sale_price: item?.master_sale_price == null ? '' : String(item.master_sale_price),
+    low_stock_threshold: String(item?.low_stock_threshold ?? DEFAULT_LOW_STOCK),
     barcode: '',
     warranty_type: item?.warranty_default?.warranty_type ?? 'NONE',
     duration_value: item?.warranty_default?.duration_value == null ? '' : String(item.warranty_default.duration_value),
@@ -445,6 +531,7 @@ function ItemFormModal({
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [serverError, setServerError] = useState('');
   const [deactivating, setDeactivating] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
   const [nameCheck, setNameCheck] = useState<{ value: string; exists: boolean; checking: boolean }>({ value: '', exists: false, checking: false });
   const nameCheckSeq = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -458,6 +545,7 @@ function ItemFormModal({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newTypeCode, setNewTypeCode] = useState('');
   const [newTypeCodeTouched, setNewTypeCodeTouched] = useState(false);
+  const [newTypeAdvancedOpen, setNewTypeAdvancedOpen] = useState(false);
   const [newTypeName, setNewTypeName] = useState('');
   const [newTypeSerialized, setNewTypeSerialized] = useState(false);
   const [masterBusy, setMasterBusy] = useState(false);
@@ -600,6 +688,13 @@ function ItemFormModal({
             ? 'Amount is too large'
             : null,
     barcode: form.barcode.trim().length > 100 ? 'Maximum 100 characters' : null,
+    low_stock_threshold: !form.low_stock_threshold.trim()
+      ? 'Low stock alert is required'
+      : !/^\d+$/.test(form.low_stock_threshold.trim())
+        ? 'Enter a whole number'
+        : Number(form.low_stock_threshold) > 1000000
+          ? 'Threshold is too large'
+          : null,
     warranty:
       (form.warranty_type === 'DAYS' || form.warranty_type === 'MONTHS') && !form.duration_value.trim()
         ? 'Warranty duration is required'
@@ -635,7 +730,7 @@ function ItemFormModal({
     setSubmitAttempted(true);
     setTouched({
       description: true, category_id: true, item_type_id: true,
-      master_sale_price: true, barcode: true, warranty: true,
+      master_sale_price: true, barcode: true, warranty: true, low_stock_threshold: true,
     });
     if (!canSave) {
       toast.error('Please fix the highlighted fields');
@@ -650,6 +745,7 @@ function ItemFormModal({
       model: form.model.trim() || null,
       compatible_models: form.compatible_models.trim() || null,
       master_sale_price: priceValue.endsWith('.') ? priceValue.slice(0, -1) : priceValue,
+      low_stock_threshold: Number(form.low_stock_threshold),
       version: item?.version,
     };
 
@@ -731,6 +827,28 @@ function ItemFormModal({
     }
   }
 
+  async function reactivate() {
+    if (!item || reactivating || busy) return;
+    const confirmed = await modal.confirm({
+      title: 'Reactivate item?',
+      message: 'The item will return to the item list and POS. Stock and sales history are unchanged.',
+      confirmText: 'Reactivate item',
+      cancelText: 'Keep inactive',
+    });
+    if (!confirmed) return;
+    setReactivating(true);
+    try {
+      await api(`/items/${item.item_id}/reactivate`, { method: 'POST' });
+      toast.success('Item reactivated');
+      await onSaved();
+      onClose();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setReactivating(false);
+    }
+  }
+
   async function addVariant() {    if (!item || !variantName.trim() || !variantValue.trim() || variantBusy) return;
     setVariantBusy(true);
     try {
@@ -757,6 +875,7 @@ function ItemFormModal({
     } else {
       setNewTypeCode('');
       setNewTypeCodeTouched(false);
+      setNewTypeAdvancedOpen(false);
       setNewTypeName('');
       setNewTypeSerialized(false);
     }
@@ -769,6 +888,7 @@ function ItemFormModal({
     setNewCategoryName('');
     setNewTypeCode('');
     setNewTypeCodeTouched(false);
+    setNewTypeAdvancedOpen(false);
     setNewTypeName('');
     setNewTypeSerialized(false);
   }
@@ -836,6 +956,7 @@ function ItemFormModal({
       patch('item_type_id', created.id);
       setNewTypeCode('');
       setNewTypeCodeTouched(false);
+      setNewTypeAdvancedOpen(false);
       setNewTypeName('');
       setNewTypeSerialized(false);
       setMasterModal(null);
@@ -996,6 +1117,29 @@ function ItemFormModal({
 
               <div className="item-form-row">
                 <div className="item-field">
+                  <label htmlFor="item-low-stock">Low stock alert (units)</label>
+                  <input
+                    id="item-low-stock"
+                    type="text"
+                    inputMode="numeric"
+                    value={form.low_stock_threshold}
+                    onChange={(event) => { if (/^\d*$/.test(event.target.value)) patch('low_stock_threshold', event.target.value); }}
+                    onBlur={() => markTouched('low_stock_threshold')}
+                    maxLength={7}
+                    disabled={readOnly}
+                    placeholder="5"
+                    className={showError('low_stock_threshold') ? 'input-error' : ''}
+                    aria-invalid={showError('low_stock_threshold') || undefined}
+                    aria-describedby={showError('low_stock_threshold') ? 'item-low-stock-error' : 'item-low-stock-hint'}
+                  />
+                  {showError('low_stock_threshold')
+                    ? <span className="item-field-error" id="item-low-stock-error">{errors.low_stock_threshold}</span>
+                    : <small className="item-hint" id="item-low-stock-hint">Stock at or below this number shows a low-stock warning in the grid. Use 0 to disable.</small>}
+                </div>
+              </div>
+
+              <div className="item-form-row">
+                <div className="item-field">
                   <label htmlFor="item-brand">Brand</label>
                   <input
                     id="item-brand"
@@ -1124,6 +1268,11 @@ function ItemFormModal({
               {deactivating ? 'Deactivating…' : 'Deactivate item'}
             </button>
           )}
+          {item && !readOnly && !item.is_active && (
+            <button type="button" className="primary inv-card-reactivate" onClick={() => void reactivate()} disabled={busy || reactivating}>
+              {reactivating ? 'Reactivating…' : 'Reactivate item'}
+            </button>
+          )}
           <button type="button" className="btn-secondary" onClick={() => void requestClose()} disabled={busy}>
             {readOnly ? 'Close' : 'Cancel'}
           </button>
@@ -1193,20 +1342,30 @@ function ItemFormModal({
                     autoFocus
                   />
                 </label>
-                <label className="wide-field">Code
-                  <input
-                    value={newTypeCode}
-                    onChange={(event) => { setNewTypeCode(event.target.value); setNewTypeCodeTouched(true); }}
-                    maxLength={50}
-                    placeholder="Auto-generated from name"
-                    aria-label="New item type code"
-                  />
-                </label>
+                <div className="item-label-row" style={{ marginTop: 'var(--space-2)' }}>
+                  <button
+                    type="button"
+                    className="ghost category-manager-advanced-toggle"
+                    aria-expanded={newTypeAdvancedOpen}
+                    onClick={() => setNewTypeAdvancedOpen((value) => !value)}
+                  >{newTypeAdvancedOpen ? 'Hide code' : 'Advanced: edit code'}</button>
+                </div>
+                {newTypeAdvancedOpen && (
+                  <label className="wide-field">Code (auto from name)
+                    <input
+                      value={newTypeCode}
+                      onChange={(event) => { setNewTypeCode(event.target.value); setNewTypeCodeTouched(true); }}
+                      maxLength={50}
+                      placeholder="Auto-generated from name"
+                      aria-label="New item type code"
+                    />
+                  </label>
+                )}
                 <label className="check">
                   <input type="checkbox" checked={newTypeSerialized} onChange={(event) => setNewTypeSerialized(event.target.checked)} />
                   Serialized / IMEI (one unique serial per unit)
                 </label>
-                <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>The code is generated from the name unless you edit it.</p>
+                <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>The code is generated from the name. Open Advanced only when you need a specific code.</p>
               </>
             )}
 

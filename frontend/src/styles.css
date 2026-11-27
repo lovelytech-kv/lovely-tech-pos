@@ -661,10 +661,10 @@ input:focus:not(:focus-visible) {
 .sales-totals .total-row .amount { font-size: var(--text-2xl); font-variant-numeric: tabular-nums; color: var(--accent); }
 
 .sales-payment { margin-top: var(--space-4); }
-.sales-payment .payment-method { padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); margin-bottom: var(--space-2); background: var(--surface-2); }
-.sales-payment .payment-method.active { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.04); }
-.sales-payment .payment-method label { display: flex; justify-content: space-between; align-items: center; font-size: var(--text-sm); font-weight: var(--fw-semibold); margin-bottom: var(--space-2); }
-.sales-payment .payment-method input { width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--text-lg); font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; text-align: right; }
+.sales-right .payment-method { padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); margin-bottom: var(--space-2); background: var(--surface-2); }
+.sales-right .payment-method.active { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.04); }
+.sales-right .payment-method label { display: flex; justify-content: space-between; align-items: center; font-size: var(--text-sm); font-weight: var(--fw-semibold); margin-bottom: var(--space-2); }
+.sales-right .payment-method input { width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--text-lg); font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; text-align: right; }
 
 .sales-paid-status { display: flex; justify-content: space-between; align-items: center; padding: var(--space-3); margin-top: var(--space-2); background: var(--color-info-bg); border: 1px solid rgba(37, 99, 235, 0.2); border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: var(--fw-semibold); }
 .sales-paid-status.complete { background: var(--color-success-bg); border-color: rgba(22, 163, 74, 0.25); color: var(--color-success); }
@@ -2196,7 +2196,7 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   border-radius: 999px; font-size: var(--text-xs); font-weight: var(--fw-bold);
   font-variant-numeric: tabular-nums; backdrop-filter: blur(4px);
 }
-.inv-stock-chip.tone-ok { background: rgba(var(--accent-rgb), 0.14); color: var(--accent); border-color: rgba(var(--accent-rgb), 0.28); }
+.inv-stock-chip.tone-ok { background: rgba(22, 163, 74, 0.14); color: var(--color-success); border-color: rgba(22, 163, 74, 0.3); }
 .inv-stock-chip.tone-low { background: rgba(202, 138, 4, 0.16); color: var(--color-warning); border-color: rgba(202, 138, 4, 0.3); }
 .inv-stock-chip.tone-out { background: rgba(220, 38, 38, 0.16); color: var(--color-danger); border-color: rgba(220, 38, 38, 0.32); }
 .inv-stock-chip.tone-unknown { background: rgba(120, 120, 130, 0.14); color: var(--muted); border-color: var(--line); }
@@ -2423,7 +2423,7 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 :root[data-theme="dark"] .inv-stock-chip.tone-out,
 :root[data-theme="dark"] .items-list-stock.tone-out { color: #f87171; }
 :root[data-theme="dark"] .inv-stock-chip.tone-ok,
-:root[data-theme="dark"] .items-list-stock.tone-ok { color: var(--accent); }
+:root[data-theme="dark"] .items-list-stock.tone-ok { color: #4ade80; }
 
 /* ── Purchases workspace ─────────────────────────────────────────── */
 .purchases-v2 { display: grid; gap: 1rem; }
@@ -2481,7 +2481,7 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 .item-inline-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .item-inline-row input:not([type="checkbox"]) { flex: 1; min-width: 110px; }
 
-/* ===== Session 3C-2 � Invoice template editor ===== */
+/* ===== Session 3C-2  —  Invoice template editor ===== */
 .invoice-template-card{grid-column:1/-1}
 .invoice-editor-layout{display:grid;grid-template-columns:minmax(200px,250px) minmax(0,1fr);gap:20px;align-items:start}
 .invoice-template-list{display:grid;gap:8px;align-content:start}
@@ -2525,3 +2525,152 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 .invoice-editor-head p{margin:.3rem 0 0;font-size:.78rem;max-width:70ch}
 .invoice-editor-head .modal-close{position:static;flex:0 0 auto}
 @media (max-width:760px){.invoice-editor-shell{padding:.9rem}}
+
+/* ============ SESSION 3D-2 — CATEGORY / ITEM TYPE MANAGER MODAL ============ */
+.category-manager-modal{width:min(1000px,100%);max-height:90vh;display:flex;flex-direction:column}
+.category-manager-body{overflow:auto;padding-right:2px}
+.category-manager-loading{display:grid;place-items:center;gap:var(--space-3);padding:var(--space-8) var(--space-4);color:var(--muted);font-size:var(--text-sm)}
+.category-manager-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:var(--space-4)}
+.category-manager-section{display:grid;gap:var(--space-3);align-content:start;padding:var(--space-4);border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface-2)}
+.category-manager-section h4{margin:0;font-size:var(--text-base);font-weight:var(--fw-bold);color:var(--text)}
+.category-manager-section p{margin:var(--space-1) 0 0}
+.category-manager-form{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
+.category-manager-form>input{flex:1 1 160px;min-width:0;padding:10px 11px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface);color:var(--text);font-size:var(--text-base)}
+.category-manager-form>input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--accent-rgb),0.12)}
+.category-manager-form .primary,.category-manager-form .ghost{padding:9px 13px;font-size:var(--text-sm)}
+.category-manager-advanced{flex:1 1 100%;display:grid;gap:var(--space-1);margin-top:var(--space-1);padding:var(--space-3);border:1px dashed var(--line);border-radius:var(--radius-md);background:var(--surface)}
+.category-manager-advanced label{font-size:var(--text-xs);font-weight:var(--fw-semibold);color:var(--muted)}
+.category-manager-advanced input{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-family:var(--font-mono);font-size:var(--text-sm)}
+.category-manager-advanced input:focus{outline:none;border-color:var(--accent)}
+.category-manager-list{display:grid;gap:var(--space-1);max-height:46vh;overflow:auto}
+.category-manager-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:var(--space-2) 0;border-bottom:1px solid var(--line);font-size:var(--text-sm);min-width:0}
+.category-manager-row:last-child{border-bottom:0}
+.category-manager-name{display:flex;align-items:center;gap:var(--space-2);min-width:0;overflow-wrap:anywhere;color:var(--text)}
+.category-manager-code{font-family:var(--font-mono);font-size:var(--text-xs);font-weight:var(--fw-semibold);padding:2px 6px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--line);color:var(--accent)}
+.category-manager-tag{font-size:10px;letter-spacing:.06em;padding:2px 6px;border-radius:999px;background:var(--color-info-bg);color:var(--color-info);font-weight:var(--fw-semibold)}
+.category-manager-actions{display:inline-flex;align-items:center;gap:var(--space-1);flex:0 0 auto}
+.category-manager-actions button{padding:6px 10px;font-size:var(--text-xs);border-radius:var(--radius-sm)}
+.category-manager-row>input,.category-manager-row>select{flex:1 1 auto;min-width:0;max-width:220px;padding:7px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:var(--text-sm)}
+.category-manager-row>input:focus,.category-manager-row>select:focus{outline:none;border-color:var(--accent)}
+.category-manager-type-row{flex-wrap:wrap;justify-content:flex-start}
+.category-manager-type-row .category-manager-actions{margin-left:auto}
+.category-manager-advanced-toggle{white-space:nowrap}
+@media (max-width:900px){.category-manager-grid{grid-template-columns:minmax(0,1fr)}.category-manager-list{max-height:none}}
+
+/* ============ SESSION 3D-2 — REACTIVATE SOFT-DELETED ITEMS ============ */
+.inv-card-inactive .inv-card-reactivate{opacity:1;transform:none;background:var(--color-success);color:#fff;border-color:transparent}
+.inv-card-reactivate,.inv-card-reactivate:hover{background:var(--color-success);color:#fff;border-color:transparent}
+.inv-card-reactivate:hover:not(:disabled){filter:brightness(1.06);color:#fff}
+.inv-card-reactivate:disabled{opacity:.6;cursor:not-allowed}
+.items-reactivate-btn{padding:7px 11px;font-size:var(--text-xs);white-space:nowrap}
+[data-theme="dark"] .inv-card-reactivate{background:var(--color-success);color:#fff}
+
+/* ============ SESSION 3D-2 — MODERN SVG SIDEBAR ICONS ============ */
+.nav-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px;text-align:center;color:#9a9aa0}
+.nav-svg{display:block;width:18px;height:18px;transition:transform var(--transition-fast)}
+.v0-nav button{transition:background var(--transition-fast),color var(--transition-fast),transform var(--transition-fast)}
+.v0-nav button:hover{transform:translateY(-1px)}
+.v0-nav button:hover .nav-icon{color:inherit}
+.v0-nav button:hover .nav-svg{transform:scale(1.06)}
+.v0-nav button.active .nav-icon{color:var(--accent)}
+.v0-sidebar.is-collapsed .nav-icon{width:20px;flex-basis:20px;font-size:inherit}
+.v0-sidebar-toggle .nav-svg{width:16px;height:16px}
+:root[data-theme="dark"] .nav-icon{color:#8b8f98}
+:root[data-theme="dark"] .v0-nav button:hover .nav-icon{color:#fff}
+:root[data-theme="dark"] .v0-nav button.active .nav-icon{color:var(--accent)}
+
+/* ============ SESSION 3D-2 — POS SALES SCREEN POLISH ============ */
+.sales-panel-header h2{font-size:var(--text-xl)}
+.sales-panel-header h3{font-size:var(--text-lg)}
+.sales-customer-bar{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) 0;border-bottom:1px solid var(--line);margin-bottom:var(--space-2);flex-wrap:wrap}
+.sales-customer-label{margin:0}
+.sales-customer-chip{display:inline-flex;align-items:center;gap:4px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 10px;font-size:var(--text-sm);max-width:100%}
+.sales-customer-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sales-customer-clear{background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:var(--text-base);line-height:1;padding:2px 6px}
+.sales-customer-clear:hover{color:var(--color-danger)}
+.sales-customer-walkin{font-size:var(--text-sm)}
+.sales-customer-add{margin-left:auto;padding:7px 11px;font-size:var(--text-xs)}
+.sales-clear-btn{padding:6px 11px;font-size:var(--text-xs);min-height:30px}
+.sales-print-btn{padding:var(--space-2) var(--space-3);background:var(--color-success);color:#fff;border:0;border-radius:var(--radius-sm);cursor:pointer;font-weight:var(--fw-semibold);white-space:nowrap;min-height:36px}
+.sales-print-btn:hover{filter:brightness(1.06)}
+.sales-last-sale{display:flex;justify-content:space-between;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+.sales-cart-empty{display:grid;justify-items:center;gap:var(--space-1);text-align:center;padding:var(--space-6) var(--space-3);color:var(--muted);font-size:var(--text-base)}
+.sales-cart-empty b{color:var(--text);font-size:var(--text-md);font-weight:var(--fw-semibold)}
+.sales-cart-empty-icon{display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted);margin-bottom:var(--space-1)}
+.sales-cart-empty-icon .nav-svg{width:22px;height:22px}
+.sales-section-label{font-size:var(--text-xs);font-weight:var(--fw-bold);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sales-summary-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-2)}
+.sales-summary-count{font-size:var(--text-xs);color:var(--muted)}
+.sales-totals .total-row .amount{font-size:var(--text-3xl);font-weight:var(--fw-bold);letter-spacing:-.02em}
+.sales-cart-line .line-meta{font-size:var(--text-xs);color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.sales-cart-line .line-name{font-size:var(--text-md)}
+.sales-cart-line .line-total{font-size:var(--text-md)}
+.sales-complete-btn{min-height:56px;font-size:var(--text-xl);display:flex;align-items:center;justify-content:center;gap:var(--space-3)}
+.sales-complete-hint kbd{font-family:var(--font-mono);font-size:var(--text-xs);padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff;font-weight:var(--fw-medium)}
+.sales-right .payment-method label span{font-size:var(--text-xs);color:var(--muted);font-weight:var(--fw-medium)}
+[data-theme="dark"] .sales-cart-empty-icon{background:var(--surface-2);border-color:var(--line)}
+.sales-complete-btn:disabled .sales-complete-hint kbd{background:rgba(0,0,0,.05);border-color:var(--line);color:var(--muted)}
+
+/* ============ SESSION 3D-2 — CROSS-TAB DESIGN CONSISTENCY ============ */
+/* Audit result: legacy tabs (Stock, Reports, Expenses, Admin, Documents, Day End,
+   Returns, Warranty) used hard-coded 9-11px padding / 9px radii / 10-11px type,
+   while newer tabs (POS, Items, Purchases, Sales History) already use tokens.
+   The rules below normalise the shared primitives without changing layout logic. */
+
+/* Card padding: legacy .panel 20px -> 16px (matches .sales-panel / item toolbar). */
+.panel { padding: var(--space-4); }
+
+/* Page containers used by tab workspaces. */
+.purchases-page, .items-page, .admin-page, .report-page { gap: var(--space-4); }
+
+/* Section headings: one scale for direct panel headings. */
+.glass.panel > h2, .panel > h2 {
+  font-size: var(--text-xl); font-weight: var(--fw-bold); letter-spacing: -.02em;
+  margin: 0 0 var(--space-2);
+}
+.glass.panel > h3, .panel > h3 {
+  font-size: var(--text-lg); font-weight: var(--fw-semibold); letter-spacing: -.015em;
+  margin: 0 0 var(--space-2);
+}
+.glass.panel > h4, .panel > h4 {
+  font-size: var(--text-base); font-weight: var(--fw-semibold);
+  margin: var(--space-3) 0 var(--space-2);
+}
+.section-head h2, .section-head h3 { margin: 0 0 var(--space-1); }
+.dashboard-hero h2 { font-size: var(--text-2xl); }
+
+/* Forms: legacy controls 10-11px padding / 9px radius / 11px text. */
+.form-grid { gap: var(--space-2); margin: var(--space-3) 0; }
+.form-grid label, .wide-field { font-size: var(--text-xs); }
+.search-row input, .date-row input, .panel > input, .form-grid input, .form-grid select,
+.detail-card input, .day-card input, .wide-input, .wide-field input, .wide-field textarea {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+/* Buttons: legacy inline forms 9px/13px, 11px text. */
+.quick-actions button, .form-grid button, .day-card button,
+.search-row button, .date-row button {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.button-row button { padding: 8px 12px; border-radius: var(--radius-md); font-size: var(--text-xs); }
+
+/* List rows: align legacy stock/claim rows with items list rows. */
+.stock-row, .claim-row, .cart-line { padding: var(--space-3) 0; }
+.purchase-history-row { padding: var(--space-3) 0; }
+
+/* Tables: 14px vertical padding -> 12px token, same as list rows. */
+.data-table th, .data-table td { padding: var(--space-3) var(--space-4); }
+
+/* Cards / metrics: 11-14px radii and mixed padding -> tokens. */
+.metric, .detail-card, .day-card, .role-editor { border-radius: var(--radius-lg); }
+.metric { padding: var(--space-3); }
+.metric span { font-size: var(--text-xs); }
+.metric b { font-size: var(--text-lg); }
+
+/* Semantic colours shared by every tab. */
+.danger-button { background: var(--color-danger) !important; }
+.status-good { color: var(--color-success); }

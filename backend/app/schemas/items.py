@@ -14,6 +14,7 @@ class ItemCreateIn(BaseModel):
     compatible_models: str | None = Field(default=None, max_length=1000)   # other models this part fits, comma separated
     master_sale_price: Decimal | None = Field(default=None, ge=0)
     barcode: str | None = Field(default=None, max_length=100)
+    low_stock_threshold: int = Field(default=5, ge=0, le=1000000)
 
 class ItemUpdateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -24,6 +25,7 @@ class ItemUpdateIn(BaseModel):
     model: str | None = Field(default=None, max_length=100)
     compatible_models: str | None = Field(default=None, max_length=1000)   # other models this part fits, comma separated
     master_sale_price: Decimal | None = Field(default=None, ge=0)
+    low_stock_threshold: int = Field(default=5, ge=0, le=1000000)
     version: int = Field(ge=1)
 
 class ItemReviewIn(BaseModel):

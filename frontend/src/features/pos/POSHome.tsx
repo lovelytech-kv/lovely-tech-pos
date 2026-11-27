@@ -22,6 +22,7 @@ import { useShopProfile } from '../settings/ShopContext';
 import { buildReceiptHTML, DEFAULT_TEMPLATES, loadDefaultTemplate, readCachedTemplate, type ReceiptTemplate } from '../receipt/receiptTemplate';
 import { PitrRestoreDialog } from './PitrRestoreDialog';
 import { CustomerPickerModal, type PickerCustomer } from './CustomerPickerModal';
+import { NavIcon } from '../../components/NavIcon';
 import { ItemsWorkspace } from '../items/ItemsWorkspace';
 import { ItemCostReviewPanel } from '../items/ItemCostReviewPanel';
 
@@ -539,7 +540,7 @@ useEffect(() => {
           <span className="kbd-hint">F2</span>
         </div>
         <div className="sales-kbd-bar">
-          <span><kbd>F2</kbd> Search · <kbd>F4</kbd> Payment · <kbd>Esc</kbd> Clear · <kbd>Enter</kbd> Add/Scan · <kbd>Enter</kbd> (empty search) → Cash</span>
+          <span><kbd>F2</kbd> Search · <kbd>F4</kbd> Cash · <kbd>Enter</kbd> Add / complete sale · <kbd>Esc</kbd> Clear cart</span>
         </div>
         <div className="sales-recent">
           <span>Today's items:</span>
@@ -576,14 +577,10 @@ useEffect(() => {
           ))}
         </div>
         {last && (
-          <div className="sales-success" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <div className="sales-success sales-last-sale">
             <span>Completed: {last.invoice_no} · Rs. {money(last.grand_total)}{last.negative_stock ? ' · Negative stock warning' : ''}</span>
-            <button
-              type="button"
-              onClick={() => printReceipt(last, shop)}
-              style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--color-success)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', minHeight: 36 }}
-            >
-              🖨 Print Receipt
+            <button type="button" className="sales-print-btn" onClick={() => printReceipt(last, shop)}>
+              Print Receipt
             </button>
           </div>
         )}
@@ -595,41 +592,50 @@ useEffect(() => {
             <h2>Cart <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--muted)', marginLeft: 6 }}>({cart.length} items)</span></h2>
             <button
               type="button"
+              className="ghost sales-clear-btn"
               disabled={!cart.length || busy}
               onClick={() => { setCart([]); setApprovalId(''); setPendingApproval(null); }}
-              style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--muted)', cursor: cart.length ? 'pointer' : 'not-allowed', minHeight: 28 }}
             >Clear</button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) 0', borderBottom: '1px solid var(--line)', marginBottom: 'var(--space-2)', flexWrap: 'wrap' }}>
-            <span className="eyebrow" style={{ margin: 0 }}>Customer</span>
+          <div className="sales-customer-bar">
+            <span className="eyebrow sales-customer-label">Customer</span>
             {selectedCustomer ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 999, padding: '2px 4px 2px 10px', fontSize: '0.8rem', maxWidth: '100%' }}>
-                <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{customerDisplay(selectedCustomer)}</b>
+              <span className="sales-customer-chip">
+                <b className="sales-customer-name">{customerDisplay(selectedCustomer)}</b>
                 <button
                   type="button"
+                  className="sales-customer-clear"
                   onClick={clearCustomer}
                   aria-label="Remove customer from sale"
                   title="Remove customer"
-                  style={{ background: 'transparent', border: 0, color: 'var(--muted)', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: '2px 6px' }}
                 >×</button>
               </span>
             ) : (
-              <span className="muted" style={{ fontSize: '0.85rem' }}>Walk-in Customer</span>
+              <span className="muted sales-customer-walkin">Walk-in Customer</span>
             )}
             <button
               type="button"
-              className="ghost"
-              style={{ marginLeft: 'auto' }}
+              className="ghost sales-customer-add"
               onClick={() => setPickerOpen(true)}
             >{selectedCustomer ? 'Change' : '+ Add Customer'}</button>
           </div>
           {cart.length === 0
-            ? <div className="sales-cart-empty">No items yet. Scan or search to add.</div>
+            ? (
+              <div className="sales-cart-empty">
+                <span className="sales-cart-empty-icon" aria-hidden="true"><NavIcon name="Sales" /></span>
+                <b>Cart is empty</b>
+                <span>Scan a barcode or click an item to start.</span>
+              </div>
+            )
             : cart.map(x => (
                 <div className="sales-cart-line" key={x.line_id}>
                   <div className="line-top">
                     <div>
                       <div className="line-name">{x.description}</div>
+                      <div className="line-meta">
+                        Rs. {money(x.price)} each
+                        {Number(x.discount) > 0 ? ` · Disc. Rs. ${money(x.discount)}` : ''}
+                      </div>
                       {x.is_serialized && (
                         <div className={`line-serial ${x.serialized_unit_id ? '' : 'missing'}`}>
                           {x.serialized_unit_id ? `IMEI: ${x.serial_number}` : '⚠ IMEI required — scan now'}
@@ -657,8 +663,8 @@ useEffect(() => {
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchInputRef.current?.focus(); } }}
                       onWheel={e => e.currentTarget.blur()}
                     /></label>
-                    <label>Price <input type="number" min="0" step=".01" value={x.price} onChange={e => edit(x.line_id, 'price', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
-                    <label>Disc <input type="number" min="0" step=".01" value={x.discount} onChange={e => edit(x.line_id, 'discount', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
+                    <label>Unit price <input type="number" min="0" step=".01" value={x.price} onChange={e => edit(x.line_id, 'price', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
+                    <label>Disc. <input type="number" min="0" step=".01" value={x.discount} onChange={e => edit(x.line_id, 'discount', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
                     <label>Warranty <select value={x.warranty_override?.warranty_type || 'DEFAULT'} onChange={e => setWarrantyOverride(x.line_id, e.target.value)}>
                       <option value="DEFAULT">Default</option>
                       <option value="NONE">None</option>
@@ -678,9 +684,13 @@ useEffect(() => {
               ))
           }
           <div className="sales-totals">
+            <div className="sales-summary-head">
+              <span className="sales-section-label">Summary</span>
+              <span className="sales-summary-count">{cart.length} {cart.length === 1 ? 'line' : 'lines'}</span>
+            </div>
             <div className="subtotal-row"><span>Subtotal</span><span>Rs. {money(moneyAdd(total, totalDiscount))}</span></div>
             <div className="subtotal-row"><span>Discount</span><span>Rs. {money(totalDiscount)}</span></div>
-            <div className="total-row"><span>TOTAL</span><span className="amount">Rs. {money(total)}</span></div>
+            <div className="total-row"><span>Total due</span><span className="amount">Rs. {money(total)}</span></div>
           </div>
         </div>
 
@@ -804,7 +814,8 @@ useEffect(() => {
           )}
 
           <button className="sales-complete-btn" disabled={!cart.length || busy || (credit && !customer) || (!credit && !isFullyPaid)} onClick={handleCompleteSale}>
-            {busy ? 'Processing…' : credit ? '✓ Complete Credit Sale' : '✓ Complete Sale'}
+            <span>{busy ? 'Processing…' : credit ? 'Complete Credit Sale' : 'Complete Sale'}</span>
+            {!busy && <span className="sales-complete-hint"><kbd>Enter</kbd></span>}
           </button>
         </div>
       </div>
@@ -1126,7 +1137,6 @@ function AdminTab({onError}:{onError:(x:string)=>void}){
   )}
   <div className="glass panel"><div className="section-head"><div><h2>Admin / Controls</h2><p className="muted">Security, users, permissions, suppliers, targets and approvals.</p></div><button onClick={load}>Refresh</button></div></div>
   <ItemCostReviewPanel onError={onError}/>
-  <CategoryTypeManager onError={onError}/>
   <div className="glass panel"><h3>Expense Categories</h3><p className="muted">Admin can add categories beyond the locked defaults.</p><div className="form-grid compact"><input placeholder="New expense category" value={expenseCatName} onChange={e=>setExpenseCatName(e.target.value)}/><button disabled={!expenseCatName.trim()} onClick={addExpenseCategory}>Add Expense Category</button></div>{expenseCats.map(c=><span key={c.id} className="feature-badge" style={{display:'inline-block',margin:'4px'}}>{c.name}</span>)}</div>
   <div className="glass panel"><h3>Suppliers</h3><p className="muted">Admin-only supplier master. Supplier payment is not part of purchase entry.</p><div className="form-grid compact"><input placeholder="Supplier name" value={supplierName} onChange={e=>setSupplierName(e.target.value)}/><input placeholder="Contact no." value={supplierContact} onChange={e=>setSupplierContact(e.target.value)}/><input placeholder="Address (optional)" value={supplierAddress} onChange={e=>setSupplierAddress(e.target.value)}/><button disabled={!supplierName.trim()} onClick={addSupplier}>Add Supplier</button></div>{suppliers.map(s=><div className="stock-row" key={s.supplier_id}><span><b>{s.name}</b> · {s.contact_no||'No contact'} · {s.address||'No address'}</span></div>)}</div>
   <div className="glass panel"><h3>Users</h3>{users.map(u=><UserRow key={u.user_id} user={u} onError={onError} onSaved={load}/>)}</div>
@@ -1141,173 +1151,6 @@ function AdminTab({onError}:{onError:(x:string)=>void}){
   <div className="glass panel"><h3>Role Permissions</h3>{roles.filter(r=>r.code!=='ADMIN').map(r=><RoleEditor key={r.role_id} role={r} perms={perms} onSave={saveRole}/>)}</div>
   <div className="glass panel"><h3>Recent Audit</h3>{audit.slice(0,20).map(x=><div className="audit-row" key={x.audit_id}><span>{new Date(x.timestamp).toLocaleString()} · {x.action_type} · {x.entity_type}</span><small>{x.reason||''}</small></div>)}</div>
  </section>}
-
-function CategoryTypeManager({onError}:{onError:(x:string)=>void}){
-  const modal = useModal();
-  const [categories,setCategories]=useState<any[]>([]);
-  const [types,setTypes]=useState<any[]>([]);
-  const [loading,setLoading]=useState(true);
-  const [busy,setBusy]=useState('');
-  const [categoryName,setCategoryName]=useState('');
-  const [typeName,setTypeName]=useState('');
-  const [code,setCode]=useState('');
-  const [serialized,setSerialized]=useState(false);
-  const [editCat,setEditCat]=useState<any|null>(null);
-  const [editType,setEditType]=useState<any|null>(null);
-
-  async function load(){
-    setLoading(true);
-    try{
-      const masters=await api<any>('/items/masters');
-      setCategories(masters.categories||[]);
-      setTypes(masters.item_types||[]);
-    }catch(e){onError((e as Error).message)}
-    finally{setLoading(false)}
-  }
-  useEffect(()=>{void load()},[]);
-
-  function slugTypeCode(name:string){
-    return name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'_').replace(/^_+|_+$/g,'').slice(0,50);
-  }
-
-  async function addCategory(){
-    const name=categoryName.trim();
-    if(!name||busy)return;
-    setBusy('add-category');
-    try{await api('/items/categories',{method:'POST',body:JSON.stringify({name})});setCategoryName('');await load();toast.success('Category added')}
-    catch(e){toast.error((e as Error).message)}
-    finally{setBusy('')}
-  }
-
-  async function saveCategory(){
-    if(!editCat||busy)return;
-    const name=String(editCat.name||'').trim();
-    if(!name){toast.error('Category name is required');return}
-    setBusy('edit-category');
-    try{await api(`/items/categories/${editCat.id}`,{method:'PUT',body:JSON.stringify({name,parent_id:editCat.parent_id||null})});setEditCat(null);await load();toast.success('Category updated')}
-    catch(e){toast.error((e as Error).message)}
-    finally{setBusy('')}
-  }
-
-  async function removeCategory(cat:any){
-    if(busy)return;
-    const ok=await modal.confirm({title:'Delete category?',message:`Delete “${cat.name}”? This fails if any item or child category still uses it.`,confirmText:'Delete category'});
-    if(!ok)return;
-    setBusy(`delete-category-${cat.id}`);
-    try{await api(`/items/categories/${cat.id}`,{method:'DELETE'});await load();toast.success('Category deleted')}
-    catch(e){toast.error((e as Error).message)}
-    finally{setBusy('')}
-  }
-
-  async function addType(){
-    const name=typeName.trim();
-    const typeCode=(code.trim().replace(/\s+/g,'_')||slugTypeCode(name)).slice(0,50);
-    if(!name){toast.error('Item type name is required');return}
-    if(!typeCode){toast.error('Enter a code or a name that can generate one');return}
-    if(busy)return;
-    setBusy('add-type');
-    try{await api('/items/item-types',{method:'POST',body:JSON.stringify({code:typeCode,name,is_serialized:serialized})});setTypeName('');setCode('');setSerialized(false);await load();toast.success('Item type added')}
-    catch(e){toast.error((e as Error).message)}
-    finally{setBusy('')}
-  }
-
-  async function saveType(){
-    if(!editType||busy)return;
-    const name=String(editType.name||'').trim();
-    const typeCode=String(editType.code||'').trim();
-    if(!name||!typeCode){toast.error('Item type code and name are required');return}
-    if(!!editType.is_serialized!==!!editType.original_serialized){
-      const ok=await modal.confirm({title:'Change serialized setting?',message:'Items already using this type may need IMEI/serial handling. Change it anyway?',confirmText:'Change setting'});
-      if(!ok)return;
-    }
-    setBusy('edit-type');
-    try{const res=await api<any>(`/items/item-types/${editType.id}`,{method:'PUT',body:JSON.stringify({code:typeCode,name,is_serialized:!!editType.is_serialized})});setEditType(null);await load();toast.success('Item type updated');if(res?.warning)toast.error(res.warning)}
-    catch(e){toast.error((e as Error).message)}
-    finally{setBusy('')}
-  }
-
-  async function removeType(type:any){
-    if(busy)return;
-    const ok=await modal.confirm({title:'Delete item type?',message:`Delete “${type.name}”? This fails if any item still uses it.`,confirmText:'Delete item type'});
-    if(!ok)return;
-    setBusy(`delete-type-${type.id}`);
-    try{await api(`/items/item-types/${type.id}`,{method:'DELETE'});await load();toast.success('Item type deleted')}
-    catch(e){toast.error((e as Error).message)}
-    finally{setBusy('')}
-  }
-
-  const categoryOptions=categories.filter(c=>c.id!==editCat?.id);
-
-  return <div className="glass panel">
-    <div className="section-head">
-      <div>
-        <h3>Category / Item Type Management</h3>
-        <p className="muted">Edit or delete categories and item types. Deletion is blocked while items still use them.</p>
-      </div>
-      <button type="button" onClick={()=>void load()} disabled={loading}>{loading?'Loading…':'Refresh'}</button>
-    </div>
-
-    <h4>Categories</h4>
-    <div className="form-grid compact">
-      <input placeholder="New category name" value={categoryName} maxLength={120} onChange={e=>setCategoryName(e.target.value)}/>
-      <button type="button" disabled={!!busy||!categoryName.trim()} onClick={()=>void addCategory()}>{busy==='add-category'?'Saving…':'Add Category'}</button>
-    </div>
-    <div className="list-stack">
-      {categories.length===0&&!loading&&<p className="muted">No active categories.</p>}
-      {categories.map(cat=>editCat&&editCat.id===cat.id?(
-        <div className="stock-row" key={cat.id} style={{gap:'0.5rem',flexWrap:'wrap'}}>
-          <input value={editCat.name} maxLength={120} aria-label="Category name" onChange={e=>setEditCat({...editCat,name:e.target.value})} style={{minWidth:160}}/>
-          <span className="inline-control">
-            <select value={editCat.parent_id||''} aria-label="Parent category" onChange={e=>setEditCat({...editCat,parent_id:e.target.value||null})}>
-              <option value="">No parent</option>
-              {categoryOptions.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <button type="button" disabled={busy==='edit-category'} onClick={()=>void saveCategory()}>{busy==='edit-category'?'Saving…':'Save'}</button>
-            <button type="button" className="ghost" disabled={busy==='edit-category'} onClick={()=>setEditCat(null)}>Cancel</button>
-          </span>
-        </div>
-      ):(
-        <div className="stock-row" key={cat.id}>
-          <span>{cat.name}</span>
-          <span className="inline-control">
-            <button type="button" className="ghost" disabled={!!busy} onClick={()=>setEditCat({id:cat.id,name:cat.name,parent_id:cat.parent_id||null})}>Edit</button>
-            <button type="button" className="danger-button" disabled={!!busy} onClick={()=>void removeCategory(cat)}>{busy===`delete-category-${cat.id}`?'Deleting…':'Delete'}</button>
-          </span>
-        </div>
-      ))}
-    </div>
-
-    <h4>Item Types</h4>
-    <div className="form-grid compact">
-      <input placeholder="Item type name" value={typeName} maxLength={120} onChange={e=>{const v=e.target.value;setTypeName(v);if(!code.trim())setCode(slugTypeCode(v))}}/>
-      <input placeholder="Code (auto from name)" value={code} maxLength={50} onChange={e=>setCode(e.target.value)}/>
-      <label className="check"><input type="checkbox" checked={serialized} onChange={e=>setSerialized(e.target.checked)}/> Serialized / IMEI</label>
-      <button type="button" disabled={!!busy||!typeName.trim()} onClick={()=>void addType()}>{busy==='add-type'?'Saving…':'Add Item Type'}</button>
-    </div>
-    <div className="list-stack">
-      {types.length===0&&!loading&&<p className="muted">No active item types.</p>}
-      {types.map(type=>editType&&editType.id===type.id?(
-        <div className="stock-row" key={type.id} style={{gap:'0.5rem',flexWrap:'wrap'}}>
-          <input value={editType.code} maxLength={50} aria-label="Item type code" onChange={e=>setEditType({...editType,code:e.target.value})} style={{minWidth:110}}/>
-          <input value={editType.name} maxLength={120} aria-label="Item type name" onChange={e=>setEditType({...editType,name:e.target.value})} style={{minWidth:150}}/>
-          <label className="check"><input type="checkbox" checked={!!editType.is_serialized} onChange={e=>setEditType({...editType,is_serialized:e.target.checked})}/> Serialized / IMEI</label>
-          <span className="inline-control">
-            <button type="button" disabled={busy==='edit-type'} onClick={()=>void saveType()}>{busy==='edit-type'?'Saving…':'Save'}</button>
-            <button type="button" className="ghost" disabled={busy==='edit-type'} onClick={()=>setEditType(null)}>Cancel</button>
-          </span>
-        </div>
-      ):(
-        <div className="stock-row" key={type.id}>
-          <span><b>{type.code}</b> · {type.name}{type.is_serialized?' · IMEI':''}</span>
-          <span className="inline-control">
-            <button type="button" className="ghost" disabled={!!busy} onClick={()=>setEditType({...type,original_serialized:!!type.is_serialized})}>Edit</button>
-            <button type="button" className="danger-button" disabled={!!busy} onClick={()=>void removeType(type)}>{busy===`delete-type-${type.id}`?'Deleting…':'Delete'}</button>
-          </span>
-        </div>
-      ))}
-    </div>
-  </div>;
-}
 
 function UserRow({user,onError,onSaved}:{user:any,onError:(x:string)=>void,onSaved:()=>void}){const [limit,setLimit]=useState(String(user.discount_limit_percent??0));const [busy,setBusy]=useState(false);async function save(){if(busy)return;const n=Number(limit);if(!Number.isFinite(n)||n<0||n>100)return onError('Discount limit must be between 0 and 100%.');if(user.version==null)return onError('User version is missing; refresh before editing.');try{setBusy(true);await api(`/admin/users/${user.user_id}/discount-limit`,{method:'PUT',body:JSON.stringify({discount_limit_percent:String(n),version:user.version})});onSaved()}catch(e){onError((e as Error).message)}finally{setBusy(false)}}return <div className="stock-row"><span>{user.username} · {user.display_name} · {user.role} · v{user.version ?? '—'}</span><span className="inline-control">Discount limit % <input {...moneyInputProps(limit, setLimit)}/><button disabled={busy} onClick={save}>{busy?'Saving…':'Save'}</button></span></div>}
 function StockAdjustPanel({onError}:{onError:(x:string)=>void}){const [item,setItem]=useState(''),[search,setSearch]=useState(''),[items,setItems]=useState<any[]>([]),[qty,setQty]=useState(''),[reason,setReason]=useState(''),[units,setUnits]=useState<any[]>([]),[picked,setPicked]=useState<string[]>([]);const chosen=items.find((x:any)=>x.item_id===item);const serialized=!!chosen?.is_serialized;const modal = useModal();async function find(){try{setItems(await api<any[]>(`/inventory/items/search?q=${encodeURIComponent(search.trim())}`))}catch(e){onError((e as Error).message)}}async function pickItem(id:string){setItem(id);setPicked([]);setUnits([]);const it=items.find((x:any)=>x.item_id===id);if(it?.is_serialized){try{setUnits(await api<any[]>(`/inventory/serialized/search?q=&item_id=${id}&status=IN_STOCK`))}catch(e){onError((e as Error).message)}}}async function save(){try{const admin_password=(await modal.prompt({title:'Admin re-authentication',message:'Enter admin password to adjust stock',placeholder:'Password',confirmText:'Adjust',type:'password'}))||'';if(!admin_password)return; await api(`/stock-control/adjust?admin_password=${encodeURIComponent(admin_password)}`,{method:'POST',body:JSON.stringify(serialized?{item_id:item,quantity_delta:String(-picked.length),reason:reason.trim(),serialized_unit_ids:picked}:{item_id:item,quantity_delta:String(qty),reason:reason.trim()})});setQty('');setReason('');setPicked([]);if(serialized)pickItem(item);toast.success('Stock adjustment saved')}catch(e){onError((e as Error).message)}}return <div className="form-grid compact"><input placeholder="Search item / code" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&find()}/><button onClick={find}>Find Item</button><select value={item} onChange={e=>pickItem(e.target.value)}><option value="">Select item</option>{items.map((x:any)=><option key={x.item_id} value={x.item_id}>{x.item_code} · {x.description} · Stock {x.stock}</option>)}</select>{serialized?<div className="wide-field"><p className="muted">IMEI-tracked phone: tick the phones to WRITE OFF (stock goes down by the number ticked). To add phones use Purchases with their IMEI.</p>{units.length===0?<p className="muted">No in-stock units.</p>:units.map((u:any)=><label className="check" key={u.serialized_unit_id}><input type="checkbox" checked={picked.includes(u.serialized_unit_id)} onChange={e=>setPicked(p=>e.target.checked?[...p,u.serialized_unit_id]:p.filter(x=>x!==u.serialized_unit_id))}/> {u.serial_number}</label>)}</div>:<input {...signedIntInputProps(qty, setQty)} placeholder="+/- Quantity"/>}<input placeholder="Required reason" value={reason} onChange={e=>setReason(e.target.value)}/><button disabled={serialized&&picked.length===0} onClick={save}>Adjust Stock</button></div>}
