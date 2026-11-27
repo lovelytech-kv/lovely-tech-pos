@@ -77,11 +77,14 @@ export function CategoryTypeManager({
   useEffect(() => { void load(); }, []);
 
   useEffect(() => {
-    firstFieldRef.current?.focus();
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = previous; };
   }, []);
+
+  useEffect(() => {
+    if (!loading) firstFieldRef.current?.focus();
+  }, [loading]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

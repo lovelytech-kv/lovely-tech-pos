@@ -2610,3 +2610,67 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 .sales-right .payment-method label span{font-size:var(--text-xs);color:var(--muted);font-weight:var(--fw-medium)}
 [data-theme="dark"] .sales-cart-empty-icon{background:var(--surface-2);border-color:var(--line)}
 .sales-complete-btn:disabled .sales-complete-hint kbd{background:rgba(0,0,0,.05);border-color:var(--line);color:var(--muted)}
+
+/* ============ SESSION 3D-2 — CROSS-TAB DESIGN CONSISTENCY ============ */
+/* Audit result: legacy tabs (Stock, Reports, Expenses, Admin, Documents, Day End,
+   Returns, Warranty) used hard-coded 9-11px padding / 9px radii / 10-11px type,
+   while newer tabs (POS, Items, Purchases, Sales History) already use tokens.
+   The rules below normalise the shared primitives without changing layout logic. */
+
+/* Card padding: legacy .panel 20px -> 16px (matches .sales-panel / item toolbar). */
+.panel { padding: var(--space-4); }
+
+/* Page containers used by tab workspaces. */
+.purchases-page, .items-page, .admin-page, .report-page { gap: var(--space-4); }
+
+/* Section headings: one scale for direct panel headings. */
+.glass.panel > h2, .panel > h2 {
+  font-size: var(--text-xl); font-weight: var(--fw-bold); letter-spacing: -.02em;
+  margin: 0 0 var(--space-2);
+}
+.glass.panel > h3, .panel > h3 {
+  font-size: var(--text-lg); font-weight: var(--fw-semibold); letter-spacing: -.015em;
+  margin: 0 0 var(--space-2);
+}
+.glass.panel > h4, .panel > h4 {
+  font-size: var(--text-base); font-weight: var(--fw-semibold);
+  margin: var(--space-3) 0 var(--space-2);
+}
+.section-head h2, .section-head h3 { margin: 0 0 var(--space-1); }
+.dashboard-hero h2 { font-size: var(--text-2xl); }
+
+/* Forms: legacy controls 10-11px padding / 9px radius / 11px text. */
+.form-grid { gap: var(--space-2); margin: var(--space-3) 0; }
+.form-grid label, .wide-field { font-size: var(--text-xs); }
+.search-row input, .date-row input, .panel > input, .form-grid input, .form-grid select,
+.detail-card input, .day-card input, .wide-input, .wide-field input, .wide-field textarea {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+/* Buttons: legacy inline forms 9px/13px, 11px text. */
+.quick-actions button, .form-grid button, .day-card button,
+.search-row button, .date-row button {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.button-row button { padding: 8px 12px; border-radius: var(--radius-md); font-size: var(--text-xs); }
+
+/* List rows: align legacy stock/claim rows with items list rows. */
+.stock-row, .claim-row, .cart-line { padding: var(--space-3) 0; }
+.purchase-history-row { padding: var(--space-3) 0; }
+
+/* Tables: 14px vertical padding -> 12px token, same as list rows. */
+.data-table th, .data-table td { padding: var(--space-3) var(--space-4); }
+
+/* Cards / metrics: 11-14px radii and mixed padding -> tokens. */
+.metric, .detail-card, .day-card, .role-editor { border-radius: var(--radius-lg); }
+.metric { padding: var(--space-3); }
+.metric span { font-size: var(--text-xs); }
+.metric b { font-size: var(--text-lg); }
+
+/* Semantic colours shared by every tab. */
+.danger-button { background: var(--color-danger) !important; }
+.status-good { color: var(--color-success); }
