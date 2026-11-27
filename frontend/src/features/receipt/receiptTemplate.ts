@@ -226,7 +226,7 @@ export function buildReceiptHTML(
       ? `<div class="ln-desc">${escapeHtml(description)}</div>`
       : '';
     const codeLine = itemCode
-      ? `<div class="ln-code">${escapeHtml(itemCode)}</div>`
+      ? `<div class="ln-code">SKU: ${escapeHtml(itemCode)}</div>`
       : '';
     const calc = t.show_unit_price
       ? `${escapeHtml(quantity)} × Rs. ${escapeHtml(unitPrice)}`
