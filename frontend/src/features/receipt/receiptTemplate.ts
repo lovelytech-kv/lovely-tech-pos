@@ -132,6 +132,28 @@ function escapeMultiline(text: string): string {
   return escapeHtml(text).replace(/\r?\n/g, '<br/>');
 }
 
+function toAmount(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.replace(/,/g, ''));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatAmount(value: number): string {
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function lineSubtotal(line: any): number | null {
+  const unitPrice = toAmount(line?.unit_price);
+  const quantity = toAmount(line?.quantity) ?? 1;
+  if (unitPrice !== null) return unitPrice * quantity;
+  const lineTotal = toAmount(line?.final_total ?? line?.line_total);
+  if (lineTotal === null) return null;
+  return lineTotal + (toAmount(line?.discount) ?? 0);
+}
+
 function paperCss(paperSize: PaperSize): string {
   if (paperSize === 'A4') {
     return `
@@ -222,6 +244,32 @@ export function buildReceiptHTML(
     ? `<div class="repair"><b>Repair:</b> ${escapeMultiline(repairValue)}</div>`
     : '';
 
+  // Labeled totals. Paid/Balance are omitted when the payload has no payment
+  // fields (sale detail currently exposes neither); Change comes from SaleOut.
+  const subtotalValues = lines.map((l: any) => lineSubtotal(l)).filter((value: number | null): value is number => value !== null);
+  const computedSubtotal = subtotalValues.length === lines.length && lines.length > 0
+    ? subtotalValues.reduce((sum: number, value: number) => sum + value, 0)
+    : null;
+  const discountTotal = lines.reduce((sum: number, l: any) => sum + (toAmount(l?.discount) ?? 0), 0);
+  const declaredTotal = toAmount(sale?.grand_total);
+  const subtotal = computedSubtotal ?? (declaredTotal !== null ? declaredTotal + discountTotal : null);
+  const totalAmount = declaredTotal ?? subtotal;
+  const changeAmount = toAmount(sale?.change_amount);
+
+  const summaryRows: string[] = [];
+  if (subtotal !== null) {
+    summaryRows.push(`<div class="row sum-line"><span>Subtotal</span><span>Rs. ${escapeHtml(formatAmount(subtotal))}</span></div>`);
+  }
+  if (discountTotal > 0.005) {
+    summaryRows.push(`<div class="row sum-line"><span>Discount</span><span>-Rs. ${escapeHtml(formatAmount(discountTotal))}</span></div>`);
+  }
+  const totalDisplay = totalAmount !== null
+    ? `Rs. ${escapeHtml(formatAmount(totalAmount))}`
+    : `Rs. ${escapeHtml(sale?.grand_total ?? '0')}`;
+  const changeRow = (changeAmount !== null && changeAmount > 0.005)
+    ? `<div class="row sum-line"><span>Change</span><span>Rs. ${escapeHtml(formatAmount(changeAmount))}</span></div>`
+    : '';
+
   const warrantyRaw = t.show_warranty_info && t.warranty_terms ? fillTokens(t.warranty_terms, shopName, phone) : '';
   const warrantyHtml = warrantyRaw
     ? `<div class="warranty"><div class="warranty-title">Warranty</div>${escapeMultiline(warrantyRaw)}</div>`
@@ -258,6 +306,7 @@ export function buildReceiptHTML(
       .ln-desc{word-break:break-word;}
       .ln-code{font-size:9px;color:#666;}
       .calc{color:#333;}
+      .sum-line{font-size:11px;color:#333;padding:1px 0;}
       .total{font-size:15px;font-weight:700;}
       .foot{text-align:center;font-size:10px;margin-top:8px;line-height:1.35;}
       .warranty{margin-top:8px;font-size:9px;color:#444;line-height:1.35;}
@@ -275,7 +324,9 @@ export function buildReceiptHTML(
     <div class="divider"></div>
     ${linesHtml}
     <div class="divider"></div>
-    <div class="row total"><span>TOTAL</span><span>Rs. ${escapeHtml(sale?.grand_total ?? '0')}</span></div>
+    ${summaryRows.join('')}
+    <div class="row total"><span>TOTAL</span><span>${totalDisplay}</span></div>
+    ${changeRow}
     ${repairHtml}
     ${warrantyHtml}
     ${footerHtml}
