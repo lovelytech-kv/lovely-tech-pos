@@ -2854,26 +2854,6 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   margin-bottom: var(--space-1);
 }
 
-/* ── Phase F — Reactivate success tint (grid card only; modal keeps accent). ── */
-.inv-card-edit.inv-card-reactivate {
-  color: var(--color-success);
-  border-color: rgba(22, 163, 74, 0.35);
-}
-.inv-card-edit.inv-card-reactivate:hover {
-  border-color: var(--color-success);
-  color: var(--color-success);
-  background: var(--color-success-bg);
-}
-[data-theme="dark"] .inv-card-edit.inv-card-reactivate {
-  color: #4ade80;
-  border-color: rgba(74, 222, 128, 0.35);
-}
-[data-theme="dark"] .inv-card-edit.inv-card-reactivate:hover {
-  border-color: #4ade80;
-  color: #4ade80;
-  background: var(--color-success-bg);
-}
-
 /* ── Phase G — Stock chip custom tooltip (2-line labeled, CSS-only).
       Positioned below the chip, right-aligned, within the media's overflow:hidden bounds. ── */
 .chip-tooltip {
