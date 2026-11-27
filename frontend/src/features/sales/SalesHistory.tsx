@@ -50,6 +50,9 @@ type SaleDetail = {
   version: number;
   customer_name?: string | null;
   customer_contact?: string | null;
+  customer_notes?: string | null;
+  cashier_name?: string | null;
+  payment_method_summary?: string | null;
   lines: SaleLine[];
 };
 
@@ -297,7 +300,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
       // Contact block is optional; the receipt still prints with the shop name/logo.
     }
     const template = await loadDefaultTemplate(paperSize);
-    w.document.write(buildReceiptHTML(detail, shop, fullShop, template));
+    w.document.write(await buildReceiptHTML(detail, shop, fullShop, template));
     w.document.close();
     restorePopupToasts(w);
   }

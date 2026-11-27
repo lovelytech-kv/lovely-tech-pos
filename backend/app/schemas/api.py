@@ -72,6 +72,9 @@ class SaleOut(BaseModel):
     version: int = 1
     customer_name: str | None = None
     customer_contact: str | None = None
+    customer_notes: str | None = None
+    cashier_name: str | None = None
+    payment_method_summary: str | None = None
     lines: list[SaleLineOut] = Field(default_factory=list)
 
 class DateRangeIn(BaseModel):

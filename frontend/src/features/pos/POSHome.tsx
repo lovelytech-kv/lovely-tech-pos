@@ -335,11 +335,13 @@ useEffect(() => {
   function edit(id:string,k:'quantity'|'price'|'discount',v:string){setCart(c=>c.map(x=>x.line_id===id?{...x,[k]:v}:x))}
   function setWarrantyOverride(id:string, value:string){setCart(c=>c.map(x=>x.line_id===id?{...x,warranty_override:value==='DEFAULT'?null:{...(x.warranty_default||{warranty_type:'NONE'}),warranty_type:value,duration_value:value==='DAYS'||value==='MONTHS'?(x.warranty_override?.duration_value||x.warranty_default?.duration_value||null):null,custom_rule:value==='CUSTOM'?(x.warranty_override?.custom_rule||x.warranty_default?.custom_rule||''):null}}:x))}
 
-  function writeReceipt(w: Window, sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }, fullShop?: any, template?: ReceiptTemplate) {
+  async function writeReceipt(w: Window, sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }, fullShop?: any, template?: ReceiptTemplate) {
   try {
     if (!w || w.closed) return;
+    const html = await buildReceiptHTML(sale, shop, fullShop, template ?? invoiceTemplate);
+    if (!w || w.closed) return;
     w.document.open();
-    w.document.write(buildReceiptHTML(sale, shop, fullShop, template ?? invoiceTemplate));
+    w.document.write(html);
     w.document.close();
     restorePopupToasts(w);
   } catch {
@@ -353,7 +355,7 @@ useEffect(() => {
     onError('Print popup was blocked. Please allow popups for this site and try again.');
     return;
   }
-  writeReceipt(w, sale, shop, fullShop, invoiceTemplate);
+  void writeReceipt(w, sale, shop, fullShop, invoiceTemplate);
 }
   function openPrintWindow(): Window | null {
     try {
@@ -441,7 +443,7 @@ useEffect(() => {
           // apply without restarting the app. Falls back to cache/built-in.
           const printTemplate = await loadDefaultTemplate('80mm');
           setInvoiceTemplate(printTemplate);
-          writeReceipt(preOpenedPrintWindow, result, shop, fullShop, printTemplate);
+          await writeReceipt(preOpenedPrintWindow, result, shop, fullShop, printTemplate);
           printed = true;
         }
       } catch(e) {
@@ -936,7 +938,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
       if (r.document_type === 'SALE') {
         try {
           const saleDetail = await api<any>(`/sales/${encodeURIComponent(r.document_no)}`);
-          html = buildReceiptHTML(saleDetail, shop, fullShop, await loadDefaultTemplate('80mm'));
+          html = await buildReceiptHTML(saleDetail, shop, fullShop, await loadDefaultTemplate('80mm'));
         } catch {
           html = buildGenericReprintHTML(r);
         }

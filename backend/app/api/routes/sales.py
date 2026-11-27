@@ -23,6 +23,18 @@ from fastapi.encoders import jsonable_encoder
 
 router = APIRouter(prefix="/sales", tags=["sales"])
 
+_PAYMENT_LABELS = {"CASH": "Cash", "CARD": "Card", "ONLINE": "Online"}
+
+
+def _payment_method_summary(methods) -> str:
+    """Human-readable payment mix for receipts ("Cash + Card", "Credit")."""
+    unique = set(methods)
+    if not unique:
+        return "Credit"
+    ordered = [m for m in ("CASH", "CARD", "ONLINE") if m in unique]
+    others = sorted(m for m in unique if m not in ordered)
+    return " + ".join(_PAYMENT_LABELS.get(m, m.title()) for m in ordered + others)
+
 
 @router.get("")
 def list_sales(
@@ -159,17 +171,10 @@ def list_sales(
     for sid, method in pay_rows:
         payment_methods_map.setdefault(sid, set()).add(method)
 
-    label_map = {"CASH": "Cash", "CARD": "Card", "ONLINE": "Online"}
-
     items = []
     for s in rows:
         methods = payment_methods_map.get(s.id, set())
-        if not methods:
-            payment_summary = "Credit"
-        else:
-            ordered = [m for m in ["CASH", "CARD", "ONLINE"] if m in methods]
-            others = [m for m in methods if m not in ordered]
-            payment_summary = " + ".join(label_map.get(m, m.title()) for m in ordered + others)
+        payment_summary = _payment_method_summary(methods)
 
         raw_count = item_count_map.get(s.id)
         if raw_count is None:
@@ -320,6 +325,9 @@ def create_sale(payload: SaleIn, user: User = Depends(require_permission("SALE_C
         )
         for line, item in line_rows
     ]
+    payment_methods = db.scalars(
+        select(Payment.payment_method).where(Payment.sale_id == result.sale_id)
+    ).all()
     return SaleOut(
         sale_id=result.sale_id,
         invoice_no=result.invoice_no,
@@ -332,6 +340,9 @@ def create_sale(payload: SaleIn, user: User = Depends(require_permission("SALE_C
         version=result.version,
         customer_name=customer.name if customer else None,
         customer_contact=customer.contact_no if customer else None,
+        customer_notes=customer.notes if customer else None,
+        cashier_name=user.display_name,
+        payment_method_summary=_payment_method_summary(payment_methods),
         lines=lines,
     )
 
@@ -379,11 +390,18 @@ def get_sale_detail(sale_id: str, user: User = Depends(require_permission("RETUR
         raise HTTPException(409, f"Sale {sale.invoice_no} is {sale.status}; only completed sales can be returned.")
     lines = db.execute(select(SaleLine, Item).join(Item, Item.id == SaleLine.item_id).where(SaleLine.sale_id == sale.id).order_by(SaleLine.created_at, SaleLine.id)).all()
     customer = db.get(Customer, sale.customer_id) if sale.customer_id else None
+    cashier = db.get(User, sale.cashier_id)
+    payment_methods = db.scalars(
+        select(Payment.payment_method).where(Payment.sale_id == sale.id)
+    ).all()
     return {
         "sale_id": str(sale.id), "invoice_no": sale.invoice_no, "sale_datetime": sale.sale_datetime,
         "grand_total": sale.grand_total, "version": sale.version,
         "customer_name": customer.name if customer else None,
         "customer_contact": customer.contact_no if customer else None,
+        "customer_notes": customer.notes if customer else None,
+        "cashier_name": cashier.display_name if cashier else None,
+        "payment_method_summary": _payment_method_summary(payment_methods),
         "lines": [{"sale_line_id": str(line.id), "item_id": str(line.item_id), "item_code": item.item_code,
                    "description": item.description, "quantity": line.quantity, "unit_price": line.unit_price,
                    "discount": line.discount, "final_total": line.final_total,

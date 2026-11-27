@@ -29,6 +29,10 @@ class InvoiceTemplateCreate(BaseModel):
     show_unit_price: bool = True
     show_warranty_info: bool = True
     show_repair_details: bool = True
+    show_payment_method: bool = False
+    show_cashier: bool = False
+    show_customer_notes: bool = False
+    logo_monochrome: bool = False
 
     footer_text: str | None = Field(default=None, max_length=500)
     warranty_terms: str | None = Field(default=None, max_length=2000)
@@ -55,6 +59,10 @@ class InvoiceTemplateUpdate(BaseModel):
     show_unit_price: bool | None = None
     show_warranty_info: bool | None = None
     show_repair_details: bool | None = None
+    show_payment_method: bool | None = None
+    show_cashier: bool | None = None
+    show_customer_notes: bool | None = None
+    logo_monochrome: bool | None = None
 
     footer_text: str | None = Field(default=None, max_length=500)
     warranty_terms: str | None = Field(default=None, max_length=2000)
@@ -83,6 +91,10 @@ class InvoiceTemplateOut(BaseModel):
     show_unit_price: bool
     show_warranty_info: bool
     show_repair_details: bool
+    show_payment_method: bool
+    show_cashier: bool
+    show_customer_notes: bool
+    logo_monochrome: bool
 
     footer_text: str | None = None
     warranty_terms: str | None = None

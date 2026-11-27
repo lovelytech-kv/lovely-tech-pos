@@ -46,6 +46,10 @@ function editablePayload(t: TemplateRecord) {
     show_unit_price: t.show_unit_price,
     show_warranty_info: t.show_warranty_info,
     show_repair_details: t.show_repair_details,
+    show_payment_method: t.show_payment_method,
+    show_cashier: t.show_cashier,
+    show_customer_notes: t.show_customer_notes,
+    logo_monochrome: t.logo_monochrome,
     footer_text: t.footer_text,
     warranty_terms: t.warranty_terms,
     show_footer_note: t.show_footer_note,
@@ -149,6 +153,7 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
   const [draft, setDraft] = useState<TemplateRecord | null>(null);
   const [baseline, setBaseline] = useState('');
   const [previewDraft, setPreviewDraft] = useState<TemplateRecord | null>(null);
+  const [previewHtml, setPreviewHtml] = useState('');
   const [fullShop, setFullShop] = useState<{ address?: string | null; phone?: string | null; email?: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -205,6 +210,24 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
     const id = window.setTimeout(() => setPreviewDraft({ ...draft }), 300);
     return () => window.clearTimeout(id);
   }, [draft]);
+
+  // Render the preview asynchronously because the B&W logo conversion uses Canvas.
+  useEffect(() => {
+    if (!previewDraft) {
+      setPreviewHtml('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const html = await renderReceiptPreview(previewDraft, shop, fullShop);
+        if (!cancelled) setPreviewHtml(html);
+      } catch {
+        if (!cancelled) setPreviewHtml('');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [previewDraft, shop, fullShop]);
 
   // Discard guard for tab close / reload.
   useEffect(() => {
@@ -406,9 +429,6 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
     );
   }
 
-  const previewHtml = previewDraft
-    ? renderReceiptPreview(previewDraft, shop, fullShop)
-    : '';
   const isA4 = previewDraft?.paper_size === 'A4';
 
   return (
@@ -595,7 +615,7 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
                       }}
                     />
                   )
-                  : <p className="muted" style={{ padding: '1rem' }}>Preview unavailable.</p>}
+                  : <p className="muted" style={{ padding: '1rem' }}>{previewDraft ? 'Preparing preview…' : 'Preview unavailable.'}</p>}
               </div>
               <p className="muted" style={{ fontSize: '0.7rem', margin: '0.4rem 0 0' }}>
                 Preview updates 300ms after the last change and always prints on white paper.
