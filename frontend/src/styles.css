@@ -2480,3 +2480,39 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 .item-inline-create { margin-top: 0.4rem; padding: 0.55rem; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface-2); display: grid; gap: 0.4rem; }
 .item-inline-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .item-inline-row input:not([type="checkbox"]) { flex: 1; min-width: 110px; }
+
+/* ===== Session 3C-2 — Invoice template editor ===== */
+.invoice-template-card{grid-column:1/-1}
+.invoice-editor-layout{display:grid;grid-template-columns:minmax(200px,250px) minmax(0,1fr);gap:20px;align-items:start}
+.invoice-template-list{display:grid;gap:8px;align-content:start}
+.invoice-template-item{display:grid;gap:6px;text-align:left;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--text);cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.invoice-template-item:hover{border-color:rgba(var(--accent-rgb),.45)}
+.invoice-template-item.selected{border-color:var(--accent);box-shadow:0 0 0 2px rgba(var(--accent-rgb),.12);background:rgba(var(--accent-rgb),.07)}
+.invoice-template-name{font-weight:700;font-size:.85rem;word-break:break-word}
+.invoice-template-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.invoice-paper-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:rgba(var(--accent-rgb),.12);color:var(--accent);font-size:.65rem;font-weight:700;letter-spacing:.04em}
+.invoice-default-badge{font-size:.65rem;font-weight:700;color:#b45309}
+.invoice-inactive-badge{font-size:.65rem;font-weight:700;color:var(--muted)}
+.invoice-template-actions{display:grid;gap:6px;margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--line)}
+.invoice-editor-main{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:22px;align-items:start;min-width:0}
+.invoice-form-section{margin-top:1.1rem;padding-top:1rem;border-top:1px solid var(--line)}
+.invoice-form-section:first-child{margin-top:0;padding-top:0;border-top:0}
+.invoice-form-section h4{margin:0 0 .65rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.invoice-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;align-items:start}
+.invoice-field{display:grid;gap:5px;margin-top:.6rem;font-size:.8rem;color:var(--muted);font-weight:600}
+.invoice-field:first-child{margin-top:0}
+.invoice-field input,.invoice-field select,.invoice-field textarea{padding:.5rem .65rem;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--text);font-size:.85rem;font-family:inherit;font-weight:400}
+.invoice-field textarea{resize:vertical;line-height:1.45}
+.invoice-field small{font-weight:400}
+.invoice-preview-pane{position:sticky;top:16px;display:grid;gap:.4rem;justify-items:start;min-width:0}
+.invoice-preview-title{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--text)}
+.invoice-preview-frame{width:320px;max-width:100%;overflow:auto;background:#d9dde3;border:1px solid var(--line);border-radius:12px;padding:8px}
+.invoice-preview-frame iframe{border-radius:4px;box-shadow:0 8px 22px rgba(0,0,0,.18)}
+.invoice-locked-note{display:flex;align-items:flex-start;gap:.55rem;margin-top:.85rem;padding:.65rem .75rem;border:1px dashed var(--line);border-radius:10px;background:var(--surface-2);color:var(--muted);font-size:.8rem;cursor:not-allowed}
+.invoice-locked-note b{display:block;color:var(--text);font-size:.8rem}
+.invoice-locked-note small{display:block;font-size:.68rem;margin-top:2px}
+.invoice-modal-backdrop{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);display:grid;place-items:center;padding:16px}
+.invoice-modal{width:min(440px,100%);background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1.25rem;color:var(--text);box-shadow:0 20px 48px rgba(0,0,0,.3)}
+.invoice-modal h3{margin:0 0 .75rem;font-size:1rem}
+@media (max-width:1100px){.invoice-editor-main{grid-template-columns:minmax(0,1fr)}.invoice-preview-pane{position:static;justify-items:stretch}.invoice-preview-frame{width:100%}}
+@media (max-width:760px){.invoice-editor-layout{grid-template-columns:minmax(0,1fr)}}

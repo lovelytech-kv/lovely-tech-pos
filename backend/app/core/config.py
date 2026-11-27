@@ -1,4 +1,6 @@
 import os
+import re
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -17,6 +19,9 @@ class Settings(BaseSettings):
     # H7 — CLIENT machine join posts admin credentials. Plain HTTP is an accepted risk
     # only on a physically trusted shop LAN; set LTPOS_TRUST_LAN=false to require HTTPS.
     ltpos_trust_lan: bool = True
+    # Independent developer branding phone printed in the LOCKED receipt footer.
+    # Never use the shop/branch phone here — shops change their own number.
+    ltpos_developer_phone: str = "0770290008"
     backup_root: str = "./backups"
     pg_dump_bin: str = "pg_dump"
     pg_restore_bin: str = "pg_restore"
@@ -39,6 +44,16 @@ class Settings(BaseSettings):
     branch_code: str = "MAIN"
     instance_id_file: str = "C:/ProgramData/LovelyTechPOS/server-data/instance.json"
     model_config = SettingsConfigDict(env_file=os.getenv("LTPOS_ENV_FILE", ".env"), extra="ignore")
+
+    @field_validator("ltpos_developer_phone")
+    @classmethod
+    def _validate_developer_phone(cls, value: str) -> str:
+        phone = (value or "").strip() or "0770290008"
+        if not re.fullmatch(r"[0-9+()\-\s]{6,20}", phone):
+            raise ValueError(
+                "LTPOS_DEVELOPER_PHONE must contain only digits, spaces, +, -, parentheses"
+            )
+        return phone
 
 settings = Settings()
 

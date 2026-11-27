@@ -4,8 +4,8 @@ import { money } from '../../services/money';
 import { useModal } from '../../ui/modals';
 import { toast } from '../../ui/toast';
 import { todayLocal } from '../../utils/date';
-import { escapeHtml } from '../../utils/escapeHtml';
 import { useShopProfile } from '../settings/ShopContext';
+import { buildReceiptHTML, loadDefaultTemplate, type PaperSize } from '../receipt/receiptTemplate';
 
 type Props = {
   isAdmin: boolean;
@@ -96,6 +96,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   const [selectedItem, setSelectedItem] = useState<SaleListItem | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<SaleDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [paperSize, setPaperSize] = useState<PaperSize>('80mm');
   const [cashiers, setCashiers] = useState<Array<{ user_id: string; display_name: string; role: string }>>([]);
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerFilterLabel, setCustomerFilterLabel] = useState('');
@@ -281,7 +282,8 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
     setCustomerMatches([]);
   }
 
-  async function printReceipt(detail: SaleDetail) {    const w = window.open('', '_blank', 'width=420,height=640');
+  async function printReceipt(detail: SaleDetail) {
+    const w = window.open('', '_blank', 'width=420,height=640');
     if (!w) {
       toast.error('Print popup blocked. Allow popups for this site.');
       return;
@@ -293,51 +295,8 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
     } catch {
       // Contact block is optional; the receipt still prints with the shop name/logo.
     }
-    const shopName = shop.getShopName();
-    const logoUrl = shop.getLogoDataUrl('light');
-    const address = fullShop?.address || '';
-    const phone = fullShop?.phone || '';
-    const email = fullShop?.email || '';
-    const receiptFooter = phone ? `Software by Lovely Tech · ${escapeHtml(phone)}` : 'Software by Lovely Tech';
-    const lines = Array.isArray(detail.lines) ? detail.lines : [];
-    const customerName = detail.customer_name || '';
-    const customerContact = detail.customer_contact || '';
-    const customerLine = (customerName || customerContact)
-      ? `<div class="meta">Customer: ${customerName ? escapeHtml(customerName) : ''}${customerName && customerContact ? ' · ' : ''}${customerContact ? escapeHtml(customerContact) : ''}</div>`
-      : '';
-    w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${escapeHtml(detail.invoice_no)}</title>
-      <style>
-        body{font-family:'Consolas','Menlo',monospace;padding:16px;font-size:13px;color:#000;}
-        h1{font-size:16px;text-align:center;margin:0 0 4px;}
-        .meta{text-align:center;font-size:11px;color:#333;margin-bottom:4px;}
-        .contact{text-align:center;font-size:10px;color:#555;margin-bottom:8px;line-height:1.35;}
-        .divider{border-top:1px dashed #000;margin:8px 0;}
-        .row{display:flex;justify-content:space-between;gap:8px;}
-        .line{padding:2px 0;}
-        .total{font-size:15px;font-weight:700;}
-        .foot{text-align:center;font-size:11px;margin-top:8px;}
-        .receipt-footer{margin-top:16px;padding-top:8px;border-top:1px dashed #ccc;text-align:center;font-size:10px;color:#888;}
-        .logo{display:block;margin:0 auto 4px;max-width:80px;max-height:80px;object-fit:contain;}
-      </style></head><body>
-      ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" class="logo" />` : ''}
-      <h1>${escapeHtml(shopName)}</h1>
-      ${(address || phone || email) ? `<div class="contact">${address ? escapeHtml(address) + '<br/>' : ''}${phone ? 'Tel: ' + escapeHtml(phone) : ''}${phone && email ? ' · ' : ''}${escapeHtml(email)}</div>` : ''}
-      <div class="meta">Invoice: ${escapeHtml(detail.invoice_no)}<br/>${new Date(detail.sale_datetime).toLocaleString()}</div>
-      ${customerLine}
-      <div class="divider"></div>
-      ${lines.map((l) => `
-        <div class="line">
-          <div>${escapeHtml(l.description || l.item_code || '')}</div>
-          <div class="row"><span>${escapeHtml(l.quantity)} × Rs. ${escapeHtml(l.unit_price)}</span><span>Rs. ${escapeHtml(l.final_total)}</span></div>
-        </div>
-      `).join('')}
-      <div class="divider"></div>
-      <div class="row total"><span>TOTAL</span><span>Rs. ${escapeHtml(detail.grand_total)}</span></div>
-      <div class="divider"></div>
-      <div class="foot">Thank you for shopping at ${escapeHtml(shopName)}!</div>
-      <div class="receipt-footer">${receiptFooter}</div>
-      <script>window.onload = function(){ window.print(); };</script>
-      </body></html>`);
+    const template = await loadDefaultTemplate(paperSize);
+    w.document.write(buildReceiptHTML(detail, shop, fullShop, template));
     w.document.close();
   }
 
@@ -660,6 +619,13 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
               </div>
 
               <div className="button-row" style={{ marginTop: '1rem', flexWrap: 'wrap' }}>
+                <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}>
+                  Paper
+                  <select value={paperSize} onChange={(e) => setPaperSize(e.target.value as PaperSize)}>
+                    <option value="80mm">80mm thermal</option>
+                    <option value="A4">A4</option>
+                  </select>
+                </label>
                 <button
                   type="button"
                   onClick={() => selectedDetail && printReceipt(selectedDetail)}

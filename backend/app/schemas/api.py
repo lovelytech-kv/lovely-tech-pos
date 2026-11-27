@@ -423,6 +423,7 @@ class ProvisioningOut(BaseModel):
 
 class BranchPublicOut(BaseModel):
     name: str
+    developer_phone: str | None = None
     logo_base64: str | None = None  # legacy
     logo_mime: str | None = None  # legacy
     logo_base64_light: str | None = None
