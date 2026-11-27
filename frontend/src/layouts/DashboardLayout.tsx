@@ -147,7 +147,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
           <button className="icon-button app-header-notifications" aria-label="Notifications">♢</button>
           {headerActions}
         </AppHeader>
-        <div className="v0-content">{children}</div>
+        <div className="v0-content"><div className="tab-content" key={activeKey}>{children}</div></div>
       </section>
     </main>
   );

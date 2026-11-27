@@ -2766,3 +2766,36 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   background: rgba(var(--accent-rgb), 0.15);
   border-color: rgba(var(--accent-rgb), 0.35);
 }
+
+/* ── Phase D — Micro-animations (targeted). ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modalEnter {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+.tab-content {
+  animation: fadeIn 150ms ease;
+}
+.modal-overlay {
+  animation: fadeIn 150ms ease;
+}
+.modal-card {
+  animation: modalEnter 200ms ease;
+}
+
+/* Targeted button lift — avoids elements that already use transform for layout. */
+.primary:not(:disabled):hover { transform: translateY(-1px); }
+.primary:not(:disabled):active { transform: translateY(0); }
+.btn-secondary:not(:disabled):hover { transform: translateY(-1px); }
+.btn-secondary:not(:disabled):active { transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
