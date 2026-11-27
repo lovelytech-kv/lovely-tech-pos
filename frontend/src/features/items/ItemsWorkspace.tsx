@@ -480,6 +480,7 @@ function ItemFormModal({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newTypeCode, setNewTypeCode] = useState('');
   const [newTypeCodeTouched, setNewTypeCodeTouched] = useState(false);
+  const [newTypeAdvancedOpen, setNewTypeAdvancedOpen] = useState(false);
   const [newTypeName, setNewTypeName] = useState('');
   const [newTypeSerialized, setNewTypeSerialized] = useState(false);
   const [masterBusy, setMasterBusy] = useState(false);
@@ -779,6 +780,7 @@ function ItemFormModal({
     } else {
       setNewTypeCode('');
       setNewTypeCodeTouched(false);
+      setNewTypeAdvancedOpen(false);
       setNewTypeName('');
       setNewTypeSerialized(false);
     }
@@ -791,6 +793,7 @@ function ItemFormModal({
     setNewCategoryName('');
     setNewTypeCode('');
     setNewTypeCodeTouched(false);
+    setNewTypeAdvancedOpen(false);
     setNewTypeName('');
     setNewTypeSerialized(false);
   }
@@ -858,6 +861,7 @@ function ItemFormModal({
       patch('item_type_id', created.id);
       setNewTypeCode('');
       setNewTypeCodeTouched(false);
+      setNewTypeAdvancedOpen(false);
       setNewTypeName('');
       setNewTypeSerialized(false);
       setMasterModal(null);
@@ -1215,20 +1219,30 @@ function ItemFormModal({
                     autoFocus
                   />
                 </label>
-                <label className="wide-field">Code
-                  <input
-                    value={newTypeCode}
-                    onChange={(event) => { setNewTypeCode(event.target.value); setNewTypeCodeTouched(true); }}
-                    maxLength={50}
-                    placeholder="Auto-generated from name"
-                    aria-label="New item type code"
-                  />
-                </label>
+                <div className="item-label-row" style={{ marginTop: 'var(--space-2)' }}>
+                  <button
+                    type="button"
+                    className="ghost category-manager-advanced-toggle"
+                    aria-expanded={newTypeAdvancedOpen}
+                    onClick={() => setNewTypeAdvancedOpen((value) => !value)}
+                  >{newTypeAdvancedOpen ? 'Hide code' : 'Advanced: edit code'}</button>
+                </div>
+                {newTypeAdvancedOpen && (
+                  <label className="wide-field">Code (auto from name)
+                    <input
+                      value={newTypeCode}
+                      onChange={(event) => { setNewTypeCode(event.target.value); setNewTypeCodeTouched(true); }}
+                      maxLength={50}
+                      placeholder="Auto-generated from name"
+                      aria-label="New item type code"
+                    />
+                  </label>
+                )}
                 <label className="check">
                   <input type="checkbox" checked={newTypeSerialized} onChange={(event) => setNewTypeSerialized(event.target.checked)} />
                   Serialized / IMEI (one unique serial per unit)
                 </label>
-                <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>The code is generated from the name unless you edit it.</p>
+                <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>The code is generated from the name. Open Advanced only when you need a specific code.</p>
               </>
             )}
 
