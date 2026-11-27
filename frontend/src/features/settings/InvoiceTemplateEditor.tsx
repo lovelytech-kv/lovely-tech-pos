@@ -525,6 +525,14 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
               <div className="invoice-form-section">
                 <h4>Header</h4>
                 <Toggle label="Show logo" hint="Uses the light logo from Shop Profile." checked={draft.show_logo} onChange={(value) => patch({ show_logo: value })} />
+                {draft.paper_size === '80mm' && (
+                  <Toggle
+                    label="Monochrome logo (80mm)"
+                    hint="Converts the light logo to 1-bit black & white for thermal printing."
+                    checked={draft.logo_monochrome}
+                    onChange={(value) => patch({ logo_monochrome: value })}
+                  />
+                )}
                 <label className="invoice-field">
                   <span>Header text override</span>
                   <textarea
@@ -553,6 +561,9 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
                   <Toggle label="Unit price" hint="Hides the quantity × price line; line totals stay visible." checked={draft.show_unit_price} onChange={(value) => patch({ show_unit_price: value })} />
                   <Toggle label="Warranty terms" hint="Prints the warranty text below." checked={draft.show_warranty_info} onChange={(value) => patch({ show_warranty_info: value })} />
                   <Toggle label="Repair details" hint="Only shown when the sale carries repair information." checked={draft.show_repair_details} onChange={(value) => patch({ show_repair_details: value })} />
+                  <Toggle label="Payment method" hint="Prints the payment mix (Cash, Card, Cash + Card)." checked={draft.show_payment_method} onChange={(value) => patch({ show_payment_method: value })} />
+                  <Toggle label="Cashier" hint="Prints the cashier who completed the sale." checked={draft.show_cashier} onChange={(value) => patch({ show_cashier: value })} />
+                  <Toggle label="Customer notes" hint="Prints notes saved on the customer record." checked={draft.show_customer_notes} onChange={(value) => patch({ show_customer_notes: value })} />
                 </div>
               </div>
 
