@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 
 type PublicProfile = {
   name: string;
+  developer_phone: string | null;
   logo_base64: string | null;
   logo_mime: string | null;
   logo_base64_light: string | null;
@@ -17,11 +18,27 @@ type ShopContextValue = {
   refetch: () => Promise<void>;
   getShopName: () => string;
   getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null;
+  getDeveloperPhone: () => string;
 };
 
 const ShopContext = createContext<ShopContextValue | null>(null);
 
 const DEFAULT_NAME = 'Lovely Tech';
+const DEVELOPER_CACHE_KEY = 'ltpos_developer_info';
+const DEVELOPER_PHONE_FALLBACK = import.meta.env.VITE_DEVELOPER_PHONE || '0770290008';
+
+function readCachedDeveloperPhone(): string {
+  try {
+    const raw = localStorage.getItem(DEVELOPER_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { developer_phone?: string } | null;
+      if (parsed?.developer_phone) return parsed.developer_phone;
+    }
+  } catch {
+    // Cache is optional; fall back to the build-time/default developer number.
+  }
+  return DEVELOPER_PHONE_FALLBACK;
+}
 
 export function ShopProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
@@ -43,6 +60,16 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       const result = await api<PublicProfile>('/branch/public');
       setProfile(result);
+      if (result.developer_phone) {
+        try {
+          localStorage.setItem(DEVELOPER_CACHE_KEY, JSON.stringify({
+            developer_name: 'Lovely Tech',
+            developer_phone: result.developer_phone,
+          }));
+        } catch {
+          // Non-fatal: the API value is already in memory.
+        }
+      }
     } catch {
       setProfile(null);
     } finally {
@@ -81,8 +108,13 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     [profile, resolvedTheme],
   );
 
+  const getDeveloperPhone = useCallback(
+    () => profile?.developer_phone || readCachedDeveloperPhone(),
+    [profile],
+  );
+
   return (
-    <ShopContext.Provider value={{ profile, loading, refetch, getShopName, getLogoDataUrl }}>
+    <ShopContext.Provider value={{ profile, loading, refetch, getShopName, getLogoDataUrl, getDeveloperPhone }}>
       {children}
     </ShopContext.Provider>
   );

@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import db_session, require_permission
+from app.core.config import settings
 from app.models.master import Branch, User
 from app.models.security import AuditLog
 from app.models.shop_identity import ShopIdentity
@@ -18,6 +19,7 @@ ALLOWED_MIMES = {'image/png', 'image/jpeg', 'image/svg+xml'}
 def _to_public(branch: Branch) -> BranchPublicOut:
     return BranchPublicOut(
         name=branch.name,
+        developer_phone=settings.ltpos_developer_phone,
         logo_base64=branch.logo_base64,
         logo_mime=branch.logo_mime,
         logo_base64_light=branch.logo_base64_light or branch.logo_base64,

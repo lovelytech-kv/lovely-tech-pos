@@ -29,6 +29,7 @@ export type ReceiptTemplate = {
 export type ShopContextLike = {
   getShopName: () => string;
   getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null;
+  getDeveloperPhone?: () => string;
 };
 
 export type FullShopLike = {
@@ -230,8 +231,14 @@ export function buildReceiptHTML(
   const footerHtml = footerRaw ? `<div class="foot">${escapeMultiline(footerRaw)}</div>` : '';
 
   // LOCKED branding — always last, never configurable by template/user.
-  const lockedFooter = phone
-    ? `${LOCKED_FOOTER_PREFIX} · ${escapeHtml(phone)}`
+  // The phone is the independent developer number, NOT the shop's phone.
+  const developerPhone = (
+    (shop.getDeveloperPhone ? shop.getDeveloperPhone() : '')
+    || import.meta.env.VITE_DEVELOPER_PHONE
+    || '0770290008'
+  ).trim();
+  const lockedFooter = developerPhone
+    ? `${LOCKED_FOOTER_PREFIX} · ${escapeHtml(developerPhone)}`
     : LOCKED_FOOTER_PREFIX;
 
   const autoPrintScript = options.autoPrint === false
