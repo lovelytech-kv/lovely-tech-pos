@@ -22,6 +22,7 @@ import { useShopProfile } from '../settings/ShopContext';
 import { buildReceiptHTML, DEFAULT_TEMPLATES, loadDefaultTemplate, readCachedTemplate, type ReceiptTemplate } from '../receipt/receiptTemplate';
 import { PitrRestoreDialog } from './PitrRestoreDialog';
 import { CustomerPickerModal, type PickerCustomer } from './CustomerPickerModal';
+import { NavIcon } from '../../components/NavIcon';
 import { ItemsWorkspace } from '../items/ItemsWorkspace';
 import { ItemCostReviewPanel } from '../items/ItemCostReviewPanel';
 
@@ -539,7 +540,7 @@ useEffect(() => {
           <span className="kbd-hint">F2</span>
         </div>
         <div className="sales-kbd-bar">
-          <span><kbd>F2</kbd> Search · <kbd>F4</kbd> Payment · <kbd>Esc</kbd> Clear · <kbd>Enter</kbd> Add/Scan · <kbd>Enter</kbd> (empty search) → Cash</span>
+          <span><kbd>F2</kbd> Search · <kbd>F4</kbd> Cash · <kbd>Enter</kbd> Add / complete sale · <kbd>Esc</kbd> Clear cart</span>
         </div>
         <div className="sales-recent">
           <span>Today's items:</span>
@@ -576,14 +577,10 @@ useEffect(() => {
           ))}
         </div>
         {last && (
-          <div className="sales-success" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <div className="sales-success sales-last-sale">
             <span>Completed: {last.invoice_no} · Rs. {money(last.grand_total)}{last.negative_stock ? ' · Negative stock warning' : ''}</span>
-            <button
-              type="button"
-              onClick={() => printReceipt(last, shop)}
-              style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--color-success)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', minHeight: 36 }}
-            >
-              🖨 Print Receipt
+            <button type="button" className="sales-print-btn" onClick={() => printReceipt(last, shop)}>
+              Print Receipt
             </button>
           </div>
         )}
@@ -595,41 +592,50 @@ useEffect(() => {
             <h2>Cart <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--muted)', marginLeft: 6 }}>({cart.length} items)</span></h2>
             <button
               type="button"
+              className="ghost sales-clear-btn"
               disabled={!cart.length || busy}
               onClick={() => { setCart([]); setApprovalId(''); setPendingApproval(null); }}
-              style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--muted)', cursor: cart.length ? 'pointer' : 'not-allowed', minHeight: 28 }}
             >Clear</button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) 0', borderBottom: '1px solid var(--line)', marginBottom: 'var(--space-2)', flexWrap: 'wrap' }}>
-            <span className="eyebrow" style={{ margin: 0 }}>Customer</span>
+          <div className="sales-customer-bar">
+            <span className="eyebrow sales-customer-label">Customer</span>
             {selectedCustomer ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 999, padding: '2px 4px 2px 10px', fontSize: '0.8rem', maxWidth: '100%' }}>
-                <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{customerDisplay(selectedCustomer)}</b>
+              <span className="sales-customer-chip">
+                <b className="sales-customer-name">{customerDisplay(selectedCustomer)}</b>
                 <button
                   type="button"
+                  className="sales-customer-clear"
                   onClick={clearCustomer}
                   aria-label="Remove customer from sale"
                   title="Remove customer"
-                  style={{ background: 'transparent', border: 0, color: 'var(--muted)', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: '2px 6px' }}
                 >×</button>
               </span>
             ) : (
-              <span className="muted" style={{ fontSize: '0.85rem' }}>Walk-in Customer</span>
+              <span className="muted sales-customer-walkin">Walk-in Customer</span>
             )}
             <button
               type="button"
-              className="ghost"
-              style={{ marginLeft: 'auto' }}
+              className="ghost sales-customer-add"
               onClick={() => setPickerOpen(true)}
             >{selectedCustomer ? 'Change' : '+ Add Customer'}</button>
           </div>
           {cart.length === 0
-            ? <div className="sales-cart-empty">No items yet. Scan or search to add.</div>
+            ? (
+              <div className="sales-cart-empty">
+                <span className="sales-cart-empty-icon" aria-hidden="true"><NavIcon name="Sales" /></span>
+                <b>Cart is empty</b>
+                <span>Scan a barcode or click an item to start.</span>
+              </div>
+            )
             : cart.map(x => (
                 <div className="sales-cart-line" key={x.line_id}>
                   <div className="line-top">
                     <div>
                       <div className="line-name">{x.description}</div>
+                      <div className="line-meta">
+                        Rs. {money(x.price)} each
+                        {Number(x.discount) > 0 ? ` · Disc. Rs. ${money(x.discount)}` : ''}
+                      </div>
                       {x.is_serialized && (
                         <div className={`line-serial ${x.serialized_unit_id ? '' : 'missing'}`}>
                           {x.serialized_unit_id ? `IMEI: ${x.serial_number}` : '⚠ IMEI required — scan now'}
@@ -657,8 +663,8 @@ useEffect(() => {
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchInputRef.current?.focus(); } }}
                       onWheel={e => e.currentTarget.blur()}
                     /></label>
-                    <label>Price <input type="number" min="0" step=".01" value={x.price} onChange={e => edit(x.line_id, 'price', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
-                    <label>Disc <input type="number" min="0" step=".01" value={x.discount} onChange={e => edit(x.line_id, 'discount', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
+                    <label>Unit price <input type="number" min="0" step=".01" value={x.price} onChange={e => edit(x.line_id, 'price', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
+                    <label>Disc. <input type="number" min="0" step=".01" value={x.discount} onChange={e => edit(x.line_id, 'discount', e.target.value)} onWheel={(e) => e.currentTarget.blur()} /></label>
                     <label>Warranty <select value={x.warranty_override?.warranty_type || 'DEFAULT'} onChange={e => setWarrantyOverride(x.line_id, e.target.value)}>
                       <option value="DEFAULT">Default</option>
                       <option value="NONE">None</option>
@@ -678,9 +684,13 @@ useEffect(() => {
               ))
           }
           <div className="sales-totals">
+            <div className="sales-summary-head">
+              <span className="sales-section-label">Summary</span>
+              <span className="sales-summary-count">{cart.length} {cart.length === 1 ? 'line' : 'lines'}</span>
+            </div>
             <div className="subtotal-row"><span>Subtotal</span><span>Rs. {money(moneyAdd(total, totalDiscount))}</span></div>
             <div className="subtotal-row"><span>Discount</span><span>Rs. {money(totalDiscount)}</span></div>
-            <div className="total-row"><span>TOTAL</span><span className="amount">Rs. {money(total)}</span></div>
+            <div className="total-row"><span>Total due</span><span className="amount">Rs. {money(total)}</span></div>
           </div>
         </div>
 
@@ -804,7 +814,8 @@ useEffect(() => {
           )}
 
           <button className="sales-complete-btn" disabled={!cart.length || busy || (credit && !customer) || (!credit && !isFullyPaid)} onClick={handleCompleteSale}>
-            {busy ? 'Processing…' : credit ? '✓ Complete Credit Sale' : '✓ Complete Sale'}
+            <span>{busy ? 'Processing…' : credit ? 'Complete Credit Sale' : 'Complete Sale'}</span>
+            {!busy && <span className="sales-complete-hint"><kbd>Enter</kbd></span>}
           </button>
         </div>
       </div>
