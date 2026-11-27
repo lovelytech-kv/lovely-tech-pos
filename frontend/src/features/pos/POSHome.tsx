@@ -16,6 +16,7 @@ import { moneyInputProps, intInputProps, signedIntInputProps } from '../../utils
 import { todayLocal } from '../../utils/date';
 import { escapeHtml } from '../../utils/escapeHtml';
 import { toast } from '../../ui/toast';
+import { restorePopupToasts, trackPopup } from '../../ui/popupToast';
 import { useModal } from '../../ui/modals';
 import { useShopProfile } from '../settings/ShopContext';
 import { buildReceiptHTML, DEFAULT_TEMPLATES, loadDefaultTemplate, readCachedTemplate, type ReceiptTemplate } from '../receipt/receiptTemplate';
@@ -334,31 +335,35 @@ useEffect(() => {
   function edit(id:string,k:'quantity'|'price'|'discount',v:string){setCart(c=>c.map(x=>x.line_id===id?{...x,[k]:v}:x))}
   function setWarrantyOverride(id:string, value:string){setCart(c=>c.map(x=>x.line_id===id?{...x,warranty_override:value==='DEFAULT'?null:{...(x.warranty_default||{warranty_type:'NONE'}),warranty_type:value,duration_value:value==='DAYS'||value==='MONTHS'?(x.warranty_override?.duration_value||x.warranty_default?.duration_value||null):null,custom_rule:value==='CUSTOM'?(x.warranty_override?.custom_rule||x.warranty_default?.custom_rule||''):null}}:x))}
 
-  function writeReceipt(w: Window, sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }, fullShop?: any, template?: ReceiptTemplate) {
+  async function writeReceipt(w: Window, sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }, fullShop?: any, template?: ReceiptTemplate) {
   try {
     if (!w || w.closed) return;
+    const html = await buildReceiptHTML(sale, shop, fullShop, template ?? invoiceTemplate);
+    if (!w || w.closed) return;
     w.document.open();
-    w.document.write(buildReceiptHTML(sale, shop, fullShop, template ?? invoiceTemplate));
+    w.document.write(html);
     w.document.close();
+    restorePopupToasts(w);
   } catch {
     // ignore
   }
 }
 
   function printReceipt(sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }) {
-  const w = window.open('', '_blank', 'width=420,height=640');
+  const w = trackPopup(window.open('', '_blank', 'width=420,height=640'));
   if (!w) {
     onError('Print popup was blocked. Please allow popups for this site and try again.');
     return;
   }
-  writeReceipt(w, sale, shop, fullShop, invoiceTemplate);
+  void writeReceipt(w, sale, shop, fullShop, invoiceTemplate);
 }
   function openPrintWindow(): Window | null {
     try {
-      const w = window.open('', '_blank', 'width=420,height=640');
+      const w = trackPopup(window.open('', '_blank', 'width=420,height=640'));
       if (w) {
         w.document.write('<!DOCTYPE html><html><head><title>Preparing receipt…</title><link rel="icon" href="data:," /></head><body style="font-family:monospace;padding:20px;text-align:center;font-size:13px"><p>Preparing receipt…</p></body></html>');
         w.document.close();
+        restorePopupToasts(w);
       }
       return w;
     } catch {
@@ -438,7 +443,7 @@ useEffect(() => {
           // apply without restarting the app. Falls back to cache/built-in.
           const printTemplate = await loadDefaultTemplate('80mm');
           setInvoiceTemplate(printTemplate);
-          writeReceipt(preOpenedPrintWindow, result, shop, fullShop, printTemplate);
+          await writeReceipt(preOpenedPrintWindow, result, shop, fullShop, printTemplate);
           printed = true;
         }
       } catch(e) {
@@ -917,7 +922,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
 
   async function reprint(r:any) {
     // Pre-open print window synchronously to bypass popup blocker
-    const w = window.open('', '_blank', 'width=420,height=640');
+    const w = trackPopup(window.open('', '_blank', 'width=420,height=640'));
     if (!w) {
       onError('Print popup was blocked. Please allow popups for this site and try again.');
       return;
@@ -933,7 +938,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
       if (r.document_type === 'SALE') {
         try {
           const saleDetail = await api<any>(`/sales/${encodeURIComponent(r.document_no)}`);
-          html = buildReceiptHTML(saleDetail, shop, fullShop, await loadDefaultTemplate('80mm'));
+          html = await buildReceiptHTML(saleDetail, shop, fullShop, await loadDefaultTemplate('80mm'));
         } catch {
           html = buildGenericReprintHTML(r);
         }
@@ -944,6 +949,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
       w.document.open();
       w.document.write(html);
       w.document.close();
+      restorePopupToasts(w);
 
       setLast(String(r.document_no || ''));
       toast.success(`Reprint opened: ${r.document_no}`);

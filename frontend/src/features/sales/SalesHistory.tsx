@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import { money } from '../../services/money';
 import { useModal } from '../../ui/modals';
 import { toast } from '../../ui/toast';
+import { restorePopupToasts, trackPopup } from '../../ui/popupToast';
 import { todayLocal } from '../../utils/date';
 import { useShopProfile } from '../settings/ShopContext';
 import { buildReceiptHTML, loadDefaultTemplate, type PaperSize } from '../receipt/receiptTemplate';
@@ -49,6 +50,9 @@ type SaleDetail = {
   version: number;
   customer_name?: string | null;
   customer_contact?: string | null;
+  customer_notes?: string | null;
+  cashier_name?: string | null;
+  payment_method_summary?: string | null;
   lines: SaleLine[];
 };
 
@@ -283,7 +287,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   }
 
   async function printReceipt(detail: SaleDetail) {
-    const w = window.open('', '_blank', 'width=420,height=640');
+    const w = trackPopup(window.open('', '_blank', 'width=420,height=640'));
     if (!w) {
       toast.error('Print popup blocked. Allow popups for this site.');
       return;
@@ -296,8 +300,9 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
       // Contact block is optional; the receipt still prints with the shop name/logo.
     }
     const template = await loadDefaultTemplate(paperSize);
-    w.document.write(buildReceiptHTML(detail, shop, fullShop, template));
+    w.document.write(await buildReceiptHTML(detail, shop, fullShop, template));
     w.document.close();
+    restorePopupToasts(w);
   }
 
   async function voidSale() {
@@ -624,6 +629,8 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                   <select value={paperSize} onChange={(e) => setPaperSize(e.target.value as PaperSize)}>
                     <option value="80mm">80mm thermal</option>
                     <option value="A4">A4</option>
+                    <option value="A5">A5</option>
+                    <option value="A6">A6</option>
                   </select>
                 </label>
                 <button

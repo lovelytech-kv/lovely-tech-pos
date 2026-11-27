@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
@@ -29,6 +29,13 @@ const MAX_HEADER = 200;
 const MAX_FOOTER = 500;
 const MAX_WARRANTY = 2000;
 
+const PREVIEW_METRICS: Record<PaperSize, { width: number; height: number; scale: number; frameHeight: number }> = {
+  '80mm': { width: 302, height: 640, scale: 1, frameHeight: 640 },
+  A4: { width: 794, height: 900, scale: 0.44, frameHeight: 400 },
+  A5: { width: 559, height: 794, scale: 0.6, frameHeight: 485 },
+  A6: { width: 397, height: 559, scale: 0.8, frameHeight: 455 },
+};
+
 function editablePayload(t: TemplateRecord) {
   return {
     name: t.name,
@@ -46,6 +53,10 @@ function editablePayload(t: TemplateRecord) {
     show_unit_price: t.show_unit_price,
     show_warranty_info: t.show_warranty_info,
     show_repair_details: t.show_repair_details,
+    show_payment_method: t.show_payment_method,
+    show_cashier: t.show_cashier,
+    show_customer_notes: t.show_customer_notes,
+    logo_monochrome: t.logo_monochrome,
     footer_text: t.footer_text,
     warranty_terms: t.warranty_terms,
     show_footer_note: t.show_footer_note,
@@ -71,7 +82,76 @@ function Toggle({ label, hint, checked, onChange }: {
   );
 }
 
-export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
+function EditorFrame({ modal, onRequestClose, children }: {
+  modal: boolean;
+  onRequestClose: () => void;
+  children: ReactNode;
+}) {
+  const shellRef = useRef<HTMLDivElement>(null);
+
+  // Modal safety: lock page scroll, move focus in, keep Tab inside.
+  useEffect(() => {
+    if (!modal) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    shellRef.current?.focus();
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [modal]);
+
+  if (!modal) {
+    return <div className="glass-panel settings-card invoice-template-card">{children}</div>;
+  }
+
+  function trapFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Tab' || !shellRef.current) return;
+    const focusable = shellRef.current.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  return (
+    <div
+      className="invoice-editor-overlay"
+      role="presentation"
+      onMouseDown={(event) => { if (event.target === event.currentTarget) onRequestClose(); }}
+    >
+      <div
+        className="invoice-editor-shell"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Invoice template editor"
+        tabIndex={-1}
+        ref={shellRef}
+        onKeyDown={trapFocus}
+      >
+        <div className="invoice-editor-head">
+          <div>
+            <h2>Invoice Templates</h2>
+            <p className="muted">Customize receipt layout for 80mm thermal, A4, A5 and A6 printing. The Lovely Tech branding line is locked and always printed last.</p>
+          </div>
+          <button type="button" className="modal-close" onClick={onRequestClose} aria-label="Close template editor">×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
+  isAdmin: boolean;
+  mode?: 'inline' | 'modal';
+  onClose?: () => void;
+}) {
   const shop = useShopProfile();
   const modal = useModal();
 
@@ -80,6 +160,7 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
   const [draft, setDraft] = useState<TemplateRecord | null>(null);
   const [baseline, setBaseline] = useState('');
   const [previewDraft, setPreviewDraft] = useState<TemplateRecord | null>(null);
+  const [previewHtml, setPreviewHtml] = useState('');
   const [fullShop, setFullShop] = useState<{ address?: string | null; phone?: string | null; email?: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -89,6 +170,7 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
   const [newForm, setNewForm] = useState<NewForm>({ name: '', paper_size: '80mm', base_id: 'builtin' });
 
   const dirty = draft !== null && baseline !== '' && serialize(draft) !== baseline;
+  const closeGuardRef = useRef<() => void>(() => {});
 
   async function load(preferredId?: string) {
     setLoading(true);
@@ -136,6 +218,24 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
     return () => window.clearTimeout(id);
   }, [draft]);
 
+  // Render the preview asynchronously because the B&W logo conversion uses Canvas.
+  useEffect(() => {
+    if (!previewDraft) {
+      setPreviewHtml('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const html = await renderReceiptPreview(previewDraft, shop, fullShop);
+        if (!cancelled) setPreviewHtml(html);
+      } catch {
+        if (!cancelled) setPreviewHtml('');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [previewDraft, shop, fullShop]);
+
   // Discard guard for tab close / reload.
   useEffect(() => {
     if (!dirty) return;
@@ -156,7 +256,37 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
     return () => window.removeEventListener('keydown', handler);
   }, [newOpen, creating]);
 
+  // Modal: Escape closes the editor, but unsaved drafts must be confirmed.
+  useEffect(() => {
+    if (mode !== 'modal') return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || newOpen) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeGuardRef.current();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [mode, newOpen]);
+
+  // Keep the close guard pointing at the latest dirty/onClose values.
+  useEffect(() => {
+    closeGuardRef.current = () => { void requestClose(); };
+  });
+
   if (!isAdmin) return null;
+
+  async function requestClose() {
+    if (dirty) {
+      const ok = await modal.confirm({
+        title: 'Discard unsaved changes?',
+        message: 'The current template has unsaved changes. Closing the editor will discard them.',
+        confirmText: 'Discard',
+      });
+      if (!ok) return;
+    }
+    onClose?.();
+  }
 
   function patch(patchValue: Partial<TemplateRecord>) {
     setDraft((current) => current ? { ...current, ...patchValue } : current);
@@ -294,30 +424,32 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
 
   if (loading) {
     return (
-      <div className="glass-panel settings-card invoice-template-card">
-        <div className="settings-card-title">
-          <div><h3>Invoice Template</h3><p className="muted">Loading templates…</p></div>
-          <span className="settings-symbol">🧾</span>
-        </div>
+      <EditorFrame modal={mode === 'modal'} onRequestClose={() => closeGuardRef.current()}>
+        {mode !== 'modal' && (
+          <div className="settings-card-title">
+            <div><h3>Invoice Template</h3><p className="muted">Loading templates…</p></div>
+            <span className="settings-symbol">🧾</span>
+          </div>
+        )}
         <div style={{ textAlign: 'center', padding: '1rem' }}><span className="spinner" /></div>
-      </div>
+      </EditorFrame>
     );
   }
 
-  const previewHtml = previewDraft
-    ? renderReceiptPreview(previewDraft, shop, fullShop)
-    : '';
-  const isA4 = previewDraft?.paper_size === 'A4';
+  const previewPaper = previewDraft?.paper_size ?? '80mm';
+  const previewMetrics = PREVIEW_METRICS[previewPaper];
 
   return (
-    <div className="glass-panel settings-card invoice-template-card">
-      <div className="settings-card-title">
-        <div>
-          <h3>Invoice Template</h3>
-          <p className="muted">Customize receipt layout for 80mm thermal and A4 printing. The Lovely Tech branding line is locked and always printed last.</p>
+    <EditorFrame modal={mode === 'modal'} onRequestClose={() => closeGuardRef.current()}>
+      {mode !== 'modal' && (
+        <div className="settings-card-title">
+          <div>
+            <h3>Invoice Template</h3>
+            <p className="muted">Customize receipt layout for 80mm thermal, A4, A5 and A6 printing. The Lovely Tech branding line is locked and always printed last.</p>
+          </div>
+          <span className="settings-symbol">🧾</span>
         </div>
-        <span className="settings-symbol">🧾</span>
-      </div>
+      )}
 
       {error && <div className="error-banner" role="alert" style={{ marginBottom: '0.75rem' }}><span>{error}</span></div>}
 
@@ -333,7 +465,7 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
             >
               <span className="invoice-template-name">{template.name}</span>
               <span className="invoice-template-meta">
-                <span className="invoice-paper-badge">{template.paper_size === 'A4' ? 'A4' : '80mm'}</span>
+                <span className="invoice-paper-badge">{template.paper_size}</span>
                 {template.is_default && <span className="invoice-default-badge">★ Default</span>}
                 {!template.is_active && <span className="invoice-inactive-badge">Inactive</span>}
               </span>
@@ -379,6 +511,8 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
                     <select value={draft.paper_size} onChange={(e) => patch({ paper_size: e.target.value as PaperSize })}>
                       <option value="80mm">80mm thermal</option>
                       <option value="A4">A4</option>
+                      <option value="A5">A5</option>
+                      <option value="A6">A6</option>
                     </select>
                   </label>
                   <Toggle label="Template active" hint="Inactive templates cannot be default or printed by new sales." checked={draft.is_active} onChange={(value) => patch({ is_active: value })} />
@@ -391,6 +525,14 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
               <div className="invoice-form-section">
                 <h4>Header</h4>
                 <Toggle label="Show logo" hint="Uses the light logo from Shop Profile." checked={draft.show_logo} onChange={(value) => patch({ show_logo: value })} />
+                {draft.paper_size === '80mm' && (
+                  <Toggle
+                    label="Monochrome logo (80mm)"
+                    hint="Converts the light logo to 1-bit black & white for thermal printing."
+                    checked={draft.logo_monochrome}
+                    onChange={(value) => patch({ logo_monochrome: value })}
+                  />
+                )}
                 <label className="invoice-field">
                   <span>Header text override</span>
                   <textarea
@@ -419,6 +561,9 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
                   <Toggle label="Unit price" hint="Hides the quantity × price line; line totals stay visible." checked={draft.show_unit_price} onChange={(value) => patch({ show_unit_price: value })} />
                   <Toggle label="Warranty terms" hint="Prints the warranty text below." checked={draft.show_warranty_info} onChange={(value) => patch({ show_warranty_info: value })} />
                   <Toggle label="Repair details" hint="Only shown when the sale carries repair information." checked={draft.show_repair_details} onChange={(value) => patch({ show_repair_details: value })} />
+                  <Toggle label="Payment method" hint="Prints the payment mix (Cash, Card, Cash + Card)." checked={draft.show_payment_method} onChange={(value) => patch({ show_payment_method: value })} />
+                  <Toggle label="Cashier" hint="Prints the cashier who completed the sale." checked={draft.show_cashier} onChange={(value) => patch({ show_cashier: value })} />
+                  <Toggle label="Customer notes" hint="Prints notes saved on the customer record." checked={draft.show_customer_notes} onChange={(value) => patch({ show_customer_notes: value })} />
                 </div>
               </div>
 
@@ -471,9 +616,9 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
             <div className="invoice-preview-pane">
               <div className="invoice-preview-title">
                 <b>Live preview</b>
-                <span className="invoice-paper-badge">{isA4 ? 'A4' : '80mm'}</span>
+                <span className="invoice-paper-badge">{previewPaper}</span>
               </div>
-              <div className="invoice-preview-frame" style={{ height: isA4 ? 400 : 640 }}>
+              <div className="invoice-preview-frame" style={{ height: previewMetrics.frameHeight }}>
                 {previewHtml
                   ? (
                     <iframe
@@ -481,9 +626,9 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
                       srcDoc={previewHtml}
                       sandbox="allow-same-origin"
                       style={{
-                        width: isA4 ? 794 : 302,
-                        height: isA4 ? 900 : 640,
-                        transform: isA4 ? 'scale(0.44)' : 'none',
+                        width: previewMetrics.width,
+                        height: previewMetrics.height,
+                        transform: previewMetrics.scale === 1 ? 'none' : `scale(${previewMetrics.scale})`,
                         transformOrigin: 'top left',
                         border: 'none',
                         background: '#fff',
@@ -491,7 +636,7 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
                       }}
                     />
                   )
-                  : <p className="muted" style={{ padding: '1rem' }}>Preview unavailable.</p>}
+                  : <p className="muted" style={{ padding: '1rem' }}>{previewDraft ? 'Preparing preview…' : 'Preview unavailable.'}</p>}
               </div>
               <p className="muted" style={{ fontSize: '0.7rem', margin: '0.4rem 0 0' }}>
                 Preview updates 300ms after the last change and always prints on white paper.
@@ -533,6 +678,8 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
               <select value={newForm.paper_size} onChange={(e) => setNewForm({ ...newForm, paper_size: e.target.value as PaperSize })}>
                 <option value="80mm">80mm thermal</option>
                 <option value="A4">A4</option>
+                <option value="A5">A5</option>
+                <option value="A6">A6</option>
               </select>
             </label>
             <label className="invoice-field">
@@ -551,6 +698,6 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </div>
       )}
-    </div>
+    </EditorFrame>
   );
 }

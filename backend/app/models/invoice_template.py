@@ -39,6 +39,12 @@ class InvoiceTemplate(UUIDPrimaryKeyMixin, Base):
     show_unit_price: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_warranty_info: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_repair_details: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    show_payment_method: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    show_cashier: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    show_customer_notes: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Thermal 80mm monochrome logo (1-bit conversion happens at print time)
+    logo_monochrome: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Footer (user content — always printed BEFORE the locked branding line)
     footer_text: Mapped[str | None] = mapped_column(Text)

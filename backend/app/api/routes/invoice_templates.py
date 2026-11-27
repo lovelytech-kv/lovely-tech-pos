@@ -30,7 +30,8 @@ _SNAPSHOT_FIELDS = (
     'show_logo', 'header_text', 'show_address', 'show_phone', 'show_email',
     'show_customer_name', 'show_customer_phone', 'show_item_description',
     'show_item_code', 'show_unit_price', 'show_warranty_info',
-    'show_repair_details',
+    'show_repair_details', 'show_payment_method', 'show_cashier',
+    'show_customer_notes', 'logo_monochrome',
     'footer_text', 'warranty_terms', 'show_footer_note',
 )
 
@@ -106,7 +107,7 @@ def list_invoice_templates(
 
 @router.get('/default', response_model=InvoiceTemplateOut)
 def get_default_invoice_template(
-    paper_size: Literal['80mm', 'A4'] = Query(default='80mm'),
+    paper_size: Literal['80mm', 'A4', 'A5', 'A6'] = Query(default='80mm'),
     user: User = Depends(require_any_permission('SALE_CREATE', 'RETURN_CREATE', 'ADMIN_PANEL')),
     db: Session = Depends(db_session),
 ):
@@ -145,6 +146,10 @@ def create_invoice_template(
         show_unit_price=payload.show_unit_price,
         show_warranty_info=payload.show_warranty_info,
         show_repair_details=payload.show_repair_details,
+        show_payment_method=payload.show_payment_method,
+        show_cashier=payload.show_cashier,
+        show_customer_notes=payload.show_customer_notes,
+        logo_monochrome=payload.logo_monochrome,
         footer_text=_clean_text(payload.footer_text),
         warranty_terms=_clean_text(payload.warranty_terms),
         show_footer_note=payload.show_footer_note,
@@ -212,7 +217,9 @@ def update_invoice_template(
     for field in ('is_active', 'show_logo', 'show_address', 'show_phone',
                   'show_email', 'show_customer_name', 'show_customer_phone',
                   'show_item_description', 'show_item_code', 'show_unit_price',
-                  'show_warranty_info', 'show_repair_details', 'show_footer_note'):
+                  'show_warranty_info', 'show_repair_details', 'show_footer_note',
+                  'show_payment_method', 'show_cashier', 'show_customer_notes',
+                  'logo_monochrome'):
         if field in data and data[field] is not None:
             setattr(template, field, data[field])
 

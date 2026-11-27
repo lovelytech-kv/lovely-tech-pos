@@ -1,12 +1,21 @@
+import { showPopupToast } from './popupToast';
+
 export type ToastType = 'success' | 'error' | 'info';
 export type ToastListener = (msg: string, type: ToastType) => void;
 
 const listeners: ToastListener[] = [];
 
+function emit(msg: string, type: ToastType): void {
+  listeners.forEach((listener) => listener(msg, type));
+  // Popups are separate documents; render there too so the feedback is not
+  // hidden behind an open receipt / reprint window.
+  showPopupToast(msg, type);
+}
+
 export const toast = {
-  success: (msg: string) => listeners.forEach((l) => l(msg, 'success')),
-  error: (msg: string) => listeners.forEach((l) => l(msg, 'error')),
-  info: (msg: string) => listeners.forEach((l) => l(msg, 'info')),
+  success: (msg: string) => emit(msg, 'success'),
+  error: (msg: string) => emit(msg, 'error'),
+  info: (msg: string) => emit(msg, 'info'),
   subscribe: (fn: ToastListener) => {
     listeners.push(fn);
     return () => {
