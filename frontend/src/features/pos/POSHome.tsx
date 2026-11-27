@@ -690,7 +690,6 @@ useEffect(() => {
             </div>
             <div className="subtotal-row"><span>Subtotal</span><span>Rs. {money(moneyAdd(total, totalDiscount))}</span></div>
             <div className="subtotal-row"><span>Discount</span><span>Rs. {money(totalDiscount)}</span></div>
-            <div className="total-row"><span>Total due</span><span className="amount">Rs. {money(total)}</span></div>
           </div>
         </div>
 
@@ -813,6 +812,13 @@ useEffect(() => {
             </div>
           )}
 
+        </div>
+
+        <div className="sales-sticky-footer">
+          <div className="sales-total">
+            <span className="label">Total Due</span>
+            <span className="amount">Rs. {money(total)}</span>
+          </div>
           <button className="sales-complete-btn" disabled={!cart.length || busy || (credit && !customer) || (!credit && !isFullyPaid)} onClick={handleCompleteSale}>
             <span>{busy ? 'Processing…' : credit ? 'Complete Credit Sale' : 'Complete Sale'}</span>
             {!busy && <span className="sales-complete-hint"><kbd>Enter</kbd></span>}
