@@ -2564,3 +2564,17 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 .inv-card-reactivate:disabled{opacity:.6;cursor:not-allowed}
 .items-reactivate-btn{padding:7px 11px;font-size:var(--text-xs);white-space:nowrap}
 [data-theme="dark"] .inv-card-reactivate{background:var(--color-success);color:#fff}
+
+/* ============ SESSION 3D-2 — MODERN SVG SIDEBAR ICONS ============ */
+.nav-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px;text-align:center;color:#9a9aa0}
+.nav-svg{display:block;width:18px;height:18px;transition:transform var(--transition-fast)}
+.v0-nav button{transition:background var(--transition-fast),color var(--transition-fast),transform var(--transition-fast)}
+.v0-nav button:hover{transform:translateY(-1px)}
+.v0-nav button:hover .nav-icon{color:inherit}
+.v0-nav button:hover .nav-svg{transform:scale(1.06)}
+.v0-nav button.active .nav-icon{color:var(--accent)}
+.v0-sidebar.is-collapsed .nav-icon{width:20px;flex-basis:20px;font-size:inherit}
+.v0-sidebar-toggle .nav-svg{width:16px;height:16px}
+:root[data-theme="dark"] .nav-icon{color:#8b8f98}
+:root[data-theme="dark"] .v0-nav button:hover .nav-icon{color:#fff}
+:root[data-theme="dark"] .v0-nav button.active .nav-icon{color:var(--accent)}

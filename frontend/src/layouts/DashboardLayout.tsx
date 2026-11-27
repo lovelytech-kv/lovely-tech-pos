@@ -5,6 +5,7 @@ import { NAV_ITEMS, getNavForRole } from '../config/navigation';
 import { loadPermissions, getDefaultPermissions, type Permission } from '../config/permissions';
 import { useShopProfile } from '../features/settings/ShopContext';
 import { AppHeader } from '../components/AppHeader';
+import { ChevronIcon, NavIcon } from '../components/NavIcon';
 
 type User = { display_name: string; role: string; branch_id: string };
 
@@ -85,7 +86,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
             aria-expanded={!collapsed}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            {collapsed ? '»' : '«'}
+            {collapsed ? <ChevronIcon direction="right" /> : <ChevronIcon direction="left" />}
           </button>
         </div>
         <div className="v0-sidebar-scroll">
@@ -99,7 +100,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
                 title={item.label}
                 aria-current={activeKey === item.key ? 'page' : undefined}
               >
-                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-icon"><NavIcon name={item.icon} /></span>
                 <span className="nav-label">{item.label}</span>
                 {item.key === 'Sales' && <b className="nav-badge">POS</b>}
               </button>
@@ -115,7 +116,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
                 title={item.label}
                 aria-current={activeKey === item.key ? 'page' : undefined}
               >
-                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-icon"><NavIcon name={item.icon} /></span>
                 <span className="nav-label">{item.label}</span>
               </button>
             ))}
@@ -127,7 +128,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
                 title={item.label}
                 aria-current={activeKey === item.key ? 'page' : undefined}
               >
-                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-icon"><NavIcon name={item.icon} /></span>
                 <span className="nav-label">{item.label}</span>
               </button>
             ))}
