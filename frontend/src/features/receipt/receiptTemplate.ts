@@ -1,7 +1,7 @@
 import { api } from '../../api/client';
 import { escapeHtml } from '../../utils/escapeHtml';
 
-export type PaperSize = '80mm' | 'A4';
+export type PaperSize = '80mm' | 'A4' | 'A5' | 'A6';
 
 export type ReceiptTemplate = {
   id?: string;
@@ -80,6 +80,56 @@ export const DEFAULT_TEMPLATES: Record<PaperSize, ReceiptTemplate> = {
     show_address: true,
     show_phone: true,
     show_email: true,
+    show_customer_name: true,
+    show_customer_phone: true,
+    show_item_description: true,
+    show_item_code: true,
+    show_unit_price: true,
+    show_warranty_info: true,
+    show_repair_details: true,
+    show_payment_method: false,
+    show_cashier: false,
+    show_customer_notes: false,
+    logo_monochrome: false,
+    footer_text: 'Thank you for shopping at {shop_name}!',
+    warranty_terms: null,
+    show_footer_note: true,
+  },
+  A5: {
+    name: 'Default A5',
+    paper_size: 'A5',
+    is_default: true,
+    is_active: true,
+    show_logo: true,
+    header_text: null,
+    show_address: true,
+    show_phone: true,
+    show_email: true,
+    show_customer_name: true,
+    show_customer_phone: true,
+    show_item_description: true,
+    show_item_code: true,
+    show_unit_price: true,
+    show_warranty_info: true,
+    show_repair_details: true,
+    show_payment_method: false,
+    show_cashier: false,
+    show_customer_notes: false,
+    logo_monochrome: false,
+    footer_text: 'Thank you for shopping at {shop_name}!',
+    warranty_terms: null,
+    show_footer_note: true,
+  },
+  A6: {
+    name: 'Default A6',
+    paper_size: 'A6',
+    is_default: true,
+    is_active: true,
+    show_logo: true,
+    header_text: null,
+    show_address: true,
+    show_phone: true,
+    show_email: false,
     show_customer_name: true,
     show_customer_phone: true,
     show_item_description: true,
@@ -257,6 +307,31 @@ function paperCss(paperSize: PaperSize): string {
       .total{font-size:17px;}
     `;
   }
+  if (paperSize === 'A5') {
+    return `
+      @page{size:A5;margin:10mm;}
+      body{width:auto;max-width:128mm;padding:0;font-size:11px;}
+      h1{font-size:18px;}
+      .logo{max-width:90px;max-height:90px;}
+      .meta{font-size:11px;}
+      .contact{font-size:10px;}
+      .line{padding:4px 0;}
+      .total{font-size:15px;}
+    `;
+  }
+  if (paperSize === 'A6') {
+    return `
+      @page{size:A6;margin:8mm;}
+      body{width:auto;max-width:89mm;padding:0;font-size:10px;}
+      h1{font-size:15px;}
+      .logo{max-width:70px;max-height:70px;}
+      .meta{font-size:10px;}
+      .contact{font-size:9px;}
+      .line{padding:3px 0;}
+      .ln-code{font-size:8px;}
+      .total{font-size:14px;}
+    `;
+  }
   return `
     @page{size:80mm auto;margin:0;}
     body{width:80mm;padding:4mm;font-size:11px;}
@@ -275,7 +350,9 @@ export async function buildReceiptHTML(
   template: ReceiptTemplate,
   options: BuildOptions = {},
 ): Promise<string> {
-  const paperSize: PaperSize = template?.paper_size === 'A4' ? 'A4' : '80mm';
+  const paperSize: PaperSize = template?.paper_size === 'A4' || template?.paper_size === 'A5' || template?.paper_size === 'A6'
+    ? template.paper_size
+    : '80mm';
   const t: ReceiptTemplate = { ...DEFAULT_TEMPLATES[paperSize], ...template };
   const lines = Array.isArray(sale?.lines) ? sale.lines : [];
 

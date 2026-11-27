@@ -107,7 +107,7 @@ def list_invoice_templates(
 
 @router.get('/default', response_model=InvoiceTemplateOut)
 def get_default_invoice_template(
-    paper_size: Literal['80mm', 'A4'] = Query(default='80mm'),
+    paper_size: Literal['80mm', 'A4', 'A5', 'A6'] = Query(default='80mm'),
     user: User = Depends(require_any_permission('SALE_CREATE', 'RETURN_CREATE', 'ADMIN_PANEL')),
     db: Session = Depends(db_session),
 ):

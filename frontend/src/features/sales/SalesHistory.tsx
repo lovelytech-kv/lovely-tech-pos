@@ -629,6 +629,8 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                   <select value={paperSize} onChange={(e) => setPaperSize(e.target.value as PaperSize)}>
                     <option value="80mm">80mm thermal</option>
                     <option value="A4">A4</option>
+                    <option value="A5">A5</option>
+                    <option value="A6">A6</option>
                   </select>
                 </label>
                 <button

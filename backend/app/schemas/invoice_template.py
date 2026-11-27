@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PaperSize = Literal['80mm', 'A4']
+PaperSize = Literal['80mm', 'A4', 'A5', 'A6']
 
 
 class InvoiceTemplateCreate(BaseModel):

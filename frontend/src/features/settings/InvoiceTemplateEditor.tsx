@@ -29,6 +29,13 @@ const MAX_HEADER = 200;
 const MAX_FOOTER = 500;
 const MAX_WARRANTY = 2000;
 
+const PREVIEW_METRICS: Record<PaperSize, { width: number; height: number; scale: number; frameHeight: number }> = {
+  '80mm': { width: 302, height: 640, scale: 1, frameHeight: 640 },
+  A4: { width: 794, height: 900, scale: 0.44, frameHeight: 400 },
+  A5: { width: 559, height: 794, scale: 0.6, frameHeight: 485 },
+  A6: { width: 397, height: 559, scale: 0.8, frameHeight: 455 },
+};
+
 function editablePayload(t: TemplateRecord) {
   return {
     name: t.name,
@@ -429,7 +436,8 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
     );
   }
 
-  const isA4 = previewDraft?.paper_size === 'A4';
+  const previewPaper = previewDraft?.paper_size ?? '80mm';
+  const previewMetrics = PREVIEW_METRICS[previewPaper];
 
   return (
     <EditorFrame modal={mode === 'modal'} onRequestClose={() => closeGuardRef.current()}>
@@ -437,7 +445,7 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
         <div className="settings-card-title">
           <div>
             <h3>Invoice Template</h3>
-            <p className="muted">Customize receipt layout for 80mm thermal and A4 printing. The Lovely Tech branding line is locked and always printed last.</p>
+            <p className="muted">Customize receipt layout for 80mm thermal, A4, A5 and A6 printing. The Lovely Tech branding line is locked and always printed last.</p>
           </div>
           <span className="settings-symbol">🧾</span>
         </div>
@@ -457,7 +465,7 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
             >
               <span className="invoice-template-name">{template.name}</span>
               <span className="invoice-template-meta">
-                <span className="invoice-paper-badge">{template.paper_size === 'A4' ? 'A4' : '80mm'}</span>
+                <span className="invoice-paper-badge">{template.paper_size}</span>
                 {template.is_default && <span className="invoice-default-badge">★ Default</span>}
                 {!template.is_active && <span className="invoice-inactive-badge">Inactive</span>}
               </span>
@@ -503,6 +511,8 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
                     <select value={draft.paper_size} onChange={(e) => patch({ paper_size: e.target.value as PaperSize })}>
                       <option value="80mm">80mm thermal</option>
                       <option value="A4">A4</option>
+                      <option value="A5">A5</option>
+                      <option value="A6">A6</option>
                     </select>
                   </label>
                   <Toggle label="Template active" hint="Inactive templates cannot be default or printed by new sales." checked={draft.is_active} onChange={(value) => patch({ is_active: value })} />
@@ -595,9 +605,9 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
             <div className="invoice-preview-pane">
               <div className="invoice-preview-title">
                 <b>Live preview</b>
-                <span className="invoice-paper-badge">{isA4 ? 'A4' : '80mm'}</span>
+                <span className="invoice-paper-badge">{previewPaper}</span>
               </div>
-              <div className="invoice-preview-frame" style={{ height: isA4 ? 400 : 640 }}>
+              <div className="invoice-preview-frame" style={{ height: previewMetrics.frameHeight }}>
                 {previewHtml
                   ? (
                     <iframe
@@ -605,9 +615,9 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
                       srcDoc={previewHtml}
                       sandbox="allow-same-origin"
                       style={{
-                        width: isA4 ? 794 : 302,
-                        height: isA4 ? 900 : 640,
-                        transform: isA4 ? 'scale(0.44)' : 'none',
+                        width: previewMetrics.width,
+                        height: previewMetrics.height,
+                        transform: previewMetrics.scale === 1 ? 'none' : `scale(${previewMetrics.scale})`,
                         transformOrigin: 'top left',
                         border: 'none',
                         background: '#fff',
@@ -657,6 +667,8 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
               <select value={newForm.paper_size} onChange={(e) => setNewForm({ ...newForm, paper_size: e.target.value as PaperSize })}>
                 <option value="80mm">80mm thermal</option>
                 <option value="A4">A4</option>
+                <option value="A5">A5</option>
+                <option value="A6">A6</option>
               </select>
             </label>
             <label className="invoice-field">
