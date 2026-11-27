@@ -451,7 +451,7 @@ export function InvoiceTemplateEditor({ isAdmin }: { isAdmin: boolean }) {
                 <div className="invoice-locked-note" title="Required branding — cannot be edited">
                   <span aria-hidden="true">🔒</span>
                   <span>
-                    <b>Software by Lovely Tech · {fullShop?.phone || '[shop phone]'}</b>
+                    <b>Software by Lovely Tech · {shop.getDeveloperPhone()}</b>
                     <small>Required branding — cannot be edited</small>
                   </span>
                 </div>
