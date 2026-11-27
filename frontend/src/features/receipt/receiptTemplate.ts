@@ -312,7 +312,7 @@ export function buildReceiptHTML(
       .warranty{margin-top:8px;font-size:9px;color:#444;line-height:1.35;}
       .warranty-title{font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;}
       .repair{margin-top:6px;font-size:10px;color:#333;line-height:1.35;}
-      .receipt-footer{margin-top:16px;padding-top:8px;border-top:1px dashed #ccc;text-align:center;font-size:10px;color:#888;}
+      .receipt-locked-footer{font-family:inherit;font-style:normal;font-weight:400;font-size:10px;text-align:center;margin-top:8px;padding-top:6px;border-top:1px dashed #ccc;color:#888;}
       .logo{display:block;margin:0 auto 4px;max-width:80px;max-height:80px;object-fit:contain;}
       ${paperCss(paperSize)}
     </style></head><body>
@@ -331,7 +331,7 @@ export function buildReceiptHTML(
     ${warrantyHtml}
     ${footerHtml}
     <div class="divider"></div>
-    <div class="receipt-footer">${lockedFooter}</div>
+    <div class="receipt-locked-footer">${lockedFooter}</div>
     ${autoPrintScript}
     </body></html>`;
 }
