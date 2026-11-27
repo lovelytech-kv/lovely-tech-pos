@@ -20,6 +20,7 @@ type ItemRow = {
   category_id: string;
   item_type_id: string;
   master_sale_price: string | number | null;
+  low_stock_threshold: number;
   version: number;
   is_active: boolean;
   barcodes: string[];
@@ -31,7 +32,7 @@ type StockRow = { item_id: string; stock: string | number };
 type StockFilter = 'ALL' | 'IN' | 'LOW' | 'OUT';
 type ViewMode = 'grid' | 'list';
 
-const LOW_STOCK_MAX = 10;
+const DEFAULT_LOW_STOCK = 5;
 const TILE_HUES = [6, 28, 45, 88, 148, 192, 216, 262, 312];
 const EMPTY_MASTERS: Masters = { categories: [], item_types: [] };
 
@@ -53,26 +54,31 @@ function numericStock(value: string | number | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function stockTone(stock: number | null): 'ok' | 'low' | 'out' | 'unknown' {
+function lowStockThreshold(item: Pick<ItemRow, 'low_stock_threshold'>): number {
+  const value = Number(item.low_stock_threshold);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : DEFAULT_LOW_STOCK;
+}
+
+function stockTone(stock: number | null, threshold: number): 'ok' | 'low' | 'out' | 'unknown' {
   if (stock === null) return 'unknown';
   if (stock <= 0) return 'out';
-  if (stock <= LOW_STOCK_MAX) return 'low';
+  if (stock <= threshold) return 'low';
   return 'ok';
 }
 
-function stockLabel(stock: number | null): string {
+function stockLabel(stock: number | null, threshold: number): string {
   if (stock === null) return '—';
   if (stock <= 0) return 'Out';
-  if (stock <= LOW_STOCK_MAX) return `${stock} left`;
+  if (stock <= threshold) return `${stock} left`;
   return String(stock);
 }
 
-function stockFilterMatch(filter: StockFilter, stock: number | null): boolean {
+function stockFilterMatch(filter: StockFilter, stock: number | null, threshold: number): boolean {
   if (filter === 'ALL') return true;
   if (stock === null) return false;
   if (filter === 'OUT') return stock <= 0;
-  if (filter === 'LOW') return stock > 0 && stock <= LOW_STOCK_MAX;
-  return stock > LOW_STOCK_MAX;
+  if (filter === 'LOW') return stock > 0 && stock <= threshold;
+  return stock > threshold;
 }
 
 export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError: (message: string) => void }) {
@@ -142,7 +148,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
       if (!item.is_active && !(isAdmin && showInactive)) return false;
       if (categoryId && item.category_id !== categoryId) return false;
       const stock = stockMap && item.item_id in stockMap ? stockMap[item.item_id] : null;
-      if (!stockFilterMatch(stockFilter, stock)) return false;
+      if (!stockFilterMatch(stockFilter, stock, lowStockThreshold(item))) return false;
       if (!term) return true;
       const haystack = [
         item.description,
@@ -268,8 +274,8 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           title={stockMap === null ? 'Stock levels are unavailable for this account' : undefined}
         >
           <option value="ALL">All stock</option>
-          <option value="IN">In stock (11+)</option>
-          <option value="LOW">Low stock (1–10)</option>
+          <option value="IN">In stock</option>
+          <option value="LOW">Low stock (at or below alert)</option>
           <option value="OUT">Out of stock</option>
         </select>
 
@@ -349,7 +355,11 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
         <div className="items-grid">
           {filtered.map((item) => {
             const stock = stockMap && item.item_id in stockMap ? stockMap[item.item_id] : null;
-            const tone = stockTone(stock);
+            const threshold = lowStockThreshold(item);
+            const tone = stockTone(stock, threshold);
+            const stockTitle = stock === null
+              ? 'Stock unavailable'
+              : `${stock} unit${stock === 1 ? '' : 's'} in stock · low stock threshold: ${threshold}${stock > 0 && stock <= threshold ? ` · Low stock alert (≤${threshold})` : ''}`;
             const tileStyle = { '--tile-h': String(tileHue(item.category_id)) } as CSSProperties;
             const categoryName = categoryNames.get(item.category_id) ?? 'Uncategorized';
             return (
@@ -358,8 +368,8 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                   <div className="inv-card-media" style={tileStyle}>
                     <span className="inv-card-initial" aria-hidden="true">{initialOf(item.description)}</span>
                     {!item.is_active && <span className="status-badge status-danger inv-inactive-badge">INACTIVE</span>}
-                    <span className={`inv-stock-chip tone-${tone}`} title={stock === null ? 'Stock unavailable' : `${stock} in stock`}>
-                      {stockLabel(stock)}
+                    <span className={`inv-stock-chip tone-${tone}`} title={stockTitle}>
+                      {stockLabel(stock, threshold)}
                     </span>
                     {tone === 'out' && <span className="inv-card-out">Out of stock</span>}
                   </div>
@@ -396,7 +406,11 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
         <div className="glass panel items-list">
           {filtered.map((item) => {
             const stock = stockMap && item.item_id in stockMap ? stockMap[item.item_id] : null;
-            const tone = stockTone(stock);
+            const threshold = lowStockThreshold(item);
+            const tone = stockTone(stock, threshold);
+            const stockTitle = stock === null
+              ? 'Stock unavailable'
+              : `${stock} unit${stock === 1 ? '' : 's'} in stock · low stock threshold: ${threshold}`;
             return (
               <div key={item.item_id} className="items-list-row">
                 <button type="button" className="items-list-main" onClick={() => openItem(item)}>
@@ -409,7 +423,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                   </span>
                 </button>
                 <span className="items-list-category">{categoryNames.get(item.category_id) ?? 'Uncategorized'}</span>
-                <span className={`items-list-stock tone-${tone}`}>{stock === null ? '—' : `${stock} in stock`}</span>
+                <span className={`items-list-stock tone-${tone}`} title={stockTitle}>{stock === null ? '—' : `${stock} in stock`}</span>
                 <span className="items-list-price">{item.master_sale_price == null ? 'No price' : `Rs. ${money(item.master_sale_price)}`}</span>
                 {isAdmin && (
                   item.is_active ? (
@@ -461,6 +475,7 @@ type ItemFormState = {
   model: string;
   compatible_models: string;
   master_sale_price: string;
+  low_stock_threshold: string;
   barcode: string;
   warranty_type: string;
   duration_value: string;
@@ -476,6 +491,7 @@ function buildInitialState(item: ItemRow | null): ItemFormState {
     model: item?.model ?? '',
     compatible_models: item?.compatible_models ?? '',
     master_sale_price: item?.master_sale_price == null ? '' : String(item.master_sale_price),
+    low_stock_threshold: String(item?.low_stock_threshold ?? DEFAULT_LOW_STOCK),
     barcode: '',
     warranty_type: item?.warranty_default?.warranty_type ?? 'NONE',
     duration_value: item?.warranty_default?.duration_value == null ? '' : String(item.warranty_default.duration_value),
@@ -672,6 +688,13 @@ function ItemFormModal({
             ? 'Amount is too large'
             : null,
     barcode: form.barcode.trim().length > 100 ? 'Maximum 100 characters' : null,
+    low_stock_threshold: !form.low_stock_threshold.trim()
+      ? 'Low stock alert is required'
+      : !/^\d+$/.test(form.low_stock_threshold.trim())
+        ? 'Enter a whole number'
+        : Number(form.low_stock_threshold) > 1000000
+          ? 'Threshold is too large'
+          : null,
     warranty:
       (form.warranty_type === 'DAYS' || form.warranty_type === 'MONTHS') && !form.duration_value.trim()
         ? 'Warranty duration is required'
@@ -707,7 +730,7 @@ function ItemFormModal({
     setSubmitAttempted(true);
     setTouched({
       description: true, category_id: true, item_type_id: true,
-      master_sale_price: true, barcode: true, warranty: true,
+      master_sale_price: true, barcode: true, warranty: true, low_stock_threshold: true,
     });
     if (!canSave) {
       toast.error('Please fix the highlighted fields');
@@ -722,6 +745,7 @@ function ItemFormModal({
       model: form.model.trim() || null,
       compatible_models: form.compatible_models.trim() || null,
       master_sale_price: priceValue.endsWith('.') ? priceValue.slice(0, -1) : priceValue,
+      low_stock_threshold: Number(form.low_stock_threshold),
       version: item?.version,
     };
 
@@ -1088,6 +1112,29 @@ function ItemFormModal({
                   {item && item.barcodes.length > 0 && (
                     <small className="item-hint">On file: {item.barcodes.join(', ')}</small>
                   )}
+                </div>
+              </div>
+
+              <div className="item-form-row">
+                <div className="item-field">
+                  <label htmlFor="item-low-stock">Low stock alert (units)</label>
+                  <input
+                    id="item-low-stock"
+                    type="text"
+                    inputMode="numeric"
+                    value={form.low_stock_threshold}
+                    onChange={(event) => { if (/^\d*$/.test(event.target.value)) patch('low_stock_threshold', event.target.value); }}
+                    onBlur={() => markTouched('low_stock_threshold')}
+                    maxLength={7}
+                    disabled={readOnly}
+                    placeholder="5"
+                    className={showError('low_stock_threshold') ? 'input-error' : ''}
+                    aria-invalid={showError('low_stock_threshold') || undefined}
+                    aria-describedby={showError('low_stock_threshold') ? 'item-low-stock-error' : 'item-low-stock-hint'}
+                  />
+                  {showError('low_stock_threshold')
+                    ? <span className="item-field-error" id="item-low-stock-error">{errors.low_stock_threshold}</span>
+                    : <small className="item-hint" id="item-low-stock-hint">Stock at or below this number shows a low-stock warning in the grid. Use 0 to disable.</small>}
                 </div>
               </div>
 
