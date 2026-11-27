@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import { money } from '../../services/money';
 import { useModal } from '../../ui/modals';
 import { toast } from '../../ui/toast';
+import { restorePopupToasts, trackPopup } from '../../ui/popupToast';
 import { todayLocal } from '../../utils/date';
 import { useShopProfile } from '../settings/ShopContext';
 import { buildReceiptHTML, loadDefaultTemplate, type PaperSize } from '../receipt/receiptTemplate';
@@ -283,7 +284,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   }
 
   async function printReceipt(detail: SaleDetail) {
-    const w = window.open('', '_blank', 'width=420,height=640');
+    const w = trackPopup(window.open('', '_blank', 'width=420,height=640'));
     if (!w) {
       toast.error('Print popup blocked. Allow popups for this site.');
       return;
@@ -298,6 +299,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
     const template = await loadDefaultTemplate(paperSize);
     w.document.write(buildReceiptHTML(detail, shop, fullShop, template));
     w.document.close();
+    restorePopupToasts(w);
   }
 
   async function voidSale() {

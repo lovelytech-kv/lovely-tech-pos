@@ -16,6 +16,7 @@ import { moneyInputProps, intInputProps, signedIntInputProps } from '../../utils
 import { todayLocal } from '../../utils/date';
 import { escapeHtml } from '../../utils/escapeHtml';
 import { toast } from '../../ui/toast';
+import { restorePopupToasts, trackPopup } from '../../ui/popupToast';
 import { useModal } from '../../ui/modals';
 import { useShopProfile } from '../settings/ShopContext';
 import { buildReceiptHTML, DEFAULT_TEMPLATES, loadDefaultTemplate, readCachedTemplate, type ReceiptTemplate } from '../receipt/receiptTemplate';
@@ -340,13 +341,14 @@ useEffect(() => {
     w.document.open();
     w.document.write(buildReceiptHTML(sale, shop, fullShop, template ?? invoiceTemplate));
     w.document.close();
+    restorePopupToasts(w);
   } catch {
     // ignore
   }
 }
 
   function printReceipt(sale: any, shop: { getShopName: () => string; getLogoDataUrl: (forcedTheme?: 'light' | 'dark') => string | null }) {
-  const w = window.open('', '_blank', 'width=420,height=640');
+  const w = trackPopup(window.open('', '_blank', 'width=420,height=640'));
   if (!w) {
     onError('Print popup was blocked. Please allow popups for this site and try again.');
     return;
@@ -355,10 +357,11 @@ useEffect(() => {
 }
   function openPrintWindow(): Window | null {
     try {
-      const w = window.open('', '_blank', 'width=420,height=640');
+      const w = trackPopup(window.open('', '_blank', 'width=420,height=640'));
       if (w) {
         w.document.write('<!DOCTYPE html><html><head><title>Preparing receipt…</title><link rel="icon" href="data:," /></head><body style="font-family:monospace;padding:20px;text-align:center;font-size:13px"><p>Preparing receipt…</p></body></html>');
         w.document.close();
+        restorePopupToasts(w);
       }
       return w;
     } catch {
@@ -917,7 +920,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
 
   async function reprint(r:any) {
     // Pre-open print window synchronously to bypass popup blocker
-    const w = window.open('', '_blank', 'width=420,height=640');
+    const w = trackPopup(window.open('', '_blank', 'width=420,height=640'));
     if (!w) {
       onError('Print popup was blocked. Please allow popups for this site and try again.');
       return;
@@ -944,6 +947,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
       w.document.open();
       w.document.write(html);
       w.document.close();
+      restorePopupToasts(w);
 
       setLast(String(r.document_no || ''));
       toast.success(`Reprint opened: ${r.document_no}`);

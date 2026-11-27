@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { todayLocal } from '../../utils/date';
+import { trackPopup } from '../../ui/popupToast';
 
 type Props = {
   codes: string[];
@@ -52,7 +53,7 @@ export function RecoveryCodesDisplay({
   }
 
   function print() {
-    const w = window.open('', '_blank', 'width=800,height=600');
+    const w = trackPopup(window.open('', '_blank', 'width=800,height=600'));
     if (!w) {
       alert('Print popup was blocked. Please allow popups for this site and try again.');
       return;
