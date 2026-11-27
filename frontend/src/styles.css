@@ -64,12 +64,18 @@
     font-weight: 600;
     padding: 0.625rem 1rem;
     transition: all 0.2s;
-    box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.25);
+    box-shadow:
+      0 1px 2px rgba(var(--accent-rgb), 0.2),
+      0 4px 12px rgba(var(--accent-rgb), 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
   .btn-primary:hover {
     opacity: 0.9;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.3);
+    box-shadow:
+      0 1px 2px rgba(var(--accent-rgb), 0.25),
+      0 6px 16px rgba(var(--accent-rgb), 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
   .btn-primary:active {
     transform: translateY(0);
@@ -340,9 +346,9 @@ html,body,#root{height:100%;max-height:100%}
 }
 
 /* Discovery + Admin manual server fallback */
-.primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s,opacity .15s}
-.primary:hover{filter:brightness(1.06)}
-.primary:disabled{opacity:.5;cursor:not-allowed}
+.primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(var(--accent-rgb),.2),0 4px 12px rgba(var(--accent-rgb),.3),inset 0 1px 0 rgba(255,255,255,.2);transition:filter .15s,opacity .15s,box-shadow .15s,transform .15s}
+.primary:hover{filter:brightness(1.06);box-shadow:0 1px 2px rgba(var(--accent-rgb),.25),0 6px 16px rgba(var(--accent-rgb),.4),inset 0 1px 0 rgba(255,255,255,.22)}
+.primary:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
 .ghost{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer}
 .ghost:disabled{opacity:.5;cursor:not-allowed}
 .discovery-overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:24px;background:rgba(8,9,12,.55);backdrop-filter:blur(4px)}
@@ -2712,4 +2718,17 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 @media (prefers-reduced-motion: reduce) {
   .glass-panel, .surface-card { transition: none; }
   .glass-panel:hover, .surface-card:hover { transform: none; }
+}
+
+/* ── Phase B — Accent glow on active nav icons + focus rings (additive). ── */
+.v0-nav button.active .nav-svg {
+  filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.5));
+}
+.btn-primary:focus-visible,
+.primary:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(var(--accent-rgb), 0.25),
+    0 1px 2px rgba(var(--accent-rgb), 0.2),
+    0 4px 12px rgba(var(--accent-rgb), 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
