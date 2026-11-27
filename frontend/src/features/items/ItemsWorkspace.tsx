@@ -392,7 +392,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                       disabled={reactivatingId !== null}
                       aria-label={`Reactivate ${item.description}`}
                     >
-                      {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                      <span aria-hidden="true">↻</span> {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
                     </button>
                   )
                 )}
@@ -435,7 +435,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                       onClick={() => void reactivateItem(item)}
                       disabled={reactivatingId !== null}
                     >
-                      {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                      <span aria-hidden="true">↻</span> {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
                     </button>
                   )
                 )}
