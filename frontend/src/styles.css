@@ -3082,6 +3082,14 @@ button.btn-sm,
   gap: 6px;
 }
 
+/* Equal box heights for small variants (secondary carries a 1px border). */
+button.btn-primary.btn-sm,
+button.btn-ghost.btn-sm,
+button.btn-danger.btn-sm,
+button.btn-success.btn-sm {
+  border: 1px solid transparent;
+}
+
 button.btn-lg,
 .btn-lg {
   min-height: 52px;
@@ -3154,6 +3162,41 @@ button.warranty-search-btn {
 .stock-actions {
   gap: var(--space-3);
   align-items: center;
+}
+
+/* Backup rows: keep actions on one line and ellipsize long filenames. */
+.backup-row {
+  align-items: center;
+  min-width: 0;
+}
+.backup-row-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.backup-file-name {
+  display: inline-block;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.backup-row-meta {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.backup-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 /* Keep ghost hierarchy inside legacy dense action bars. */
