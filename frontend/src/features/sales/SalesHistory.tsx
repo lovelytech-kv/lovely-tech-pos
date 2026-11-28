@@ -107,6 +107,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   const [customerFilterLabel, setCustomerFilterLabel] = useState('');
   const [customerMatches, setCustomerMatches] = useState<CustomerOption[]>([]);
   const [customerSearching, setCustomerSearching] = useState(false);
+  const [quickRangeKey, setQuickRangeKey] = useState<'' | 'today' | 'yesterday' | 'week' | 'month'>('');
 
   const modal = useModal();
   const shop = useShopProfile();
@@ -253,6 +254,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   }
 
   function quickRange(kind: 'today' | 'yesterday' | 'week' | 'month') {
+    setQuickRangeKey(kind);
     const now = new Date();
     if (kind === 'today') {
       setFilters((f) => ({ ...f, date_from: today(), date_to: today() }));
@@ -379,17 +381,17 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
         <div className="form-grid compact" style={{ marginBottom: '0.5rem' }}>
           <label>
             From
-            <input type="date" value={filters.date_from} onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
+            <input type="date" value={filters.date_from} onChange={(e) => { setQuickRangeKey(''); setFilters({ ...filters, date_from: e.target.value }); }} />
           </label>
           <label>
             To
-            <input type="date" value={filters.date_to} onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} />
+            <input type="date" value={filters.date_to} onChange={(e) => { setQuickRangeKey(''); setFilters({ ...filters, date_to: e.target.value }); }} />
           </label>
-          <div className="button-row">
-            <button type="button" onClick={() => quickRange('today')}>Today</button>
-            <button type="button" onClick={() => quickRange('yesterday')}>Yest</button>
-            <button type="button" onClick={() => quickRange('week')}>Week</button>
-            <button type="button" onClick={() => quickRange('month')}>Month</button>
+          <div className="button-row sales-range-row">
+            <button type="button" aria-pressed={quickRangeKey === 'today'} className={`sales-range-btn${quickRangeKey === 'today' ? ' is-active' : ''}`} onClick={() => quickRange('today')}>Today</button>
+            <button type="button" aria-pressed={quickRangeKey === 'yesterday'} className={`sales-range-btn${quickRangeKey === 'yesterday' ? ' is-active' : ''}`} onClick={() => quickRange('yesterday')}>Yest</button>
+            <button type="button" aria-pressed={quickRangeKey === 'week'} className={`sales-range-btn${quickRangeKey === 'week' ? ' is-active' : ''}`} onClick={() => quickRange('week')}>Week</button>
+            <button type="button" aria-pressed={quickRangeKey === 'month'} className={`sales-range-btn${quickRangeKey === 'month' ? ' is-active' : ''}`} onClick={() => quickRange('month')}>Month</button>
           </div>
         </div>
 

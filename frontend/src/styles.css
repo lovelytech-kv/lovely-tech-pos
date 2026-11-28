@@ -2917,8 +2917,8 @@ button.ghost {
 }
 
 /* Primary — accent filled, main action. `.primary` is kept as an alias. */
-.btn-primary,
-.primary {
+button.btn-primary,
+button.primary {
   border: 0;
   background: var(--accent);
   color: #fff;
@@ -2930,8 +2930,8 @@ button.ghost {
   transition: background-color var(--transition-fast), box-shadow var(--transition-fast),
     transform var(--transition-fast), opacity var(--transition-fast);
 }
-.btn-primary:hover:not(:disabled),
-.primary:hover:not(:disabled) {
+button.btn-primary:hover:not(:disabled),
+button.primary:hover:not(:disabled) {
   background: var(--btn-primary-hover-bg);
   filter: none;
   transform: translateY(-1px);
@@ -2940,23 +2940,23 @@ button.ghost {
     0 6px 16px rgba(var(--accent-rgb), 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
-.btn-primary:active:not(:disabled),
-.primary:active:not(:disabled) {
+button.btn-primary:active:not(:disabled),
+button.primary:active:not(:disabled) {
   transform: translateY(0);
   box-shadow:
     0 1px 2px rgba(var(--accent-rgb), 0.2),
     0 2px 6px rgba(var(--accent-rgb), 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
-.btn-primary:disabled,
-.primary:disabled {
+button.btn-primary:disabled,
+button.primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
 }
 
 /* Secondary — outline neutral action. */
-.btn-secondary {
+button.btn-secondary {
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
@@ -2964,18 +2964,18 @@ button.ghost {
   transition: background-color var(--transition-fast), border-color var(--transition-fast),
     color var(--transition-fast), opacity var(--transition-fast);
 }
-.btn-secondary:hover:not(:disabled) {
+button.btn-secondary:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--btn-secondary-hover-bg);
 }
-.btn-secondary:disabled {
+button.btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 /* Ghost — minimal tertiary action. */
-.btn-ghost {
+button.btn-ghost {
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -2983,17 +2983,17 @@ button.ghost {
   transition: background-color var(--transition-fast), color var(--transition-fast),
     opacity var(--transition-fast);
 }
-.btn-ghost:hover:not(:disabled) {
+button.btn-ghost:hover:not(:disabled) {
   background: var(--btn-ghost-hover-bg);
   color: var(--btn-ghost-hover-text);
 }
-.btn-ghost:disabled {
+button.btn-ghost:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 /* Legacy `.ghost` used by dense inline editors — same metrics, secondary look. */
-.ghost {
+button.ghost {
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
@@ -3001,12 +3001,12 @@ button.ghost {
   transition: background-color var(--transition-fast), border-color var(--transition-fast),
     color var(--transition-fast), opacity var(--transition-fast);
 }
-.ghost:hover:not(:disabled) {
+button.ghost:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--btn-secondary-hover-bg);
 }
-.ghost:disabled {
+button.ghost:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -3040,7 +3040,7 @@ button.danger-button:disabled {
 }
 
 /* Success — positive confirmation action. */
-.btn-success {
+button.btn-success {
   border: 0;
   background: var(--color-success);
   color: #fff;
@@ -3048,18 +3048,29 @@ button.danger-button:disabled {
   transition: background-color var(--transition-fast), box-shadow var(--transition-fast),
     transform var(--transition-fast), opacity var(--transition-fast);
 }
-.btn-success:hover:not(:disabled) {
+button.btn-success:hover:not(:disabled) {
   background: var(--color-success-hover);
   box-shadow: 0 1px 2px rgba(22, 163, 74, 0.25), 0 6px 16px rgba(22, 163, 74, 0.36);
   transform: translateY(-1px);
 }
-.btn-success:active:not(:disabled) {
+button.btn-success:active:not(:disabled) {
   transform: translateY(0);
 }
-.btn-success:disabled {
+button.btn-success:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+/* Card reactivate is a primary-classed button that must stay green. */
+button.inv-card-reactivate {
+  background: var(--color-success);
+  color: #fff;
+  border-color: transparent;
+}
+button.inv-card-reactivate:hover:not(:disabled) {
+  background: var(--color-success-hover);
+  color: #fff;
 }
 
 /* Size modifiers: small inline actions and large primary CTAs. */
@@ -3076,6 +3087,54 @@ button.btn-lg,
   min-height: 52px;
   padding: 14px 28px;
   font-size: var(--text-lg);
+}
+
+/* Sales history quick-range filters — active = primary, inactive = ghost. */
+.sales-range-row {
+  gap: var(--space-2);
+  align-items: center;
+  align-self: center;
+}
+button.sales-range-btn {
+  min-height: 40px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  line-height: 1.2;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast), box-shadow var(--transition-fast);
+}
+button.sales-range-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--btn-ghost-hover-bg);
+}
+button.sales-range-btn:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+button.sales-range-btn.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 0 3px rgba(var(--accent-rgb), 0.12);
+}
+button.sales-range-btn.is-active:hover:not(:disabled) {
+  background: var(--btn-primary-hover-bg);
+  color: #fff;
+}
+[data-theme="dark"] button.sales-range-btn.is-active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 3px rgba(var(--accent-rgb), 0.22);
 }
 
 /* Keep ghost hierarchy inside legacy dense action bars. */
