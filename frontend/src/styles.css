@@ -1,34 +1,46 @@
 @import "tailwindcss";
 
 @layer components {
-  /* Glass card with visible backdrop blur */
+  /* Glass card with visible backdrop blur (structural: sidebar, header, auth — no hover lift) */
   .glass-card {
-    background: rgba(255, 255, 255, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+    background: rgba(255, 255, 255, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 4px 8px rgba(0, 0, 0, 0.06),
+      0 12px 24px rgba(0, 0, 0, 0.08);
     border-radius: 16px;
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(8px) saturate(160%);
+    -webkit-backdrop-filter: blur(8px) saturate(160%);
   }
   [data-theme="dark"] .glass-card {
-    background: rgba(21, 23, 27, 0.65);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.15);
+    background: rgba(20, 20, 25, 0.65);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 4px 8px rgba(0, 0, 0, 0.4),
+      0 12px 24px rgba(0, 0, 0, 0.5);
   }
 
-  /* Glass panel for content cards (more opaque) */
+  /* Glass panel for content cards (more opaque) — hover lift defined outside this layer */
   .glass-panel {
     background: rgba(255, 255, 255, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.6);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 4px 8px rgba(0, 0, 0, 0.06),
+      0 12px 24px rgba(0, 0, 0, 0.08);
     border-radius: 16px;
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    backdrop-filter: blur(8px) saturate(160%);
+    -webkit-backdrop-filter: blur(8px) saturate(160%);
   }
   [data-theme="dark"] .glass-panel {
     background: rgba(21, 23, 27, 0.75);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 4px 8px rgba(0, 0, 0, 0.4),
+      0 12px 24px rgba(0, 0, 0, 0.5);
   }
 
   /* Surface card */
@@ -52,12 +64,18 @@
     font-weight: 600;
     padding: 0.625rem 1rem;
     transition: all 0.2s;
-    box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.25);
+    box-shadow:
+      0 1px 2px rgba(var(--accent-rgb), 0.2),
+      0 4px 12px rgba(var(--accent-rgb), 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
   .btn-primary:hover {
     opacity: 0.9;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.3);
+    box-shadow:
+      0 1px 2px rgba(var(--accent-rgb), 0.25),
+      0 6px 16px rgba(var(--accent-rgb), 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
   .btn-primary:active {
     transform: translateY(0);
@@ -300,9 +318,6 @@ html,body,#root{height:100%;max-height:100%}
 .app-header{height:var(--header-height);min-height:var(--header-height);padding:8px 14px 8px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .app-header-title{display:flex;align-items:baseline;gap:14px;min-width:0}
 .app-header-title h1{font-size:var(--text-xl);font-weight:var(--fw-bold);letter-spacing:-.025em;margin:0;max-width:min(360px,28vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.app-header-datetime{display:inline-flex;align-items:center;gap:8px;font-size:var(--text-base);color:var(--text);font-weight:var(--fw-medium);white-space:nowrap;font-variant-numeric:tabular-nums}
-.app-header-datetime time{font-size:var(--text-lg);font-weight:var(--fw-semibold);color:var(--text);letter-spacing:.01em}
-.app-header-datetime-sep{color:var(--line)}
 .app-header-actions{display:flex;align-items:center;gap:9px;min-width:0}
 .app-header-user{display:flex;align-items:center;gap:8px;padding-left:10px;border-left:1px solid var(--line);min-width:0}
 .app-header-user-text{min-width:0}
@@ -328,9 +343,9 @@ html,body,#root{height:100%;max-height:100%}
 }
 
 /* Discovery + Admin manual server fallback */
-.primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s,opacity .15s}
-.primary:hover{filter:brightness(1.06)}
-.primary:disabled{opacity:.5;cursor:not-allowed}
+.primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(var(--accent-rgb),.2),0 4px 12px rgba(var(--accent-rgb),.3),inset 0 1px 0 rgba(255,255,255,.2);transition:filter .15s,opacity .15s,box-shadow .15s,transform .15s}
+.primary:hover{filter:brightness(1.06);box-shadow:0 1px 2px rgba(var(--accent-rgb),.25),0 6px 16px rgba(var(--accent-rgb),.4),inset 0 1px 0 rgba(255,255,255,.22)}
+.primary:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
 .ghost{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer}
 .ghost:disabled{opacity:.5;cursor:not-allowed}
 .discovery-overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:24px;background:rgba(8,9,12,.55);backdrop-filter:blur(4px)}
@@ -2674,3 +2689,213 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 /* Semantic colours shared by every tab. */
 .danger-button { background: var(--color-danger) !important; }
 .status-good { color: var(--color-success); }
+
+/* ============ SESSION 3D-3 — MODERN UI REFINEMENT ============ */
+
+/* ── Phase A — Glass-lite hover lift (unlayered so it beats the @layer base + theme block).
+      `.glass-card` is intentionally excluded: it is the sidebar + header container. ── */
+.glass-panel, .surface-card {
+  transition: transform 150ms ease, box-shadow 150ms ease,
+    background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+.glass-panel:hover, .surface-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 6px 12px rgba(0, 0, 0, 0.08),
+    0 20px 36px rgba(0, 0, 0, 0.12);
+}
+[data-theme="dark"] .glass-panel:hover,
+[data-theme="dark"] .surface-card:hover {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 6px 12px rgba(0, 0, 0, 0.45),
+    0 20px 36px rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .glass-panel, .surface-card { transition: none; }
+  .glass-panel:hover, .surface-card:hover { transform: none; }
+}
+
+/* ── Phase B — Accent glow on active nav icons + focus rings (additive). ── */
+.v0-nav button.active .nav-svg {
+  filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.5));
+}
+.btn-primary:focus-visible,
+.primary:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(var(--accent-rgb), 0.25),
+    0 1px 2px rgba(var(--accent-rgb), 0.2),
+    0 4px 12px rgba(var(--accent-rgb), 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* ── Phase C — Header clock accent pill. ── */
+.header-clock-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.header-clock-pill-icon {
+  color: var(--accent);
+  filter: drop-shadow(0 0 4px rgba(var(--accent-rgb), 0.4));
+  flex-shrink: 0;
+}
+.header-clock-pill-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1;
+}
+.header-clock-pill-sep {
+  color: rgba(var(--accent-rgb), 0.5);
+}
+.header-clock-pill-time {
+  font-weight: var(--fw-bold);
+}
+[data-theme="dark"] .header-clock-pill {
+  background: rgba(var(--accent-rgb), 0.15);
+  border-color: rgba(var(--accent-rgb), 0.35);
+}
+
+/* ── Phase D — Micro-animations (targeted). ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modalEnter {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+.tab-content {
+  animation: fadeIn 150ms ease;
+}
+.modal-overlay {
+  animation: fadeIn 150ms ease;
+}
+.modal-card {
+  animation: modalEnter 200ms ease;
+}
+
+/* Targeted button lift — avoids elements that already use transform for layout. */
+.primary:not(:disabled):hover { transform: translateY(-1px); }
+.primary:not(:disabled):active { transform: translateY(0); }
+.btn-secondary:not(:disabled):hover { transform: translateY(-1px); }
+.btn-secondary:not(:disabled):active { transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Phase E — Sales sticky footer (Total Due + Complete Sale always visible). ── */
+.sales-sticky-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+.sales-total {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sales-total .label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: var(--fw-bold);
+}
+.sales-total .amount {
+  font-size: var(--text-2xl);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.sales-sticky-footer .sales-complete-btn {
+  width: auto;
+  margin-top: 0;
+  min-height: 48px;
+  padding: 0 var(--space-6);
+  font-size: var(--text-lg);
+  flex-shrink: 0;
+}
+[data-theme="dark"] .sales-sticky-footer {
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Compress payment rows so the panel fits better above the sticky footer. */
+.sales-right .payment-method {
+  padding: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+/* ── Phase G — Stock chip custom tooltip (2-line labeled, CSS-only).
+      Positioned below the chip, right-aligned, within the media's overflow:hidden bounds. ── */
+.chip-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+  pointer-events: none;
+}
+.inv-stock-chip:hover .chip-tooltip,
+.inv-stock-chip:focus-within .chip-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.chip-tooltip-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.chip-tooltip .label {
+  color: var(--muted);
+}
+.chip-tooltip .value {
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+[data-theme="dark"] .chip-tooltip {
+  background: var(--surface-2);
+}

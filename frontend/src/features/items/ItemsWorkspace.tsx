@@ -368,8 +368,20 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                   <div className="inv-card-media" style={tileStyle}>
                     <span className="inv-card-initial" aria-hidden="true">{initialOf(item.description)}</span>
                     {!item.is_active && <span className="status-badge status-danger inv-inactive-badge">INACTIVE</span>}
-                    <span className={`inv-stock-chip tone-${tone}`} title={stockTitle}>
+                    <span className={`inv-stock-chip tone-${tone}`} aria-label={stockTitle}>
                       {stockLabel(stock, threshold)}
+                      {stock !== null && (
+                        <span className="chip-tooltip" role="tooltip">
+                          <span className="chip-tooltip-line">
+                            <span className="label">Stock</span>
+                            <span className="value">{stock} unit{stock === 1 ? '' : 's'}</span>
+                          </span>
+                          <span className="chip-tooltip-line">
+                            <span className="label">Alert at</span>
+                            <span className="value">≤{threshold}</span>
+                          </span>
+                        </span>
+                      )}
                     </span>
                     {tone === 'out' && <span className="inv-card-out">Out of stock</span>}
                   </div>
@@ -392,7 +404,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                       disabled={reactivatingId !== null}
                       aria-label={`Reactivate ${item.description}`}
                     >
-                      {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                      <span aria-hidden="true">↻</span> {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
                     </button>
                   )
                 )}
@@ -410,7 +422,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             const tone = stockTone(stock, threshold);
             const stockTitle = stock === null
               ? 'Stock unavailable'
-              : `${stock} unit${stock === 1 ? '' : 's'} in stock · low stock threshold: ${threshold}`;
+              : `Stock: ${stock} unit${stock === 1 ? '' : 's'}\nAlert at ≤${threshold}`;
             return (
               <div key={item.item_id} className="items-list-row">
                 <button type="button" className="items-list-main" onClick={() => openItem(item)}>
@@ -435,7 +447,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                       onClick={() => void reactivateItem(item)}
                       disabled={reactivatingId !== null}
                     >
-                      {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                      <span aria-hidden="true">↻</span> {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
                     </button>
                   )
                 )}

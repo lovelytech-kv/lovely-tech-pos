@@ -47,11 +47,29 @@ export function AppHeader({ title, user, onLogout, children }: AppHeaderProps) {
     <header className="v0-header app-header glass-card">
       <div className="app-header-title">
         <h1 title={title}>{title}</h1>
-        <span className="app-header-datetime">
-          <span>{dateLabel}</span>
-          <span className="app-header-datetime-sep" aria-hidden="true">·</span>
-          <time dateTime={`${localDate}T${isoTime}`} title={timeLabel}>{timeLabel}</time>
-        </span>
+        <div className="header-clock-pill">
+          <svg
+            className="header-clock-pill-icon"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" />
+          </svg>
+          <span className="header-clock-pill-text">
+            <span>{dateLabel}</span>
+            <span className="header-clock-pill-sep" aria-hidden="true">·</span>
+            <time className="header-clock-pill-time" dateTime={`${localDate}T${isoTime}`} title={timeLabel}>{timeLabel}</time>
+          </span>
+        </div>
       </div>
       <div className="app-header-actions">
         {children}
