@@ -9,6 +9,7 @@ import { SessionTimeoutSettings } from './SessionTimeoutSettings';
 import { RecoveryCodesPanel } from '../users/RecoveryCodesPanel';
 import { AboutCard } from './AboutCard';
 import { useTheme, type Theme } from '../../theme/ThemeProvider';
+import { Icon } from '../../components/Icon';
 
 const DEFAULT_DOC_KEY = 'ltpos_default_doc_type';
 type DocType = 'SYSTEM_PRINTED' | 'MANUAL' | 'NO_PRINT';
@@ -52,7 +53,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
             <h3>Server connection</h3>
             <p className="muted">Automatic LAN discovery is the default. Manual override is a fallback for Admins when discovery fails.</p>
           </div>
-          <span className="settings-symbol">⚙</span>
+          <span className="settings-symbol"><Icon name="settings" size={20} /></span>
         </div>
         <div className="settings-facts"><span><small>Manual override</small><b>Admin only</b></span></div>
         <div className="button-row" style={{ marginTop: '0.5rem' }}>
@@ -82,7 +83,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
       <div className="glass-panel settings-card">
         <div className="settings-card-title">
           <div><h3>Workspace density</h3><p className="muted">Use compact spacing when the POS screen needs more information.</p></div>
-          <span className="settings-symbol">▦</span>
+          <span className="settings-symbol"><Icon name="dashboard" size={20} /></span>
         </div>
         <label className="toggle-row">
           <span><b>{compact ? 'Compact' : 'Comfortable'}</b><small>Card and control spacing</small></span>
@@ -96,7 +97,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
             <h3>Default invoice type</h3>
             <p className="muted">Applied to every new sale. You can still change it per sale.</p>
           </div>
-          <span className="settings-symbol">🖨</span>
+          <span className="settings-symbol"><Icon name="print" size={20} /></span>
         </div>
         <div className="segmented-control" role="group" aria-label="Default invoice type">
           {(['SYSTEM_PRINTED', 'MANUAL', 'NO_PRINT'] as DocType[]).map((x) => (
@@ -109,7 +110,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
                 try { localStorage.setItem(DEFAULT_DOC_KEY, x); } catch { /* ignore */ }
               }}
             >
-              {x === 'SYSTEM_PRINTED' ? '🖨 Thermal' : x === 'MANUAL' ? '✍ Manual' : '✖ None'}
+              {x === 'SYSTEM_PRINTED' ? <><Icon name="print" size={14} /> Thermal</> : x === 'MANUAL' ? <><Icon name="edit-pencil" size={14} /> Manual</> : <><Icon name="close-x" size={14} /> None</>}
             </button>
           ))}
         </div>

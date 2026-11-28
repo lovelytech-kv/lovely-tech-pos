@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { toast } from '../../ui/toast';
 import { discoverServersFromBackend } from '../../services/discovery';
+import { Icon } from '../../components/Icon';
 
 type MachineRole = 'SERVER' | 'CLIENT';
 
@@ -400,7 +401,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
               <div style={{ flex: 1 }}>
                 <small className="muted" style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Connected Server</small>
                 <div style={{ fontSize: '0.85rem', fontWeight: 600, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
-                  {identity.server_url || <span style={{ color: '#dc2626' }}>⚠ No server URL configured</span>}
+                  {identity.server_url || <span style={{ color: '#dc2626' }}><Icon name="warning-triangle" size={14} /> No server URL configured</span>}
                 </div>
               </div>
               <button type="button" className="btn-secondary" onClick={() => void testConnection()} disabled={testingConn || !identity.server_url}>
@@ -411,7 +412,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
 
           {connResult && (
             <div className={`connection-status ${connResult.ok ? 'ok' : 'fail'}`}>
-              {connResult.ok ? '✓' : '✕'} {connResult.message}{connResult.shopName && ` — ${connResult.shopName}`}
+              {connResult.ok ? <Icon name="success-check" size={14} /> : <Icon name="close-x" size={14} />} {connResult.message}{connResult.shopName && ` — ${connResult.shopName}`}
             </div>
           )}
 
@@ -429,7 +430,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
                 {!isServer && (
                   <>
                     <button type="button" className="btn-secondary" onClick={() => void rediscover()} disabled={rediscovering || reconnectJoining}>
-                      {rediscovering ? '🔍 Searching…' : '🔍 Rediscover Server'}
+                      {rediscovering ? <><Icon name="search" size={14} /> Searching…</> : <><Icon name="search" size={14} /> Rediscover Server</>}
                     </button>
                     <button type="button" className="btn-secondary" onClick={openReconnectModal}>Reconnect to Server…</button>
                   </>
@@ -448,15 +449,15 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
           <div className="modal-card" style={{ width: 'min(520px, 100%)' }}>
             <div className="modal-header">
               <h3>Change Machine Role</h3>
-              <button className="modal-close" onClick={closeRoleModal} disabled={savingRole} aria-label="Close">×</button>
+              <button className="modal-close" onClick={closeRoleModal} disabled={savingRole} aria-label="Close"><Icon name="close-x" size={18} /></button>
             </div>
             <div className="modal-body">
               <div className="recovery-warning" style={{ marginBottom: '0.5rem' }}>
-                <b>⚠ Warning:</b> Changing machine role will affect which server this machine connects to. The app will reload after saving.
+                <b><Icon name="warning-triangle" size={16} /> Warning:</b> Changing machine role will affect which server this machine connects to. The app will reload after saving.
               </div>
               {roleSubmitAttempted && (roleUrlErr || roleNameErr) && (
                 <div className="modal-error-banner">
-                  <div className="modal-error-banner-title"><span>⚠</span> Please fix:</div>
+                  <div className="modal-error-banner-title"><Icon name="warning-triangle" size={16} /> Please fix:</div>
                   <ul className="modal-error-banner-list">
                     {roleUrlErr && <li>{roleUrlErr}</li>}
                     {roleNameErr && <li>{roleNameErr}</li>}
@@ -481,7 +482,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
                   </div>
                   <small className="muted" style={{ fontSize: '0.7rem' }}>Format: http://host:port · must test successfully before saving</small>
                   {(roleTouched.newServerUrl || roleSubmitAttempted) && roleUrlErr && <span className="field-error">{roleUrlErr}</span>}
-                  {roleConnResult && <div className={`connection-status ${roleConnResult.ok ? 'ok' : 'fail'}`}>{roleConnResult.ok ? '✓' : '✕'} {roleConnResult.message}{roleConnResult.shopName && ` — ${roleConnResult.shopName}`}</div>}
+                  {roleConnResult && <div className={`connection-status ${roleConnResult.ok ? 'ok' : 'fail'}`}>{roleConnResult.ok ? <Icon name="success-check" size={14} /> : <Icon name="close-x" size={14} />} {roleConnResult.message}{roleConnResult.shopName && ` — ${roleConnResult.shopName}`}</div>}
                 </div>
               )}
               <div className="field">
@@ -505,7 +506,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
           <div className="modal-card" style={{ width: 'min(520px, 100%)' }}>
             <div className="modal-header">
               <h3>Reconnect to Server</h3>
-              <button className="modal-close" onClick={closeReconnectModal} disabled={reconnectJoining} aria-label="Close">×</button>
+              <button className="modal-close" onClick={closeReconnectModal} disabled={reconnectJoining} aria-label="Close"><Icon name="close-x" size={18} /></button>
             </div>
             <div className="modal-body">
               <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>
@@ -513,7 +514,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
               </p>
               {reconnectSubmitted && (reconnectUrlErr || reconnectUserErr || reconnectPwdErr) && (
                 <div className="modal-error-banner">
-                  <div className="modal-error-banner-title"><span>⚠</span> Please fix:</div>
+                  <div className="modal-error-banner-title"><Icon name="warning-triangle" size={16} /> Please fix:</div>
                   <ul className="modal-error-banner-list">
                     {reconnectUrlErr && <li>{reconnectUrlErr}</li>}
                     {reconnectUserErr && <li>{reconnectUserErr}</li>}
@@ -545,7 +546,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
               </div>
               {reconnectConn && (
                 <div className={`connection-status ${reconnectConn.ok ? 'ok' : 'fail'}`}>
-                  {reconnectConn.ok ? '✓' : '✕'} {reconnectConn.message}{reconnectConn.shopName && ` — ${reconnectConn.shopName}`}
+                  {reconnectConn.ok ? <Icon name="success-check" size={14} /> : <Icon name="close-x" size={14} />} {reconnectConn.message}{reconnectConn.shopName && ` — ${reconnectConn.shopName}`}
                 </div>
               )}
             </div>

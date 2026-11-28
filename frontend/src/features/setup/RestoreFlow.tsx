@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { toast } from '../../ui/toast';
+import { Icon } from '../../components/Icon';
 
 type Props = {
   onComplete: () => void;
@@ -281,9 +282,9 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
           {error && <div className="modal-error-banner">{error}</div>}
         </div>
         <div className="setup-actions">
-          <button type="button" className="btn-secondary" onClick={handleBackToR1} disabled={inspecting}>← Back</button>
+          <button type="button" className="btn-secondary" onClick={handleBackToR1} disabled={inspecting}><Icon name="arrow-left" size={16} /> Back</button>
           <button type="button" className="primary" onClick={handleInspect} disabled={!canInspect}>
-            {inspecting ? 'Inspecting…' : 'Continue →'}
+            {inspecting ? 'Inspecting…' : <>Continue <Icon name="arrow-right" size={16} /></>}
           </button>
         </div>
       </div>
@@ -308,21 +309,21 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
 
           {isSameShop && (
             <div className="restore-info-ok">
-              <b>✓ Same shop detected</b>
+              <b><Icon name="success-check" size={16} /> Same shop detected</b>
               <p style={{ margin: '0.3rem 0 0' }}>This backup is from the same shop{currentStatus?.shop_name ? ` (${currentStatus.shop_name})` : ''}. Safe to restore.</p>
             </div>
           )}
 
           {isDifferentShop && (
             <div className="restore-warning" style={{ borderWidth: 3 }}>
-              <b>⚠ DIFFERENT SHOP DETECTED</b>
+              <b><Icon name="warning-triangle" size={16} /> DIFFERENT SHOP DETECTED</b>
               <p style={{ margin: '0.3rem 0 0' }}>This backup is from a DIFFERENT shop{metadata?.shop_name ? ` (${metadata.shop_name})` : ''}. The current shop's data will be completely replaced with another shop's data. This is IRREVERSIBLE.</p>
             </div>
           )}
 
           {isUnknownShop && (
             <div className="restore-warning" style={{ background: 'rgba(234, 179, 8, 0.1)', borderColor: 'rgba(234, 179, 8, 0.5)', color: '#a16207' }}>
-              <b>⚠ Cannot verify backup identity</b>
+              <b><Icon name="warning-triangle" size={16} /> Cannot verify backup identity</b>
               <p style={{ margin: '0.3rem 0 0' }}>{!backupUuid ? 'This backup was created before Chunk 14b — no shop UUID in metadata.' : 'Current shop identity not available.'} Proceed with caution.</p>
             </div>
           )}
@@ -336,7 +337,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
                 color: '#a16207',
               }}
             >
-              <b>⚠ Legacy backup — integrity cannot be verified</b>
+              <b><Icon name="warning-triangle" size={16} /> Legacy backup — integrity cannot be verified</b>
               <p style={{ margin: '0.3rem 0 0' }}>
                 This backup was created before integrity checking (Chunk 15a). SHA-256 cannot be verified. Proceed only if you trust this file.
               </p>
@@ -344,7 +345,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
           )}
 
           <div className="restore-warning">
-            <b>⚠ This will REPLACE the current database</b>
+            <b><Icon name="warning-triangle" size={16} /> This will REPLACE the current database</b>
             <p style={{ margin: '0.3rem 0 0' }}>A safety backup is created automatically, but the current data on this machine will be replaced by the backup file.</p>
           </div>
 
@@ -387,14 +388,14 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
                 disabled={restoring}
                 autoComplete="off"
               />
-              <small className="muted" style={{ fontSize: '0.7rem' }}>{replaceText === 'REPLACE' ? '✓ Matches — confirmation enabled' : 'Must type exactly: REPLACE'}</small>
+              <small className="muted" style={{ fontSize: '0.7rem' }}>{replaceText === 'REPLACE' ? <><Icon name="success-check" size={14} /> Matches — confirmation enabled</> : 'Must type exactly: REPLACE'}</small>
             </div>
           )}
 
           {error && <div className="modal-error-banner">{error}</div>}
         </div>
         <div className="setup-actions">
-          <button type="button" className="btn-secondary" onClick={handleBackToR2} disabled={restoring}>← Back</button>
+          <button type="button" className="btn-secondary" onClick={handleBackToR2} disabled={restoring}><Icon name="arrow-left" size={16} /> Back</button>
           <button type="button" className="primary danger-button" onClick={handleRestore} disabled={!canConfirmRestore || restoring}>
             {restoring ? 'Restoring… do not close' : 'Restore Now'}
           </button>
@@ -406,7 +407,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
   return (
     <div className="restore-flow">
       <div className="restore-step restore-success">
-        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(22, 163, 74, 0.15)', color: '#16a34a', display: 'grid', placeItems: 'center', fontSize: '2rem', margin: '0 auto 1rem' }}>✓</div>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(22, 163, 74, 0.15)', color: '#16a34a', display: 'grid', placeItems: 'center', margin: '0 auto 1rem' }}><Icon name="success-check" size={36} /></div>
         <h2 style={{ fontSize: '1.35rem', margin: '0 0 0.5rem' }}>Restore complete</h2>
         {successData?.shop_name ? <p className="muted" style={{ margin: '0 0 0.4rem' }}>Shop: <b style={{ color: 'var(--text)' }}>{successData.shop_name}</b></p> : null}
         <p className="muted" style={{ margin: '0 0 0.4rem' }}>Log in with your previous admin credentials.</p>
@@ -414,7 +415,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
         <p className="muted" style={{ fontSize: '0.72rem', margin: '0.4rem 0 0' }}>Restore event logged in audit trail.</p>
       </div>
       <div className="setup-actions" style={{ justifyContent: 'center' }}>
-        <button type="button" className="primary" onClick={onComplete}>Go to Login →</button>
+        <button type="button" className="primary" onClick={onComplete}>Go to Login <Icon name="arrow-right" size={16} /></button>
       </div>
     </div>
   );

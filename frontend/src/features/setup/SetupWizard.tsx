@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { toast } from '../../ui/toast';
+import { Icon } from '../../components/Icon';
 import { RecoveryCodesDisplay } from '../users/RecoveryCodesDisplay';
 import { RestoreFlow } from './RestoreFlow';
 
@@ -244,7 +245,7 @@ export function SetupWizard({ onComplete }: Props) {
       return (
         <div className="setup-stepper" style={{ gridTemplateColumns: '1fr' }}>
           <div className="step active">
-            <div className="step-circle">🔗</div>
+            <div className="step-circle"><Icon name="external-link" size={18} /></div>
             <span className="step-label">Connect to Server</span>
           </div>
         </div>
@@ -259,7 +260,7 @@ export function SetupWizard({ onComplete }: Props) {
           const cls = `step${isActive ? ' active' : ''}${isComplete ? ' complete' : ''}`;
           return (
             <div key={n} className={cls}>
-              <div className="step-circle">{isComplete ? '✓' : (n === 0 || n === 0.5) ? '⚙' : n}</div>
+              <div className="step-circle">{isComplete ? <Icon name="success-check" size={18} /> : (n === 0 || n === 0.5) ? <Icon name="settings" size={18} /> : n}</div>
               <span className="step-label">{STEP_LABELS[n]}</span>
             </div>
           );
@@ -295,7 +296,7 @@ export function SetupWizard({ onComplete }: Props) {
 
               {clientSubmitted && (clientUrlErr || clientUserErr || clientPwdErr) && (
                 <div className="modal-error-banner">
-                  <div className="modal-error-banner-title"><span>⚠</span> Please fix:</div>
+                  <div className="modal-error-banner-title"><Icon name="warning-triangle" size={16} /> Please fix:</div>
                   <ul className="modal-error-banner-list">
                     {clientUrlErr && <li>{clientUrlErr}</li>}
                     {clientUserErr && <li>Username: {clientUserErr}</li>}
@@ -383,14 +384,14 @@ export function SetupWizard({ onComplete }: Props) {
 
               {clientConn && (
                 <div className={`connection-status ${clientConn.ok ? 'ok' : 'fail'}`}>
-                  {clientConn.ok ? '✓' : '✕'} {clientConn.message}
+                  {clientConn.ok ? <Icon name="success-check" size={14} /> : <Icon name="close-x" size={14} />} {clientConn.message}
                   {clientConn.shopName && ` — ${clientConn.shopName}`}
                 </div>
               )}
             </div>
             <div className="setup-actions">
               {joinMode === 'SERVER_REQUIRES_SETUP' && (
-                <button className="btn-secondary" onClick={() => setStep(0)} disabled={joiningClient}>← Back</button>
+                <button className="btn-secondary" onClick={() => setStep(0)} disabled={joiningClient}><Icon name="arrow-left" size={16} /> Back</button>
               )}
               <button className="primary" onClick={() => void submitClientJoin()} disabled={!canClientJoin || joiningClient}>
                 {joiningClient ? 'Joining…' : 'Join as Client'}
@@ -420,7 +421,7 @@ export function SetupWizard({ onComplete }: Props) {
 
                 <label className={`setup-role-option ${machineRole === 'CLIENT' ? 'selected' : ''}`}>
                   <input type="radio" name="role" value="CLIENT" checked={machineRole === 'CLIENT'} onChange={() => setMachineRole('CLIENT')} style={{ display: 'none' }} />
-                  <div className="role-icon">🔗</div>
+                  <div className="role-icon"><Icon name="external-link" size={22} /></div>
                   <div>
                     <b>No, this connects to an existing server</b>
                     <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', lineHeight: 1.4 }}>
@@ -432,7 +433,7 @@ export function SetupWizard({ onComplete }: Props) {
             </div>
             <div className="setup-actions">
               <button className="primary" onClick={() => setStep(machineRole === 'SERVER' ? 0.5 : -1)}>
-                Continue →
+                Continue <Icon name="arrow-right" size={16} />
               </button>
             </div>
           </>
@@ -446,21 +447,21 @@ export function SetupWizard({ onComplete }: Props) {
 
               <div className="setup-choice-cards">
                 <button type="button" className="setup-choice-card" onClick={() => setStep(1)}>
-                  <div className="choice-icon">🆕</div>
+                  <div className="choice-icon"><Icon name="plus" size={22} /></div>
                   <div>
                     <b>Start a new shop</b>
                     <p className="muted">Create a fresh setup with admin account and shop details.</p>
                   </div>
                 </button>
                 <button type="button" className="setup-choice-card" onClick={() => setShowRestore(true)}>
-                  <div className="choice-icon">♻</div>
+                  <div className="choice-icon"><Icon name="refresh" size={22} /></div>
                   <div>
                     <b>Restore from backup</b>
                     <p className="muted">Restore an existing shop from a .ltbak backup file.</p>
                   </div>
                 </button>
                 <button type="button" className="setup-choice-card" onClick={() => setStep(-1)}>
-                  <div className="choice-icon">🔗</div>
+                  <div className="choice-icon"><Icon name="external-link" size={22} /></div>
                   <div>
                     <b>Connect to existing server</b>
                     <p className="muted">This laptop will connect to a POS server already on the network.</p>
@@ -469,7 +470,7 @@ export function SetupWizard({ onComplete }: Props) {
               </div>
             </div>
             <div className="setup-actions">
-              <button className="btn-secondary" onClick={() => setStep(0)}>← Back</button>
+              <button className="btn-secondary" onClick={() => setStep(0)}><Icon name="arrow-left" size={16} /> Back</button>
             </div>
           </>
         )}
@@ -492,8 +493,8 @@ export function SetupWizard({ onComplete }: Props) {
               </p>
             </div>
             <div className="setup-actions" style={{ justifyContent: 'center' }}>
-              <button className="btn-secondary" onClick={() => setStep(0.5)}>← Back</button>
-              <button className="primary" onClick={() => setStep(2)}>Get Started →</button>
+              <button className="btn-secondary" onClick={() => setStep(0.5)}><Icon name="arrow-left" size={16} /> Back</button>
+              <button className="primary" onClick={() => setStep(2)}>Get Started <Icon name="arrow-right" size={16} /></button>
             </div>
           </>
         )}
@@ -528,8 +529,8 @@ export function SetupWizard({ onComplete }: Props) {
               </div>
             </div>
             <div className="setup-actions">
-              <button className="btn-secondary" onClick={() => setStep(1)}>← Back</button>
-              <button className="primary" onClick={() => { if (validateShop()) setStep(3); }}>Continue →</button>
+              <button className="btn-secondary" onClick={() => setStep(1)}><Icon name="arrow-left" size={16} /> Back</button>
+              <button className="primary" onClick={() => { if (validateShop()) setStep(3); }}>Continue <Icon name="arrow-right" size={16} /></button>
             </div>
           </>
         )}
@@ -576,7 +577,7 @@ export function SetupWizard({ onComplete }: Props) {
               </div>
             </div>
             <div className="setup-actions">
-              <button className="btn-secondary" onClick={() => setStep(2)} disabled={submitting}>← Back</button>
+              <button className="btn-secondary" onClick={() => setStep(2)} disabled={submitting}><Icon name="arrow-left" size={16} /> Back</button>
               <button className="primary" onClick={submitServer} disabled={submitting}>{submitting ? 'Creating account…' : 'Create Account & Continue'}</button>
             </div>
           </>
@@ -598,7 +599,7 @@ export function SetupWizard({ onComplete }: Props) {
         {step === 5 && (
           <>
             <div className="setup-step-content" style={{ textAlign: 'center', padding: '1rem 0' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(22, 163, 74, 0.15)', color: '#16a34a', display: 'grid', placeItems: 'center', fontSize: '2rem', margin: '0 auto 1rem' }}>✓</div>
+              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(22, 163, 74, 0.15)', color: '#16a34a', display: 'grid', placeItems: 'center', margin: '0 auto 1rem' }}><Icon name="success-check" size={36} /></div>
               <h2 style={{ fontSize: '1.35rem', margin: '0 0 0.5rem' }}>{doneMode === 'CLIENT' ? 'Connected!' : "You're all set!"}</h2>
               {doneMode === 'CLIENT' ? (
                 <>
@@ -621,7 +622,7 @@ export function SetupWizard({ onComplete }: Props) {
               )}
             </div>
             <div className="setup-actions" style={{ justifyContent: 'center' }}>
-              <button className="primary" onClick={onComplete}>Go to Login →</button>
+              <button className="primary" onClick={onComplete}>Go to Login <Icon name="arrow-right" size={16} /></button>
             </div>
           </>
         )}

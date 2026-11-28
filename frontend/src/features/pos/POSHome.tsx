@@ -23,6 +23,7 @@ import { buildReceiptHTML, DEFAULT_TEMPLATES, loadDefaultTemplate, readCachedTem
 import { PitrRestoreDialog } from './PitrRestoreDialog';
 import { CustomerPickerModal, type PickerCustomer } from './CustomerPickerModal';
 import { NavIcon } from '../../components/NavIcon';
+import { Icon } from '../../components/Icon';
 import { ItemsWorkspace } from '../items/ItemsWorkspace';
 import { ItemCostReviewPanel } from '../items/ItemCostReviewPanel';
 
@@ -106,7 +107,7 @@ export function POSHome({user,onLogout}:{user:User,onLogout:()=>void}) {
     setError('');
   }
   return <DashboardLayout user={user} activeKey={tab} onNavigate={navigate} onLogout={()=>{serverLogout().finally(onLogout)}} headerActions={tab!=='Sales'&&<button type="button" className="app-header-action" onClick={()=>{setTab('Sales');setError('')}}>+ New Sale</button>}>
-    {error&&<div className="error-banner" role="alert"><span>{error}</span><button className="error-dismiss" aria-label="Dismiss error" onClick={()=>setError('')}>×</button></div>}
+    {error&&<div className="error-banner" role="alert"><span>{error}</span><button className="error-dismiss" aria-label="Dismiss error" onClick={()=>setError('')}><Icon name="close-x" size={16} /></button></div>}
     {tab==='Dashboard'&&<HomeDashboard user={user} onNavigate={navigate}/>} {tab==='Customers'&&<CustomersTab onError={setError}/>} {tab==='Items'&&<ItemsWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Sales'&&<SalesTab isAdmin={isAdmin} onError={setError} onNavigate={setTab}/>} {tab==='SalesHistory'&&<SalesHistory isAdmin={isAdmin} onError={setError} onNavigate={setTab} user={user}/>} {tab==='Returns'&&<ReturnsWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Repairs'&&<><RepairForm onError={setError} /><RepairWorkspace isAdmin={isAdmin} onError={setError}/></>} {tab==='Warranty'&&<WarrantyWorkspace isAdmin={isAdmin} onError={setError}/>} {tab==='Stock'&&<StockTab/>} {tab==='Purchases'&&<Purchases isAdmin={isAdmin} onError={setError} initialStatusFilter={purchasesNavStatus}/>} {tab==='Expenses'&&<ExpensesTab onError={setError}/>} {tab==='Cash/Day'&&<DayEnd isAdmin={isAdmin} onError={setError}/>} {tab==='Reports'&&<ReportsTab isAdmin={isAdmin} onError={setError}/>} {tab==='Documents'&&<DocumentsTab onError={setError}/>} {tab==='Settings'&&<SettingsPanel isAdmin={isAdmin}/>} {tab==='Admin'&&isAdmin&&<AdminTab onError={setError}/>} {tab==='Users'&&isAdmin&&<UserManagement isAdmin={isAdmin} onError={setError}/>} {tab==='Backup'&&isAdmin&&<BackupTab onError={setError}/>}
   </DashboardLayout>;
 }
@@ -119,7 +120,7 @@ function CustomersTab({onError}:{onError:(x:string)=>void}){
   async function save(){if(!selected)return;try{setBusy(true);const r=await api<any>(`/customers/${selected.customer_id}`,{method:'PUT',body:JSON.stringify(form)});setSelected(r);setRows(x=>x.map(c=>c.customer_id===r.customer_id?r:c));setForm({name:r.name||'',contact_no:r.contact_no||'',notes:r.notes||'',version:r.version});toast.success('Customer updated.')}catch(e){onError((e as Error).message)}finally{setBusy(false)}}
   async function create(){try{setBusy(true);const r=await api<any>('/customers',{method:'POST',body:JSON.stringify({name:form.name||null,contact_no:form.contact_no||null,notes:form.notes||null})});await search();open(r)}catch(e){onError((e as Error).message)}finally{setBusy(false)}}
   async function loadHistory(){if(!selected)return;try{setHistory(await api<any>(`/customers/${selected.customer_id}/history`))}catch(e){onError((e as Error).message)}}
-  return <section className="split"><div className="glass panel"><div className="section-head"><div><span className="eyebrow">CUSTOMERS</span><h2>Customer directory</h2><p className="muted">Customer details are optional. History covers sales, repairs, warranty claims and settlements.</p></div><button onClick={search}>Search</button></div><div className="search-row"><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&search()} placeholder="Name or contact number"/><button onClick={search}>Find</button></div><div className="list-stack">{rows.map(c=><button className="list-row customer-row" key={c.customer_id} onClick={()=>open(c)}><span><b>{c.name||'Unnamed customer'}</b><small>{c.contact_no||'No contact'} · Version {c.version}</small></span><span>›</span></button>)}{rows.length===0&&<p className="muted">No customers loaded.</p>}</div></div><div className="glass panel"><div className="section-head"><div><span className="eyebrow">CUSTOMER PROFILE</span><h2>{selected?selected.name||selected.contact_no||'Customer':'Create customer'}</h2></div>{selected&&<button onClick={loadHistory}>History</button>}</div><div className="form-grid compact"><input placeholder="Name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/><input placeholder="Contact no." value={form.contact_no} onChange={e=>setForm({...form,contact_no:e.target.value})}/><textarea className="wide-field" placeholder="Notes" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></div>{selected?<button disabled={busy} onClick={save}>Save Customer</button>:<button disabled={busy||(!form.name.trim()&&!form.contact_no.trim())} onClick={create}>Create Customer</button>}{selected&&<p className="muted">Optimistic lock version: {form.version}. A stale save is rejected by the backend.</p>}{history&&<div className="history-card"><h3>History</h3><div className="status-strip"><div><span>Sales</span><b>{history.sales?.length||0}</b></div><div><span>Repairs</span><b>{history.repairs?.length||0}</b></div><div><span>Warranty</span><b>{history.warranty_claims?.length||0}</b></div></div><h4>Sales</h4>{(history.sales||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.sale_id}><span>{x.invoice_no} · {new Date(x.date).toLocaleString()}</span><b>Rs. {money(x.total)}</b></div>)}<h4>Settlements</h4>{(history.settlements||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.settlement_id}><span>{new Date(x.date).toLocaleString()} · {x.method}</span><b>Rs. {money(x.amount)}</b></div>)}<h4>Repairs</h4>{(history.repairs||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.repair_id}><span>{x.repair_no} · {x.status}</span><b>Rs. {money(x.total)}</b></div>)}</div>}</div></section>
+  return <section className="split"><div className="glass panel"><div className="section-head"><div><span className="eyebrow">CUSTOMERS</span><h2>Customer directory</h2><p className="muted">Customer details are optional. History covers sales, repairs, warranty claims and settlements.</p></div><button onClick={search}>Search</button></div><div className="search-row"><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&search()} placeholder="Name or contact number"/><button onClick={search}>Find</button></div><div className="list-stack">{rows.map(c=><button className="list-row customer-row" key={c.customer_id} onClick={()=>open(c)}><span><b>{c.name||'Unnamed customer'}</b><small>{c.contact_no||'No contact'} · Version {c.version}</small></span><span><Icon name="chevron-right" size={16} /></span></button>)}{rows.length===0&&<p className="muted">No customers loaded.</p>}</div></div><div className="glass panel"><div className="section-head"><div><span className="eyebrow">CUSTOMER PROFILE</span><h2>{selected?selected.name||selected.contact_no||'Customer':'Create customer'}</h2></div>{selected&&<button onClick={loadHistory}>History</button>}</div><div className="form-grid compact"><input placeholder="Name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/><input placeholder="Contact no." value={form.contact_no} onChange={e=>setForm({...form,contact_no:e.target.value})}/><textarea className="wide-field" placeholder="Notes" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></div>{selected?<button disabled={busy} onClick={save}>Save Customer</button>:<button disabled={busy||(!form.name.trim()&&!form.contact_no.trim())} onClick={create}>Create Customer</button>}{selected&&<p className="muted">Optimistic lock version: {form.version}. A stale save is rejected by the backend.</p>}{history&&<div className="history-card"><h3>History</h3><div className="status-strip"><div><span>Sales</span><b>{history.sales?.length||0}</b></div><div><span>Repairs</span><b>{history.repairs?.length||0}</b></div><div><span>Warranty</span><b>{history.warranty_claims?.length||0}</b></div></div><h4>Sales</h4>{(history.sales||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.sale_id}><span>{x.invoice_no} · {new Date(x.date).toLocaleString()}</span><b>Rs. {money(x.total)}</b></div>)}<h4>Settlements</h4>{(history.settlements||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.settlement_id}><span>{new Date(x.date).toLocaleString()} · {x.method}</span><b>Rs. {money(x.amount)}</b></div>)}<h4>Repairs</h4>{(history.repairs||[]).slice(0,20).map((x:any)=><div className="stock-row" key={x.repair_id}><span>{x.repair_no} · {x.status}</span><b>Rs. {money(x.total)}</b></div>)}</div>}</div></section>
 }
 
 function SalesTab({isAdmin,onError,onNavigate}:{isAdmin:boolean,onError:(x:string)=>void,onNavigate:(key:string)=>void}){
@@ -608,7 +609,7 @@ useEffect(() => {
                   onClick={clearCustomer}
                   aria-label="Remove customer from sale"
                   title="Remove customer"
-                >×</button>
+                ><Icon name="close-x" size={14} /></button>
               </span>
             ) : (
               <span className="muted sales-customer-walkin">Walk-in Customer</span>
@@ -617,7 +618,7 @@ useEffect(() => {
               type="button"
               className="ghost sales-customer-add"
               onClick={() => setPickerOpen(true)}
-            >{selectedCustomer ? 'Change' : '+ Add Customer'}</button>
+            >{selectedCustomer ? 'Change' : <><Icon name="plus" size={15} /> Add Customer</>}</button>
           </div>
           {cart.length === 0
             ? (
@@ -638,12 +639,12 @@ useEffect(() => {
                       </div>
                       {x.is_serialized && (
                         <div className={`line-serial ${x.serialized_unit_id ? '' : 'missing'}`}>
-                          {x.serialized_unit_id ? `IMEI: ${x.serial_number}` : '⚠ IMEI required — scan now'}
+                          {x.serialized_unit_id ? `IMEI: ${x.serial_number}` : <><Icon name="warning-triangle" size={14} /> IMEI required — scan now</>}
                         </div>
                       )}
                     </div>
                     <div className="line-total">Rs. {moneySub(moneyTimesQty(x.price, x.quantity), x.discount)}</div>
-                    <button type="button" className="line-remove" aria-label={`Remove ${x.description}`} onClick={() => setCart(c => c.filter(y => y.line_id !== x.line_id))}>×</button>
+                    <button type="button" className="line-remove" aria-label={`Remove ${x.description}`} onClick={() => setCart(c => c.filter(y => y.line_id !== x.line_id))}><Icon name="close-x" size={14} /></button>
                   </div>
                   <div className="line-controls">
                     <label>Qty <input
@@ -726,7 +727,7 @@ useEffect(() => {
 
           {cart.length > 0 && (
             <div className={`sales-paid-status ${isFullyPaid ? 'complete' : ''}`}>
-              <span>{isFullyPaid ? '✓ Paid in full' : 'Remaining'}</span>
+              <span>{isFullyPaid ? <><Icon name="success-check" size={14} /> Paid in full</> : 'Remaining'}</span>
               <span>Rs. {money((isFullyPaid ? totalPaid : remaining).toFixed(2))} / Rs. {money(total)}</span>
             </div>
           )}
@@ -1037,7 +1038,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
           marginBottom: '0.5rem',
         }}
       >
-        <span>✓ Reprint opened for <b>{last}</b></span>
+        <span><Icon name="success-check" size={14} /> Reprint opened for <b>{last}</b></span>
         <button
           type="button"
           onClick={() => setLast('')}
@@ -1052,7 +1053,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
             padding: '0 4px',
           }}
         >
-          ×
+          <Icon name="close-x" size={18} />
         </button>
       </div>
     )}

@@ -2899,3 +2899,19 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 [data-theme="dark"] .chip-tooltip {
   background: var(--surface-2);
 }
+
+/* ============ SESSION 3D-4a — UNIFIED ICON FAMILY ============ */
+.icon-svg {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: -0.125em;
+}
+.icon-spinner {
+  animation: icon-spin 0.8s linear infinite;
+}
+@keyframes icon-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-spinner { animation: none; }
+}

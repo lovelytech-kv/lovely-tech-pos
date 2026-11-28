@@ -5,6 +5,7 @@ import { todayLocal } from '../../utils/date';
 import { moneyInputProps, intInputProps } from '../../utils/numberInput';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
+import { Icon } from '../../components/Icon';
 
 type Item = { item_id: string; item_code: string; description: string; stock: string | number; is_serialized?: boolean };
 type Supplier = { supplier_id: string; name: string; contact_no?: string | null; address?: string | null };
@@ -638,14 +639,14 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
 
           {validationError.length > 0 && (
             <div className="modal-error-banner" role="alert">
-              <div className="modal-error-banner-title"><span>⚠</span> Purchase is incomplete</div>
+              <div className="modal-error-banner-title"><Icon name="warning-triangle" size={16} /> Purchase is incomplete</div>
               <div>Missing or invalid: {validationError.join('; ')}.</div>
             </div>
           )}
 
           {saveError && (
             <div className="modal-error-banner" role="alert">
-              <div className="modal-error-banner-title"><span>⚠</span> Could not save purchase</div>
+              <div className="modal-error-banner-title"><Icon name="warning-triangle" size={16} /> Could not save purchase</div>
               <div>{saveError}</div>
               <button type="button" className="ghost" onClick={() => void save()} disabled={busy}>Retry save</button>
             </div>
@@ -759,7 +760,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                                 title="Remove line"
                                 disabled={busy}
                               >
-                                🗑
+                                <Icon name="trash" size={14} />
                               </button>
                             </td>
                           </tr>
@@ -890,7 +891,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
           >
             <div className="modal-header">
               <h3 id="purchase-detail-title">Purchase · {detail.purchase_date}</h3>
-              <button type="button" className="modal-close" onClick={() => setDetail(null)} aria-label="Close">×</button>
+              <button type="button" className="modal-close" onClick={() => setDetail(null)} aria-label="Close"><Icon name="close-x" size={18} /></button>
             </div>
             <div className="modal-body">
               <div className="purchase-detail-meta">
@@ -991,7 +992,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
           >
             <div className="modal-header">
               <h3 id="purchase-correction-title">{correction.title}</h3>
-              <button type="button" className="modal-close" onClick={() => setCorrection(null)} aria-label="Close" disabled={savingCorrection}>×</button>
+              <button type="button" className="modal-close" onClick={() => setCorrection(null)} aria-label="Close" disabled={savingCorrection}><Icon name="close-x" size={18} /></button>
             </div>
             <div className="modal-body">
               {correction.field === 'supplier' ? (
@@ -1039,12 +1040,12 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
           >
             <div className="modal-header">
               <h3 id="quick-supplier-title">New supplier</h3>
-              <button type="button" className="modal-close" onClick={() => setSupplierModalOpen(false)} aria-label="Close" disabled={supplierSaving}>×</button>
+              <button type="button" className="modal-close" onClick={() => setSupplierModalOpen(false)} aria-label="Close" disabled={supplierSaving}><Icon name="close-x" size={18} /></button>
             </div>
             <div className="modal-body">
               {supplierFormError && (
                 <div className="modal-error-banner" role="alert">
-                  <div className="modal-error-banner-title"><span>⚠</span> Could not add supplier</div>
+                  <div className="modal-error-banner-title"><Icon name="warning-triangle" size={16} /> Could not add supplier</div>
                   <div>{supplierFormError}</div>
                 </div>
               )}

@@ -4,6 +4,7 @@ import { money } from '../../services/money';
 import { moneyInputProps } from '../../utils/numberInput';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
+import { Icon } from '../../components/Icon';
 import { CategoryTypeManager } from './CategoryTypeManager';
 
 type Category = { id: string; name: string; parent_id: string | null };
@@ -241,7 +242,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
 
       <div className="glass panel items-toolbar">
         <div className="items-search">
-          <span className="items-search-icon" aria-hidden="true">⌕</span>
+          <span className="items-search-icon" aria-hidden="true"><Icon name="search" size={18} /></span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -249,7 +250,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             aria-label="Search items"
           />
           {query && (
-            <button type="button" className="items-search-clear" onClick={() => setQuery('')} aria-label="Clear search">×</button>
+            <button type="button" className="items-search-clear" onClick={() => setQuery('')} aria-label="Clear search"><Icon name="close-x" size={16} /></button>
           )}
         </div>
 
@@ -286,7 +287,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             onClick={() => setView('grid')}
             aria-pressed={view === 'grid'}
           >
-            <span aria-hidden="true">▦</span> Grid
+            <span aria-hidden="true"><Icon name="dashboard" size={15} /></span> Grid
           </button>
           <button
             type="button"
@@ -294,7 +295,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             onClick={() => setView('list')}
             aria-pressed={view === 'list'}
           >
-            <span aria-hidden="true">☰</span> List
+            <span aria-hidden="true"><Icon name="empty-list" size={15} /></span> List
           </button>
         </div>
 
@@ -311,7 +312,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
         )}
 
         <button type="button" className="ghost items-refresh" onClick={() => void load()} disabled={loading}>
-          {loading ? 'Refreshing…' : '⟳ Refresh'}
+          {loading ? 'Refreshing…' : <><Icon name="refresh" size={15} /> Refresh</>}
         </button>
       </div>
 
@@ -335,16 +336,16 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
 
       {!loading && rows.length === 0 && (
         <div className="empty-state items-empty">
-          <span className="items-empty-icon" aria-hidden="true">📦</span>
+          <span className="items-empty-icon" aria-hidden="true"><Icon name="empty-box" size={40} /></span>
           <b>No items yet</b>
           <span>{isAdmin ? 'Add your first item to start selling, tracking stock and scanning barcodes.' : 'Ask an Admin to add items to the shop.'}</span>
-          {isAdmin && <button className="primary" onClick={addItem}>+ Add First Item</button>}
+          {isAdmin && <button className="primary" onClick={addItem}><Icon name="plus" size={15} /> Add First Item</button>}
         </div>
       )}
 
       {!loading && rows.length > 0 && filtered.length === 0 && (
         <div className="empty-state items-empty">
-          <span className="items-empty-icon" aria-hidden="true">🔍</span>
+          <span className="items-empty-icon" aria-hidden="true"><Icon name="empty-search" size={40} /></span>
           <b>No items match</b>
           <span>Try a different name, barcode or item code, or clear the filters.</span>
           <button className="ghost" onClick={clearFilters}>Clear filters</button>
@@ -394,7 +395,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                 {isAdmin && (
                   item.is_active ? (
                     <button type="button" className="inv-card-edit" onClick={() => openItem(item)} aria-label={`Edit ${item.description}`}>
-                      <span aria-hidden="true">✎</span> Edit
+                      <span aria-hidden="true"><Icon name="edit-pencil" size={15} /></span> Edit
                     </button>
                   ) : (
                     <button
@@ -404,7 +405,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                       disabled={reactivatingId !== null}
                       aria-label={`Reactivate ${item.description}`}
                     >
-                      <span aria-hidden="true">↻</span> {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                      <span aria-hidden="true"><Icon name="refresh" size={15} /></span> {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
                     </button>
                   )
                 )}
@@ -447,7 +448,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                       onClick={() => void reactivateItem(item)}
                       disabled={reactivatingId !== null}
                     >
-                      <span aria-hidden="true">↻</span> {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
+                      <span aria-hidden="true"><Icon name="refresh" size={15} /></span> {reactivatingId === item.item_id ? 'Reactivating…' : 'Reactivate'}
                     </button>
                   )
                 )}
@@ -986,15 +987,15 @@ function ItemFormModal({
       <div className="modal-card item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h3 id="item-modal-title">
-            {readOnly ? `Item: ${item?.description ?? ''}` : item ? `Edit Item: ${item.description}` : '+ Add New Item'}
+            {readOnly ? `Item: ${item?.description ?? ''}` : item ? `Edit Item: ${item.description}` : <><Icon name="plus" size={16} /> Add New Item</>}
           </h3>
-          <button type="button" className="modal-close" onClick={() => void requestClose()} aria-label="Close" disabled={busy}>×</button>
+          <button type="button" className="modal-close" onClick={() => void requestClose()} aria-label="Close" disabled={busy}><Icon name="close-x" size={18} /></button>
         </div>
 
         <div className="modal-body item-modal-body">
           {serverError && !serverDuplicateError && (
             <div className="modal-error-banner" role="alert">
-              <div className="modal-error-banner-title"><span>⚠</span> Could not save item</div>
+              <div className="modal-error-banner-title"><Icon name="warning-triangle" size={16} /> Could not save item</div>
               <div>{serverError}</div>
               <button type="button" className="ghost item-error-retry" onClick={() => void save()} disabled={busy}>
                 Retry save
@@ -1005,7 +1006,7 @@ function ItemFormModal({
           <div className="item-form-grid">
             <div className="item-form-col">
               <div className="item-field">
-                <label htmlFor="item-name">Item name * {form.description.trim() && !errors.description && <span className="field-ok">✓</span>}</label>
+                <label htmlFor="item-name">Item name * {form.description.trim() && !errors.description && <span className="field-ok"><Icon name="check" size={14} /></span>}</label>
                 <input
                   id="item-name"
                   ref={nameRef}
@@ -1316,12 +1317,12 @@ function ItemFormModal({
         >
           <div className="modal-header">
             <h3 id="item-master-title">{masterModal === 'category' ? 'New category' : 'New item type'}</h3>
-            <button type="button" className="modal-close" onClick={() => void requestCloseMaster()} aria-label="Close" disabled={masterBusy}>×</button>
+            <button type="button" className="modal-close" onClick={() => void requestCloseMaster()} aria-label="Close" disabled={masterBusy}><Icon name="close-x" size={18} /></button>
           </div>
           <div className="modal-body">
             {masterError && (
               <div className="modal-error-banner" role="alert">
-                <div className="modal-error-banner-title"><span>⚠</span> Could not save</div>
+                <div className="modal-error-banner-title"><Icon name="warning-triangle" size={16} /> Could not save</div>
                 <div>{masterError}</div>
               </div>
             )}
