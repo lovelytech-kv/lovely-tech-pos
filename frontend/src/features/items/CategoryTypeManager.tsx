@@ -374,7 +374,7 @@ export function CategoryTypeManager({
                         {categoryOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                       </select>
                       <span className="category-manager-actions">
-                        <button type="button" className="btn-sm" disabled={busy === 'edit-category'} onClick={() => void saveCategory()}>
+                        <button type="button" className="btn-primary btn-sm" disabled={busy === 'edit-category'} onClick={() => void saveCategory()}>
                           {busy === 'edit-category' ? 'Saving…' : 'Save'}
                         </button>
                         <button type="button" className="btn-ghost btn-sm" disabled={busy === 'edit-category'} onClick={() => setEditCat(null)}>Cancel</button>
@@ -478,7 +478,7 @@ export function CategoryTypeManager({
                         />
                       )}
                       <span className="category-manager-actions">
-                        <button type="button" className="btn-sm" disabled={busy === 'edit-type'} onClick={() => void saveType()}>
+                        <button type="button" className="btn-primary btn-sm" disabled={busy === 'edit-type'} onClick={() => void saveType()}>
                           {busy === 'edit-type' ? 'Saving…' : 'Save'}
                         </button>
                         <button
