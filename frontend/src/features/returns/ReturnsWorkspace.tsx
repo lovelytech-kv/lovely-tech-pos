@@ -260,7 +260,7 @@ export function ReturnsWorkspace({ isAdmin, onError }: Props) {
               <h2>Return / Exchange</h2>
               <p className="muted">Find the original sale, select returned quantities, complete the return, then process refund or exchange.</p>
             </div>
-            <button className="ghost" onClick={() => { setSale(null); setLines([]); setLastResult(null); }}>Reset</button>
+            <button className="ghost btn-sm" onClick={() => { setSale(null); setLines([]); setLastResult(null); }}>Reset</button>
           </div>
 
           <div className="search-row">

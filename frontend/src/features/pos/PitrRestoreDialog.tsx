@@ -235,7 +235,7 @@ export function PitrRestoreDialog({ onClose }: Props) {
             )}
           </div>
           <div className="modal-actions">
-            <button className="btn-secondary" onClick={requestClose} disabled={busy}>
+            <button className="btn-ghost" onClick={requestClose} disabled={busy}>
               {result ? 'Close' : 'Cancel'}
             </button>
                     {!result && (
@@ -277,7 +277,7 @@ export function PitrRestoreDialog({ onClose }: Props) {
               <p style={{ margin: 0 }}>You have unsaved input. Close without proceeding?</p>
             </div>
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setShowDiscard(false)}>Keep editing</button>
+              <button className="btn-ghost" onClick={() => setShowDiscard(false)}>Keep editing</button>
               <button
                 className="btn-danger"
                 onClick={() => { setShowDiscard(false); onClose(); }}

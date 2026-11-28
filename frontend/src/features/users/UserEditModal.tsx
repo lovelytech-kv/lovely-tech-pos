@@ -131,7 +131,7 @@ export function UserEditModal({ user, onClose, onSuccess }: Props) {
           </div>
         </div>
         <div className="modal-actions">
-          <button className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
           <button className="primary" onClick={submit} disabled={busy || !canSubmit}>{busy ? 'Saving…' : 'Save'}</button>
         </div>
       </div>

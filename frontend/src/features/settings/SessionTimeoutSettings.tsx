@@ -193,7 +193,7 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
             />
             {saveError && <p role="alert" style={{ margin: 0, color: '#dc2626', fontSize: '0.8rem' }}>{saveError}</p>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-              <button type="button" className="btn-secondary" onClick={cancelSave} disabled={saving}>Cancel</button>
+              <button type="button" className="btn-ghost" onClick={cancelSave} disabled={saving}>Cancel</button>
               <button type="button" className="primary" onClick={() => void confirmSave()} disabled={saving}>{saving ? 'Saving…' : 'Confirm Save'}</button>
             </div>
           </div>

@@ -205,7 +205,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
           </div>
         </div>
         <div className="setup-actions">
-          <button type="button" className="btn-secondary" onClick={handleCancelClick}>Cancel</button>
+          <button type="button" className="btn-ghost" onClick={handleCancelClick}>Cancel</button>
         </div>
       </div>
     );

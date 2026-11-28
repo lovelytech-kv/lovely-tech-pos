@@ -212,7 +212,7 @@ export function ForgotPasswordModal({ onClose, onSuccess }: Props) {
           )}
         </div>
         <div className="modal-actions">
-          <button className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
           {step === 1 ? (
             <button className="primary" onClick={verifyCode} disabled={busy || !username.trim() || !code.trim()}>
               {busy ? 'Verifying…' : 'Verify Code'}

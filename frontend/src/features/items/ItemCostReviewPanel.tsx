@@ -83,16 +83,16 @@ export function ItemCostReviewPanel({ onError }: { onError: (message: string) =>
       )}
 
       {rows.length > 0 && (
-        <div className="purchase-table-wrap">
-          <table className="purchase-line-table">
+        <div className="data-table-wrap">
+          <table className="data-table data-table--compact data-table--wide">
             <thead>
               <tr>
                 <th>Item</th>
                 <th>Category</th>
                 <th>Created by</th>
                 <th>Created</th>
-                <th>Buy cost</th>
-                <th>Action</th>
+                <th className="num">Buy cost</th>
+                <th className="actions">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -102,7 +102,7 @@ export function ItemCostReviewPanel({ onError }: { onError: (message: string) =>
                   <td>{row.category_name || '—'}</td>
                   <td>{row.created_by || '—'}</td>
                   <td>{formatDate(row.created_at)}</td>
-                  <td>
+                  <td className="num">
                     <input
                       {...moneyInputProps(costs[row.item_id] || '', (value) => setCosts(prev => ({ ...prev, [row.item_id]: value })))}
                       placeholder={row.buy_cost == null ? 'No cost yet' : `Rs. ${money(row.buy_cost)}`}
@@ -110,7 +110,7 @@ export function ItemCostReviewPanel({ onError }: { onError: (message: string) =>
                       style={{ width: 120 }}
                     />
                   </td>
-                  <td>
+                  <td className="actions">
                     <button type="button" disabled={busy === row.item_id} onClick={() => void saveCost(row)}>
                       {busy === row.item_id ? 'Saving…' : 'Set Cost'}
                     </button>

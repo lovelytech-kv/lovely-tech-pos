@@ -12,9 +12,15 @@ type AppHeaderProps = {
 };
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  weekday: 'long',
+  weekday: 'short',
   day: '2-digit',
   month: 'short',
+});
+
+const DATE_TITLE_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  weekday: 'long',
+  day: '2-digit',
+  month: 'long',
   year: 'numeric',
 });
 
@@ -34,7 +40,9 @@ export function AppHeader({ title, user, onLogout, children }: AppHeaderProps) {
   // Derive the date from the shop-local calendar date, never UTC.
   const localDate = todayLocal(now);
   const [year, month, day] = localDate.split('-').map(Number);
-  const dateLabel = DATE_FORMAT.format(new Date(year, month - 1, day));
+  const shopDate = new Date(year, month - 1, day);
+  const dateLabel = DATE_FORMAT.format(shopDate);
+  const dateTitle = DATE_TITLE_FORMAT.format(shopDate);
   // 12-hour shop clock: 2:35 PM (never 14:35).
   const hours24 = now.getHours();
   const hours12 = hours24 % 12 || 12;
@@ -48,12 +56,14 @@ export function AppHeader({ title, user, onLogout, children }: AppHeaderProps) {
     <header className="v0-header app-header glass-card">
       <div className="app-header-title">
         <h1 title={title}>{title}</h1>
-        <div className="header-clock-pill">
-          <Icon name="clock" size={16} className="header-clock-pill-icon" />
-          <span className="header-clock-pill-text">
-            <span>{dateLabel}</span>
-            <span className="header-clock-pill-sep" aria-hidden="true">·</span>
-            <time className="header-clock-pill-time" dateTime={`${localDate}T${isoTime}`} title={timeLabel}>{timeLabel}</time>
+        <div className="header-datetime">
+          <span className="header-date-pill">
+            <Icon name="calendar" size={15} className="header-date-pill-icon" />
+            <time className="header-date-pill-text" dateTime={localDate} title={dateTitle}>{dateLabel}</time>
+          </span>
+          <span className="header-time-pill">
+            <Icon name="clock" size={20} className="header-time-pill-icon" />
+            <time className="header-time-pill-text" dateTime={`${localDate}T${isoTime}`} title={timeLabel}>{timeLabel}</time>
           </span>
         </div>
       </div>

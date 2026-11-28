@@ -374,10 +374,10 @@ export function CategoryTypeManager({
                         {categoryOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                       </select>
                       <span className="category-manager-actions">
-                        <button type="button" disabled={busy === 'edit-category'} onClick={() => void saveCategory()}>
+                        <button type="button" className="btn-primary btn-sm" disabled={busy === 'edit-category'} onClick={() => void saveCategory()}>
                           {busy === 'edit-category' ? 'Saving…' : 'Save'}
                         </button>
-                        <button type="button" className="ghost" disabled={busy === 'edit-category'} onClick={() => setEditCat(null)}>Cancel</button>
+                        <button type="button" className="btn-ghost btn-sm" disabled={busy === 'edit-category'} onClick={() => setEditCat(null)}>Cancel</button>
                       </span>
                     </div>
                   ) : (
@@ -386,13 +386,13 @@ export function CategoryTypeManager({
                       <span className="category-manager-actions">
                         <button
                           type="button"
-                          className="ghost"
+                          className="ghost btn-sm"
                           disabled={!!busy}
                           onClick={() => setEditCat({ id: category.id, name: category.name, parent_id: category.parent_id || null })}
                         >Edit</button>
                         <button
                           type="button"
-                          className="danger-button"
+                          className="btn-danger btn-sm"
                           disabled={!!busy}
                           onClick={() => void removeCategory(category)}
                         >{busy === `delete-category-${category.id}` ? 'Deleting…' : 'Delete'}</button>
@@ -478,12 +478,12 @@ export function CategoryTypeManager({
                         />
                       )}
                       <span className="category-manager-actions">
-                        <button type="button" disabled={busy === 'edit-type'} onClick={() => void saveType()}>
+                        <button type="button" className="btn-primary btn-sm" disabled={busy === 'edit-type'} onClick={() => void saveType()}>
                           {busy === 'edit-type' ? 'Saving…' : 'Save'}
                         </button>
                         <button
                           type="button"
-                          className="ghost"
+                          className="btn-ghost btn-sm"
                           disabled={busy === 'edit-type'}
                           onClick={() => { setEditType(null); setEditTypeCodeOpen(false); }}
                         >Cancel</button>
@@ -497,10 +497,10 @@ export function CategoryTypeManager({
                         {type.is_serialized ? <span className="category-manager-tag">IMEI</span> : null}
                       </span>
                       <span className="category-manager-actions">
-                        <button type="button" className="ghost" disabled={!!busy} onClick={() => startEditType(type)}>Edit</button>
+                        <button type="button" className="ghost btn-sm" disabled={!!busy} onClick={() => startEditType(type)}>Edit</button>
                         <button
                           type="button"
-                          className="danger-button"
+                          className="btn-danger btn-sm"
                           disabled={!!busy}
                           onClick={() => void removeType(type)}
                         >{busy === `delete-type-${type.id}` ? 'Deleting…' : 'Delete'}</button>
@@ -514,7 +514,7 @@ export function CategoryTypeManager({
         </div>
 
         <div className="modal-actions">
-          <button type="button" className="btn-secondary" onClick={() => closeRef.current()} disabled={!!busy}>Close</button>
+          <button type="button" className="btn-ghost" onClick={() => closeRef.current()} disabled={!!busy}>Close</button>
         </div>
       </div>
     </div>

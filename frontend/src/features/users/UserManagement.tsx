@@ -138,8 +138,8 @@ export function UserManagement({ isAdmin, onError }: Props) {
         </div>
       ) : (
         <>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table" style={{ width: '100%' }}>
+          <div className="data-table-wrap">
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>Username</th>
@@ -147,7 +147,7 @@ export function UserManagement({ isAdmin, onError }: Props) {
                   <th>Role</th>
                   <th>Status</th>
                   <th>Last Login</th>
-                  <th>Actions</th>
+                  <th className="actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -164,7 +164,7 @@ export function UserManagement({ isAdmin, onError }: Props) {
                       </td>
                       <td><span className={`sh-status ${st.cls}`}>{st.label}</span></td>
                       <td>{formatRelative(u.last_login_at)}</td>
-                      <td>
+                      <td className="actions">
                         <div className="button-row">
                           <button onClick={() => setEditUser(u)}>Edit</button>
                           <button onClick={() => setResetUser(u)}>Reset Pwd</button>

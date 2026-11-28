@@ -207,11 +207,11 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
           </div>
           <div className="search-row">
             <input value={serial} onChange={(event) => setSerial(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void lookupSerial(); }} placeholder="Serial / IMEI" />
-            <button onClick={() => void lookupSerial()}>Search Serial</button>
+            <button className="btn-secondary warranty-search-btn" onClick={() => void lookupSerial()}>Search Serial</button>
           </div>
           <div className="search-row">
             <input value={warrantyNo} onChange={(event) => setWarrantyNo(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void lookupWarranty(); }} placeholder="Warranty number" />
-            <button onClick={() => void lookupWarranty()}>Search Warranty</button>
+            <button className="btn-secondary warranty-search-btn" onClick={() => void lookupWarranty()}>Search Warranty</button>
           </div>
           {lookup && (
             <div className="day-card">
@@ -258,7 +258,7 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
             <h2>Create and manage claims</h2>
             <p className="muted">Claims hold the reported quantity. Admin decisions are version-protected, so a stale screen cannot approve the same claim twice.</p>
           </div>
-          <button className="ghost" onClick={() => void loadClaims()}>Refresh</button>
+          <button className="ghost btn-sm" onClick={() => void loadClaims()}>Refresh</button>
         </div>
         <div className="form-grid compact">
           <input value={itemQuery} onChange={(event) => setItemQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchItems(); }} placeholder="Item code / barcode / description" />
@@ -270,7 +270,7 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
           <input {...intInputProps(claimQuantity, setClaimQuantity, 1)} placeholder="Quantity" />
           <input value={warrantyId} onChange={(event) => setWarrantyId(event.target.value)} placeholder="Product warranty ID (optional)" />
           <input value={claimNotes} onChange={(event) => setClaimNotes(event.target.value)} placeholder="Reported issue / claim notes" />
-          <button disabled={!itemId} onClick={() => void createClaim()}>Create Warranty Claim</button>
+          <button className="btn-primary" disabled={!itemId} onClick={() => void createClaim()}>Create Warranty Claim</button>
         </div>
 
         <div className="list-stack">
@@ -285,8 +285,8 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
               {claim.replacement_outcome && <span className="status-pill">{claim.replacement_outcome}</span>}
               {isAdmin && claim.admin_decision === 'PENDING_ADMIN' && (
                 <div className="button-row">
-                  <button onClick={() => void decision(claim, 'supplier', { supplier_process: 'SUPPLIER_WARRANTY_CLAIM', notes: 'Approved supplier warranty claim' })}>Supplier Claim</button>
-                  <button className="danger-button" onClick={() => void decision(claim, 'damage', { notes: 'Approved as damage/loss' })}>Damage / Loss</button>
+                  <button className="btn-sm" onClick={() => void decision(claim, 'supplier', { supplier_process: 'SUPPLIER_WARRANTY_CLAIM', notes: 'Approved supplier warranty claim' })}>Supplier Claim</button>
+                  <button className="btn-danger btn-sm" onClick={() => void decision(claim, 'damage', { notes: 'Approved as damage/loss' })}>Damage / Loss</button>
                 </div>
               )}
               {isAdmin && claim.admin_decision === 'SUPPLIER_WARRANTY_CLAIM' && !claim.replacement_outcome && (
@@ -295,9 +295,9 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
                     {...intInputProps(outcomeQuantity[claim.claim_id] ?? String(claim.quantity), (v) => setOutcomeQuantity((current) => ({ ...current, [claim.claim_id]: v })), 1)}
                     aria-label={`Supplier outcome quantity for ${claim.claim_no}`}
                   />
-                  <button onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'REPLACEMENT', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Replacement received from supplier' })}>Replacement Received</button>
-                  <button className="danger-button" onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'SHOP_HELD_DAMAGE', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Supplier rejected; shop-held item damaged/lost' })}>Shop Damage</button>
-                  <button onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'CUSTOMER_KEEPS_ITEM', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Customer keeps item' })}>Customer Keeps</button>
+                  <button className="btn-sm" onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'REPLACEMENT', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Replacement received from supplier' })}>Replacement Received</button>
+                  <button className="btn-danger btn-sm" onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'SHOP_HELD_DAMAGE', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Supplier rejected; shop-held item damaged/lost' })}>Shop Damage</button>
+                  <button className="btn-sm" onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'CUSTOMER_KEEPS_ITEM', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Customer keeps item' })}>Customer Keeps</button>
                 </div>
               )}
             </div>

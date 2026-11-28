@@ -493,7 +493,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
               </div>
             </div>
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={closeRoleModal} disabled={savingRole}>Cancel</button>
+              <button className="btn-ghost" onClick={closeRoleModal} disabled={savingRole}>Cancel</button>
               <button className="btn-primary" onClick={() => void submitRoleChange()} disabled={!canSubmitRole}>{savingRole ? 'Saving…' : 'Change Role & Reload'}</button>
             </div>
           </div>
@@ -551,7 +551,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
               )}
             </div>
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={closeReconnectModal} disabled={reconnectJoining}>Cancel</button>
+              <button className="btn-ghost" onClick={closeReconnectModal} disabled={reconnectJoining}>Cancel</button>
               <button className="btn-primary" onClick={() => void submitReconnect()} disabled={!canReconnectJoin || reconnectJoining}>{reconnectJoining ? 'Reconnecting…' : 'Reconnect'}</button>
             </div>
           </div>

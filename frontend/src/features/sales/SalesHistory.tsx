@@ -107,6 +107,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   const [customerFilterLabel, setCustomerFilterLabel] = useState('');
   const [customerMatches, setCustomerMatches] = useState<CustomerOption[]>([]);
   const [customerSearching, setCustomerSearching] = useState(false);
+  const [quickRangeKey, setQuickRangeKey] = useState<'' | 'today' | 'yesterday' | 'week' | 'month'>('');
 
   const modal = useModal();
   const shop = useShopProfile();
@@ -253,6 +254,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
   }
 
   function quickRange(kind: 'today' | 'yesterday' | 'week' | 'month') {
+    setQuickRangeKey(kind);
     const now = new Date();
     if (kind === 'today') {
       setFilters((f) => ({ ...f, date_from: today(), date_to: today() }));
@@ -371,7 +373,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                 : 'Your sales history. Search, filter, view details or start a return.'}
             </p>
           </div>
-          <button className="ghost" onClick={() => void fetchSales(false)} disabled={loading}>
+          <button className="ghost btn-sm" onClick={() => void fetchSales(false)} disabled={loading}>
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
@@ -379,17 +381,17 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
         <div className="form-grid compact" style={{ marginBottom: '0.5rem' }}>
           <label>
             From
-            <input type="date" value={filters.date_from} onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
+            <input type="date" value={filters.date_from} onChange={(e) => { setQuickRangeKey(''); setFilters({ ...filters, date_from: e.target.value }); }} />
           </label>
           <label>
             To
-            <input type="date" value={filters.date_to} onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} />
+            <input type="date" value={filters.date_to} onChange={(e) => { setQuickRangeKey(''); setFilters({ ...filters, date_to: e.target.value }); }} />
           </label>
-          <div className="button-row">
-            <button type="button" onClick={() => quickRange('today')}>Today</button>
-            <button type="button" onClick={() => quickRange('yesterday')}>Yest</button>
-            <button type="button" onClick={() => quickRange('week')}>Week</button>
-            <button type="button" onClick={() => quickRange('month')}>Month</button>
+          <div className="button-row sales-range-row">
+            <button type="button" aria-pressed={quickRangeKey === 'today'} className={`sales-range-btn${quickRangeKey === 'today' ? ' is-active' : ''}`} onClick={() => quickRange('today')}>Today</button>
+            <button type="button" aria-pressed={quickRangeKey === 'yesterday'} className={`sales-range-btn${quickRangeKey === 'yesterday' ? ' is-active' : ''}`} onClick={() => quickRange('yesterday')}>Yest</button>
+            <button type="button" aria-pressed={quickRangeKey === 'week'} className={`sales-range-btn${quickRangeKey === 'week' ? ' is-active' : ''}`} onClick={() => quickRange('week')}>Week</button>
+            <button type="button" aria-pressed={quickRangeKey === 'month'} className={`sales-range-btn${quickRangeKey === 'month' ? ' is-active' : ''}`} onClick={() => quickRange('month')}>Month</button>
           </div>
         </div>
 
@@ -490,15 +492,15 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
             </div>
           ) : (
             <>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="data-table" style={{ width: '100%' }}>
+              <div className="data-table-wrap">
+                <table className="data-table data-table--interactive">
                   <thead>
                     <tr>
                       <th>Invoice</th>
                       <th>Time</th>
                       <th>Customer</th>
-                      <th style={{ textAlign: 'right' }}>Items</th>
-                      <th style={{ textAlign: 'right' }}>Total</th>
+                      <th className="num">Items</th>
+                      <th className="num">Total</th>
                       <th>Payment</th>
                       {isAdmin && <th>Cashier</th>}
                       <th>Status</th>
@@ -508,20 +510,14 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                     {sales.map((s) => (
                       <tr
                         key={s.sale_id}
+                        className={selectedItem?.sale_id === s.sale_id ? 'is-selected' : undefined}
                         onClick={() => void openSale(s)}
-                        style={{
-                          cursor: 'pointer',
-                          background:
-                            selectedItem?.sale_id === s.sale_id
-                              ? 'rgba(var(--accent-rgb), 0.08)'
-                              : undefined,
-                        }}
                       >
                         <td><b>{s.invoice_no}</b></td>
                         <td>{new Date(s.sale_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                         <td>{customerText(s.customer_name, s.customer_contact)}</td>
-                        <td style={{ textAlign: 'right' }}>{s.item_count}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        <td className="num">{s.item_count}</td>
+                        <td className="num">
                           Rs. {money(s.grand_total)}
                         </td>
                         <td>{s.payment_summary}</td>
@@ -636,18 +632,19 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                 </label>
                 <button
                   type="button"
+                  className="btn-sm"
                   onClick={() => selectedDetail && printReceipt(selectedDetail)}
                   disabled={!selectedDetail}
                 >
                   <Icon name="print" size={15} /> Print
                 </button>
-                <button type="button" onClick={goToReturn}>
+                <button type="button" className="btn-sm" onClick={goToReturn}>
                   <Icon name="return-undo" size={15} /> Return
                 </button>
                 {isAdmin && !selectedItem.is_voided && (
                   <button
                     type="button"
-                    className="danger-button"
+                    className="btn-danger btn-sm"
                     onClick={() => void voidSale()}
                     disabled={!selectedDetail}
                   >
