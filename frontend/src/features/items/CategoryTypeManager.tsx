@@ -377,7 +377,7 @@ export function CategoryTypeManager({
                         <button type="button" disabled={busy === 'edit-category'} onClick={() => void saveCategory()}>
                           {busy === 'edit-category' ? 'Saving…' : 'Save'}
                         </button>
-                        <button type="button" className="ghost" disabled={busy === 'edit-category'} onClick={() => setEditCat(null)}>Cancel</button>
+                        <button type="button" className="btn-ghost btn-sm" disabled={busy === 'edit-category'} onClick={() => setEditCat(null)}>Cancel</button>
                       </span>
                     </div>
                   ) : (
@@ -483,7 +483,7 @@ export function CategoryTypeManager({
                         </button>
                         <button
                           type="button"
-                          className="ghost"
+                          className="btn-ghost btn-sm"
                           disabled={busy === 'edit-type'}
                           onClick={() => { setEditType(null); setEditTypeCodeOpen(false); }}
                         >Cancel</button>
