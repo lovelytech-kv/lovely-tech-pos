@@ -392,7 +392,7 @@ export function CategoryTypeManager({
                         >Edit</button>
                         <button
                           type="button"
-                          className="danger-button"
+                          className="btn-danger btn-sm"
                           disabled={!!busy}
                           onClick={() => void removeCategory(category)}
                         >{busy === `delete-category-${category.id}` ? 'Deleting…' : 'Delete'}</button>
@@ -500,7 +500,7 @@ export function CategoryTypeManager({
                         <button type="button" className="ghost" disabled={!!busy} onClick={() => startEditType(type)}>Edit</button>
                         <button
                           type="button"
-                          className="danger-button"
+                          className="btn-danger btn-sm"
                           disabled={!!busy}
                           onClick={() => void removeType(type)}
                         >{busy === `delete-type-${type.id}` ? 'Deleting…' : 'Delete'}</button>

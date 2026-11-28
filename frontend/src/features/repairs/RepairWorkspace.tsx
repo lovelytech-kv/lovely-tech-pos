@@ -496,7 +496,7 @@ function RepairDetailPanel({
         )}
 
         {!['DELIVERED', 'CANCELLED'].includes(detail.status) && (
-          <button className="danger-button" onClick={() => void onCancel()}>
+          <button className="btn-danger btn-sm" onClick={() => void onCancel()}>
             Cancel Repair
           </button>
         )}
@@ -576,7 +576,7 @@ function RepairDetailPanel({
                     Return Good
                   </button>
                   <button
-                    className="danger-button"
+                    className="btn-danger btn-sm"
                     onClick={() =>
                       void onAction(
                         `/repairs/${detail.repair_id}/part/${part.id}/remove`,
@@ -670,7 +670,7 @@ function RepairDetailPanel({
               </button>
             )}
             {isAdmin && payment.payment_type === 'RECEIPT' && !detail.payments.some((x) => x.reversal_of_id === payment.id) && (
-              <button className="danger-button" onClick={() => void reversePayment(payment)}>
+              <button className="btn-danger btn-sm" onClick={() => void reversePayment(payment)}>
                 Reverse / Refund
               </button>
             )}

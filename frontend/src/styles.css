@@ -3013,8 +3013,8 @@ button.ghost {
 
 /* Danger — destructive action. `.danger-button` is the legacy alias and now
    shares the exact same base metrics + color (no longer a background-only modifier). */
-.btn-danger,
-.danger-button {
+button.btn-danger,
+button.danger-button {
   border: 0;
   background: var(--color-danger);
   color: #fff;
@@ -3022,18 +3022,18 @@ button.ghost {
   transition: background-color var(--transition-fast), box-shadow var(--transition-fast),
     transform var(--transition-fast), opacity var(--transition-fast);
 }
-.btn-danger:hover:not(:disabled),
-.danger-button:hover:not(:disabled) {
+button.btn-danger:hover:not(:disabled),
+button.danger-button:hover:not(:disabled) {
   background: var(--color-danger-hover);
   box-shadow: 0 1px 2px rgba(220, 38, 38, 0.2), 0 5px 12px rgba(220, 38, 38, 0.26);
   transform: translateY(-1px);
 }
-.btn-danger:active:not(:disabled),
-.danger-button:active:not(:disabled) {
+button.btn-danger:active:not(:disabled),
+button.danger-button:active:not(:disabled) {
   transform: translateY(0);
 }
-.btn-danger:disabled,
-.danger-button:disabled {
+button.btn-danger:disabled,
+button.danger-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;

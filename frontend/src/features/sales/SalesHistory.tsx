@@ -641,7 +641,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                 {isAdmin && !selectedItem.is_voided && (
                   <button
                     type="button"
-                    className="danger-button"
+                    className="btn-danger btn-sm"
                     onClick={() => void voidSale()}
                     disabled={!selectedDetail}
                   >

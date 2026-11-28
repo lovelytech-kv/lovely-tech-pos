@@ -285,8 +285,8 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
               {claim.replacement_outcome && <span className="status-pill">{claim.replacement_outcome}</span>}
               {isAdmin && claim.admin_decision === 'PENDING_ADMIN' && (
                 <div className="button-row">
-                  <button onClick={() => void decision(claim, 'supplier', { supplier_process: 'SUPPLIER_WARRANTY_CLAIM', notes: 'Approved supplier warranty claim' })}>Supplier Claim</button>
-                  <button className="danger-button" onClick={() => void decision(claim, 'damage', { notes: 'Approved as damage/loss' })}>Damage / Loss</button>
+                  <button className="btn-sm" onClick={() => void decision(claim, 'supplier', { supplier_process: 'SUPPLIER_WARRANTY_CLAIM', notes: 'Approved supplier warranty claim' })}>Supplier Claim</button>
+                  <button className="btn-danger btn-sm" onClick={() => void decision(claim, 'damage', { notes: 'Approved as damage/loss' })}>Damage / Loss</button>
                 </div>
               )}
               {isAdmin && claim.admin_decision === 'SUPPLIER_WARRANTY_CLAIM' && !claim.replacement_outcome && (
@@ -295,9 +295,9 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
                     {...intInputProps(outcomeQuantity[claim.claim_id] ?? String(claim.quantity), (v) => setOutcomeQuantity((current) => ({ ...current, [claim.claim_id]: v })), 1)}
                     aria-label={`Supplier outcome quantity for ${claim.claim_no}`}
                   />
-                  <button onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'REPLACEMENT', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Replacement received from supplier' })}>Replacement Received</button>
-                  <button className="danger-button" onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'SHOP_HELD_DAMAGE', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Supplier rejected; shop-held item damaged/lost' })}>Shop Damage</button>
-                  <button onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'CUSTOMER_KEEPS_ITEM', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Customer keeps item' })}>Customer Keeps</button>
+                  <button className="btn-sm" onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'REPLACEMENT', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Replacement received from supplier' })}>Replacement Received</button>
+                  <button className="btn-danger btn-sm" onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'SHOP_HELD_DAMAGE', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Supplier rejected; shop-held item damaged/lost' })}>Shop Damage</button>
+                  <button className="btn-sm" onClick={() => void decision(claim, 'supplier-outcome', { outcome: 'CUSTOMER_KEEPS_ITEM', quantity: outcomeQuantity[claim.claim_id] ?? String(claim.quantity), notes: 'Customer keeps item' })}>Customer Keeps</button>
                 </div>
               )}
             </div>
