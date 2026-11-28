@@ -3183,6 +3183,66 @@ button.btn-lg,
   .theme-segmented-thumb { transition: none; }
 }
 
+/* ============ 3D-4b-2 — ICON GLOW EXTENSION ============ */
+/* Filled action buttons: white halo keeps the glyph crisp on accent fills. */
+.btn-primary .icon-svg,
+.primary .icon-svg,
+.btn-success .icon-svg,
+.inv-card-reactivate .icon-svg {
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.4));
+}
+.btn-danger .icon-svg,
+.danger-button .icon-svg {
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.35));
+}
+
+/* Card action icons (edit / reactivate). */
+.inv-card-edit .icon-svg {
+  filter: drop-shadow(0 0 3px rgba(var(--accent-rgb), 0.25));
+  transition: filter var(--transition-fast), color var(--transition-fast);
+}
+.inv-card-edit:hover .icon-svg,
+.inv-card-reactivate:hover .icon-svg {
+  filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.55));
+}
+
+/* Empty-state icons: soft accent halo, never a hard ring. */
+.items-empty-icon .icon-svg,
+.sales-cart-empty-icon .nav-svg,
+.empty-state .icon-svg {
+  color: var(--accent);
+  filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), 0.28));
+}
+
+/* Modal close buttons — subtle accent glow on hover. */
+.modal-close .icon-svg {
+  transition: color var(--transition-fast), filter var(--transition-fast);
+}
+.modal-close:hover .icon-svg {
+  color: var(--accent);
+  filter: drop-shadow(0 0 5px rgba(var(--accent-rgb), 0.5));
+}
+
+/* Dark theme: stronger halos so they read on near-black surfaces. */
+[data-theme="dark"] .btn-primary .icon-svg,
+[data-theme="dark"] .primary .icon-svg,
+[data-theme="dark"] .btn-success .icon-svg,
+[data-theme="dark"] .inv-card-reactivate .icon-svg {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+}
+[data-theme="dark"] .inv-card-edit:hover .icon-svg,
+[data-theme="dark"] .inv-card-reactivate:hover .icon-svg {
+  filter: drop-shadow(0 0 8px rgba(var(--accent-rgb), 0.7));
+}
+[data-theme="dark"] .items-empty-icon .icon-svg,
+[data-theme="dark"] .sales-cart-empty-icon .nav-svg,
+[data-theme="dark"] .empty-state .icon-svg {
+  filter: drop-shadow(0 0 14px rgba(var(--accent-rgb), 0.42));
+}
+[data-theme="dark"] .modal-close:hover .icon-svg {
+  filter: drop-shadow(0 0 7px rgba(var(--accent-rgb), 0.7));
+}
+
 /* ============ SESSION 3D-4b - ENTERPRISE DATA TABLES ============ */
 
 .data-table-wrap {
