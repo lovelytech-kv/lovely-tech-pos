@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { currentUser } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import {
   DEFAULT_CASHIER_PERMISSIONS,
   PERMISSION_LABELS,
@@ -84,7 +85,7 @@ export function PermissionMatrix() {
             Admin permissions are fixed and always granted.
           </p>
         </div>
-        <span className='settings-symbol'>✓</span>
+        <span className='settings-symbol'><Icon name='check' size={20} /></span>
       </div>
 
       <div style={groupHeadingStyle}>Tabs &amp; Screens</div>

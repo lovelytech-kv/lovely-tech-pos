@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { money } from '../../services/money';
 import { useModal } from '../../ui/modals';
 import { toast } from '../../ui/toast';
@@ -466,7 +467,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                     <b>{customer.name || customer.contact_no || 'Unnamed customer'}</b>
                     <small>{customer.contact_no || 'No phone number'}</small>
                   </span>
-                  <span>›</span>
+                  <span><Icon name="chevron-right" size={16} /></span>
                 </button>
               ))}
             </div>
@@ -574,7 +575,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                     {new Date(selectedItem.sale_datetime).toLocaleString()}
                   </p>
                 </div>
-                <button className="icon-button" onClick={closeDetail} aria-label="Close detail">×</button>
+                <button className="icon-button" onClick={closeDetail} aria-label="Close detail"><Icon name="close-x" size={16} /></button>
               </div>
 
               <div className="day-card" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
@@ -638,10 +639,10 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                   onClick={() => selectedDetail && printReceipt(selectedDetail)}
                   disabled={!selectedDetail}
                 >
-                  🖨 Print
+                  <Icon name="print" size={15} /> Print
                 </button>
                 <button type="button" onClick={goToReturn}>
-                  ↩ Return
+                  <Icon name="return-undo" size={15} /> Return
                 </button>
                 {isAdmin && !selectedItem.is_voided && (
                   <button
@@ -650,7 +651,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                     onClick={() => void voidSale()}
                     disabled={!selectedDetail}
                   >
-                    🚫 Void
+                    <Icon name="ban" size={15} /> Void
                   </button>
                 )}
               </div>

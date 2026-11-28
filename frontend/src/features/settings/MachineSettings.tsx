@@ -358,7 +358,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
   if (loading) {
     return (
       <div className="glass-panel settings-card" style={{ gridColumn: '1 / -1' }}>
-        <div className="settings-card-title"><div><h3>Machine Role &amp; Connection</h3><p className="muted">Loading…</p></div><span className="settings-symbol">🖥</span></div>
+        <div className="settings-card-title"><div><h3>Machine Role &amp; Connection</h3><p className="muted">Loading…</p></div><span className="settings-symbol"><Icon name="monitor" size={20} /></span></div>
         <div style={{ textAlign: 'center', padding: '1rem' }}><span className="spinner" /></div>
       </div>
     );
@@ -366,7 +366,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
   if (loadError || !identity) {
     return (
       <div className="glass-panel settings-card" style={{ gridColumn: '1 / -1' }}>
-        <div className="settings-card-title"><div><h3>Machine Role &amp; Connection</h3><p className="muted">Could not load machine identity.</p></div><span className="settings-symbol">🖥</span></div>
+        <div className="settings-card-title"><div><h3>Machine Role &amp; Connection</h3><p className="muted">Could not load machine identity.</p></div><span className="settings-symbol"><Icon name="monitor" size={20} /></span></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>{loadError ?? 'Machine identity not available'}</p>
           <button type="button" className="btn-secondary" onClick={() => void load()}>Retry</button>
@@ -382,13 +382,13 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
       <div className="glass-panel settings-card" style={{ gridColumn: '1 / -1' }}>
         <div className="settings-card-title">
           <div><h3>Machine Role &amp; Connection</h3><p className="muted">This laptop's role on the shop network. Role changes require reboot.</p></div>
-          <span className="settings-symbol">🖥</span>
+          <span className="settings-symbol"><Icon name="monitor" size={20} /></span>
         </div>
         <div style={{ display: 'grid', gap: '0.85rem' }}>
           <div className="machine-info-grid">
             <div>
               <small>Current Role</small>
-              <div><span className={`machine-role-badge ${isServer ? 'role-server' : 'role-client'}`}>{isServer ? '🖥 SERVER' : '🔗 CLIENT'}</span></div>
+              <div><span className={`machine-role-badge ${isServer ? 'role-server' : 'role-client'}`}>{isServer ? <><Icon name="monitor" size={14} /> SERVER</> : <><Icon name="link" size={14} /> CLIENT</>}</span></div>
             </div>
             <div><small>Registered</small><b style={{ fontSize: '0.82rem' }}>{identity.registered_at ? new Date(identity.registered_at).toLocaleString() : '—'}</b></div>
             <div><small>Last Seen</small><b style={{ fontSize: '0.82rem' }}>{identity.last_seen_at ? new Date(identity.last_seen_at).toLocaleString() : '—'}</b></div>
@@ -540,7 +540,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
                 <label>Admin Password *</label>
                 <div className="pwd-wrapper">
                   <input type={showReconnectPwd ? 'text' : 'password'} value={reconnectPwd} onChange={(e) => { setReconnectPwd(e.target.value); setReconnectConn(null); }} onBlur={() => setReconnectTouched((t) => ({ ...t, password: true }))} placeholder="Password" maxLength={200} autoComplete="off" className={(reconnectTouched.password || reconnectSubmitted) && reconnectPwdErr ? 'input-error' : ''} />
-                  <button type="button" className="pwd-toggle-btn" onClick={() => setShowReconnectPwd((v) => !v)} aria-label={showReconnectPwd ? 'Hide password' : 'Show password'}>{showReconnectPwd ? '🙈' : '👁'}</button>
+                  <button type="button" className="pwd-toggle-btn" onClick={() => setShowReconnectPwd((v) => !v)} aria-label={showReconnectPwd ? 'Hide password' : 'Show password'}>{showReconnectPwd ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}</button>
                 </div>
                 {(reconnectTouched.password || reconnectSubmitted) && reconnectPwdErr && <span className="field-error">{reconnectPwdErr}</span>}
               </div>

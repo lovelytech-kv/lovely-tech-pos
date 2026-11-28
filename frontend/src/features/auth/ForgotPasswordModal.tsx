@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 
 type Props = {
@@ -119,7 +120,7 @@ export function ForgotPasswordModal({ onClose, onSuccess }: Props) {
       <div className="modal-card">
         <div className="modal-header">
           <h3>{step === 1 ? 'Forgot Password — Step 1 of 2' : 'Forgot Password — Step 2 of 2'}</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close" disabled={busy}>×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close" disabled={busy}><Icon name="close-x" size={16} /></button>
         </div>
         <div className="modal-body">
           {step === 1 && (
@@ -172,7 +173,7 @@ export function ForgotPasswordModal({ onClose, onSuccess }: Props) {
                     maxLength={200}
                   />
                   <button type="button" className="pwd-toggle-btn" onClick={() => setShowPw((v) => !v)} aria-label={showPw ? 'Hide passwords' : 'Show passwords'}>
-                    {showPw ? '🙈' : '👁'}
+                    {showPw ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}
                   </button>
                 </div>
                 <div className="pwd-strength-bar" aria-hidden="true">
@@ -185,11 +186,11 @@ export function ForgotPasswordModal({ onClose, onSuccess }: Props) {
                   {newPassword.length === 0 ? '' : s.level === 'weak' ? 'Weak' : s.level === 'medium' ? 'Medium' : 'Strong'}
                 </div>
                 <ul className="pwd-requirements">
-                  <li className={s.checks.length ? 'met' : 'not-met'}><span className="req-icon">{s.checks.length ? '✓' : '○'}</span>At least {MIN_LEN} characters ({newPassword.length}/{MIN_LEN})</li>
-                  <li className={s.checks.lower ? 'met' : 'not-met'}><span className="req-icon">{s.checks.lower ? '✓' : '○'}</span>Contains lowercase letter</li>
-                  <li className={s.checks.upper ? 'met' : 'not-met'}><span className="req-icon">{s.checks.upper ? '✓' : '○'}</span>Contains uppercase letter</li>
-                  <li className={s.checks.digit ? 'met' : 'not-met'}><span className="req-icon">{s.checks.digit ? '✓' : '○'}</span>Contains number</li>
-                  <li className={s.checks.symbol ? 'met' : 'not-met'}><span className="req-icon">{s.checks.symbol ? '✓' : '○'}</span>Contains symbol</li>
+                  <li className={s.checks.length ? 'met' : 'not-met'}><span className="req-icon">{s.checks.length ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>At least {MIN_LEN} characters ({newPassword.length}/{MIN_LEN})</li>
+                  <li className={s.checks.lower ? 'met' : 'not-met'}><span className="req-icon">{s.checks.lower ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>Contains lowercase letter</li>
+                  <li className={s.checks.upper ? 'met' : 'not-met'}><span className="req-icon">{s.checks.upper ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>Contains uppercase letter</li>
+                  <li className={s.checks.digit ? 'met' : 'not-met'}><span className="req-icon">{s.checks.digit ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>Contains number</li>
+                  <li className={s.checks.symbol ? 'met' : 'not-met'}><span className="req-icon">{s.checks.symbol ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>Contains symbol</li>
                 </ul>
                 {errPwd && newPassword.length >= MIN_LEN === false && <span className="field-error">{errPwd}</span>}
               </div>
@@ -204,7 +205,7 @@ export function ForgotPasswordModal({ onClose, onSuccess }: Props) {
                   maxLength={200}
                 />
                 {errConfirm && <span className="field-error">{errConfirm}</span>}
-                {confirm && !errConfirm && <span className="field-ok-inline">✓ Passwords match</span>}
+                {confirm && !errConfirm && <span className="field-ok-inline"><Icon name="check" size={12} /> Passwords match</span>}
               </div>
               {error && <div className="error login-error" role="alert">{error}</div>}
             </>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 
 // Auto-detect vendor logo files placed in frontend/src/assets/vendor/.
 const vendorLogos = import.meta.glob('../../assets/vendor/logo-*.{png,jpg,jpeg,svg,webp}', {
@@ -83,7 +84,7 @@ export function AboutCard() {
           <h3>About</h3>
           <p className="muted">Software information and vendor details.</p>
         </div>
-        <span className="settings-symbol">ⓘ</span>
+        <span className="settings-symbol"><Icon name="info-circle" size={20} /></span>
       </div>
 
       <div style={{ display: 'grid', gap: '1rem' }}>

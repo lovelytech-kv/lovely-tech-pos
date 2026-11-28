@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 import { useShopProfile } from './ShopContext';
 
@@ -234,7 +235,7 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
       <div className="glass-panel settings-card" style={{ gridColumn: '1 / -1' }}>
         <div className="settings-card-title">
           <div><h3>Shop Profile</h3><p className="muted">Loading…</p></div>
-          <span className="settings-symbol">🏪</span>
+          <span className="settings-symbol"><Icon name="store" size={20} /></span>
         </div>
         <div style={{ textAlign: 'center', padding: '1rem' }}><span className="spinner" /></div>
       </div>
@@ -248,7 +249,7 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
           <h3>Shop Profile</h3>
           <p className="muted">Name, contact and branding shown on receipts, login and header. Only admin can edit.</p>
         </div>
-        <span className="settings-symbol">🏪</span>
+        <span className="settings-symbol"><Icon name="store" size={20} /></span>
       </div>
 
       <div style={{ display: 'grid', gap: '1rem' }}>
@@ -264,7 +265,7 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
                 <small className="muted" style={{ fontSize: '0.7rem' }}>This unique ID identifies your shop. It survives backups and hardware changes.</small>
               </div>
               <button type="button" className="btn-secondary" onClick={() => void copyShopId()} style={{ fontSize: '0.75rem' }}>
-                {copiedId ? '✓ Copied' : 'Copy ID'}
+                {copiedId ? <><Icon name="check" size={13} /> Copied</> : 'Copy ID'}
               </button>
             </div>
           ) : shopIdError ? (
@@ -281,11 +282,11 @@ export function ShopProfile({ isAdmin }: { isAdmin: boolean }) {
           <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Logos</div>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             <div style={{ display: 'grid', gap: '0.35rem' }}>
-              <small className="muted" style={{ fontSize: '0.7rem', textAlign: 'center', fontWeight: 600 }}>☀ Light mode</small>
+              <small className="muted" style={{ fontSize: '0.7rem', textAlign: 'center', fontWeight: 600 }}><Icon name="sun" size={12} /> Light mode</small>
               <LogoBox logo={logoLight} onPick={onPickLight} onRemove={removeLight} fileRef={fileLightRef} mode="light" />
             </div>
             <div style={{ display: 'grid', gap: '0.35rem' }}>
-              <small className="muted" style={{ fontSize: '0.7rem', textAlign: 'center', fontWeight: 600 }}>☾ Dark mode</small>
+              <small className="muted" style={{ fontSize: '0.7rem', textAlign: 'center', fontWeight: 600 }}><Icon name="moon" size={12} /> Dark mode</small>
               <LogoBox logo={logoDark} onPick={onPickDark} onRemove={removeDark} fileRef={fileDarkRef} mode="dark" />
             </div>
             <div style={{ flex: 1, minWidth: 200, fontSize: '0.7rem', color: 'var(--muted)', alignSelf: 'center' }}>

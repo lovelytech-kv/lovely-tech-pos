@@ -5,6 +5,7 @@ import { NAV_ITEMS, getNavForRole } from '../config/navigation';
 import { loadPermissions, getDefaultPermissions, type Permission } from '../config/permissions';
 import { useShopProfile } from '../features/settings/ShopContext';
 import { AppHeader } from '../components/AppHeader';
+import { Icon } from '../components/Icon';
 import { ChevronIcon, NavIcon } from '../components/NavIcon';
 
 type User = { display_name: string; role: string; branch_id: string };
@@ -136,7 +137,7 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
         </div>
         <div className="v0-sidebar-footer">
           <div className={`v0-connection connection-${serverState}`} aria-live="polite" title={serverState === 'online' ? 'LAN connected' : serverState === 'offline' ? 'LAN offline' : 'Checking LAN…'}><span className="online-dot" /><span><b>{serverState === 'online' ? 'LAN connected' : serverState === 'offline' ? 'LAN offline' : 'Checking LAN…'}</b><small>Branch {user.branch_id}</small></span></div>
-          <button className="v0-user-mini" onClick={onLogout} title={`Logout ${user.display_name}`}><span className="avatar">{user.display_name.slice(0,2).toUpperCase()}</span><span><b>{user.display_name}</b><small>{user.role} · Logout</small></span><span className="logout-arrow">↗</span></button>
+          <button className="v0-user-mini" onClick={onLogout} title={`Logout ${user.display_name}`}><span className="avatar">{user.display_name.slice(0,2).toUpperCase()}</span><span><b>{user.display_name}</b><small>{user.role} · Logout</small></span><span className="logout-arrow"><Icon name="arrow-right" size={14} /></span></button>
         </div>
       </aside>
 

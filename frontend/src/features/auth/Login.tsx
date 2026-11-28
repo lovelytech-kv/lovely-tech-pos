@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { login, API_BASE_URL } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { useShopProfile } from '../settings/ShopContext';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
 
@@ -36,10 +37,10 @@ export function Login({onLogin}:{onLogin:(u:any)=>void}) {
         <span className="eyebrow">{shopName.toUpperCase()}</span>
         <h1>Run the shop.<br/><em>Simply.</em></h1>
         <p>Sales, stock, repairs, warranty and day-end control in one offline-first POS.</p>
-        <div className="login-feature-list"><span>✓ Branch-aware inventory</span><span>✓ Atomic sales & payments</span><span>✓ Audit-ready history</span></div>
+        <div className="login-feature-list"><span><Icon name="check" size={12} /> Branch-aware inventory</span><span><Icon name="check" size={12} /> Atomic sales & payments</span><span><Icon name="check" size={12} /> Audit-ready history</span></div>
       </div>
       <form className="login-card glass-card" onSubmit={submit}>
-        <div className="login-card-head"><div><span className="eyebrow">SECURE SIGN IN</span><h2>Welcome back</h2><p>Use your {shopName} account to continue.</p></div><span className="secure-dot">●</span></div>
+        <div className="login-card-head"><div><span className="eyebrow">SECURE SIGN IN</span><h2>Welcome back</h2><p>Use your {shopName} account to continue.</p></div><span className="secure-dot"><Icon name="dot" size={14} /></span></div>
         <label>Username<input autoFocus autoComplete="username" placeholder="Enter username" value={username} onChange={e=>setUsername(e.target.value)}/></label>
         <label>Password<input type="password" autoComplete="current-password" placeholder="Enter password" value={password} onChange={e=>setPassword(e.target.value)}/></label>
         <div style={{ textAlign: 'right', marginTop: '-0.4rem' }}>
@@ -52,7 +53,7 @@ export function Login({onLogin}:{onLogin:(u:any)=>void}) {
           </button>
         </div>
         {error&&<div className="error login-error">{error}</div>}
-        <button aria-label="Login" className="login-submit" disabled={busy||!username.trim()||!password}>{busy?'Signing in…':'Sign in to POS'} <span>→</span></button>
+        <button aria-label="Login" className="login-submit" disabled={busy||!username.trim()||!password}>{busy?'Signing in…':'Sign in to POS'} <span><Icon name="arrow-right" size={16} /></span></button>
         <div className="login-footer"><span>Server</span><b>{API_BASE_URL}</b></div>
       </form>
     </div>

@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
+import { Icon, type IconName } from '../components/Icon';
 import { toast, type ToastType } from './toast';
 
 type Item = { id: number; msg: string; type: ToastType };
 
 let _id = 0;
 
-const TOAST_CONFIG: Record<ToastType, { icon: string }> = {
-  success: { icon: '✓' },
-  error: { icon: '✕' },
-  info: { icon: 'i' },
+const TOAST_CONFIG: Record<ToastType, { icon: IconName }> = {
+  success: { icon: 'check' },
+  error: { icon: 'close-x' },
+  info: { icon: 'info-circle' },
 };
 
 export function ToastContainer() {
@@ -35,7 +36,7 @@ export function ToastContainer() {
         const cfg = TOAST_CONFIG[it.type];
         return (
           <div key={it.id} className={`toast toast-${it.type}`} role="status">
-            <div className="toast-icon" aria-hidden="true">{cfg.icon}</div>
+            <div className="toast-icon" aria-hidden="true"><Icon name={cfg.icon} size={12} /></div>
             <div className="toast-message">{it.msg}</div>
             <button
               type="button"
@@ -43,7 +44,7 @@ export function ToastContainer() {
               onClick={() => dismiss(it.id)}
               aria-label="Dismiss notification"
             >
-              ×
+              <Icon name="close-x" size={15} />
             </button>
             <div className="toast-progress" />
           </div>

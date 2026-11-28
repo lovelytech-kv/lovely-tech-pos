@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
 
@@ -314,13 +315,13 @@ export function CategoryTypeManager({
             <span className="eyebrow">ITEM MASTER</span>
             <h3 id="category-manager-title">Categories &amp; Item Types</h3>
           </div>
-          <button type="button" className="modal-close" onClick={() => closeRef.current()} aria-label="Close" disabled={!!busy}>×</button>
+          <button type="button" className="modal-close" onClick={() => closeRef.current()} aria-label="Close" disabled={!!busy}><Icon name="close-x" size={16} /></button>
         </div>
 
         <div className="modal-body category-manager-body">
           {loadError && (
             <div className="modal-error-banner" role="alert">
-              <div className="modal-error-banner-title"><span>⚠</span> Could not load categories and types</div>
+              <div className="modal-error-banner-title"><span><Icon name="warning-triangle" size={14} /></span> Could not load categories and types</div>
               <div>{loadError}</div>
               <button type="button" className="ghost" onClick={() => void load()}>Retry</button>
             </div>

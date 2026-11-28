@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { configureManualServer } from '../api/client';
+import { Icon } from './Icon';
 
 export function AdminManualServerPanel({
   onConfigured,
@@ -51,7 +52,7 @@ export function AdminManualServerPanel({
               Automatic discovery failed. Enter the POS server address. This control is Admin-only.
             </p>
           </div>
-          <button className="ghost" onClick={onBack}>← Back</button>
+          <button className="ghost" onClick={onBack}><Icon name="arrow-left" size={15} /> Back</button>
         </div>
 
         <form className="manual-form" onSubmit={submit}>
@@ -69,7 +70,7 @@ export function AdminManualServerPanel({
           {error && <div className="error manual-error" role="alert">{error}</div>}
           {identity && (
             <div className="manual-verified">
-              <span className="status-good">● Verified Lovely Tech POS server</span>
+              <span className="status-good"><Icon name="dot" size={12} /> Verified Lovely Tech POS server</span>
               <div className="identity-grid">
                 {(['product', 'instance_id', 'protocol_version', 'api_version', 'app_version', 'branch_code'] as const).map(field => (
                   <div key={field}>

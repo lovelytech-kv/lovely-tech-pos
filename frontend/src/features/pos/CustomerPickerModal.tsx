@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 
 export type PickerCustomer = {
   customer_id: string;
@@ -198,7 +199,7 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
       <div className="modal-card" style={{ width: 'min(560px, 100%)' }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 id="customer-picker-title">{view === 'search' ? 'Add Customer' : 'New Customer'}</h3>
-          <button type="button" className="modal-close" onClick={requestClose} aria-label="Close" disabled={saving}>×</button>
+          <button type="button" className="modal-close" onClick={requestClose} aria-label="Close" disabled={saving}><Icon name="close-x" size={16} /></button>
         </div>
 
         <div className="modal-body">
@@ -252,7 +253,7 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
                             <b>{customerLabel(customer)}</b>
                             <small>{customer.contact_no || 'No phone number'}</small>
                           </span>
-                          <span>›</span>
+                          <span><Icon name="chevron-right" size={16} /></span>
                         </button>
                       ))}
                     </div>
@@ -277,7 +278,7 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
           ) : (
             <>
               <button type="button" className="ghost" onClick={backToSearch} disabled={saving} style={{ justifySelf: 'start' }}>
-                ← Back to search
+                <Icon name="arrow-left" size={15} /> Back to search
               </button>
 
               <div className="field">

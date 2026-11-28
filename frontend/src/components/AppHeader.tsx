@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from 'react';
+import { Icon } from './Icon';
 import { todayLocal } from '../utils/date';
 
 type HeaderUser = { display_name: string; role: string };
@@ -48,22 +49,7 @@ export function AppHeader({ title, user, onLogout, children }: AppHeaderProps) {
       <div className="app-header-title">
         <h1 title={title}>{title}</h1>
         <div className="header-clock-pill">
-          <svg
-            className="header-clock-pill-icon"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v5l3 2" />
-          </svg>
+          <Icon name="clock" size={16} className="header-clock-pill-icon" />
           <span className="header-clock-pill-text">
             <span>{dateLabel}</span>
             <span className="header-clock-pill-sep" aria-hidden="true">·</span>

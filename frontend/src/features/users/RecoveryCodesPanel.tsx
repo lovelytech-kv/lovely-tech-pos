@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 import { RecoveryCodesDisplay } from './RecoveryCodesDisplay';
 
@@ -63,7 +64,7 @@ export function RecoveryCodesPanel({ isAdmin }: { isAdmin: boolean }) {
       <div className="glass-panel settings-card" style={{ gridColumn: '1 / -1' }}>
         <div className="settings-card-title">
           <div><h3>Recovery Codes</h3><p className="muted">Loading…</p></div>
-          <span className="settings-symbol">🔑</span>
+          <span className="settings-symbol"><Icon name="key" size={20} /></span>
         </div>
         <div style={{ textAlign: 'center', padding: '1rem' }}>
           <span className="spinner" />
@@ -80,7 +81,7 @@ export function RecoveryCodesPanel({ isAdmin }: { isAdmin: boolean }) {
             <h3>Recovery Codes</h3>
             <p className="muted">One-time codes for resetting your admin password if you forget it. Each code can be used once.</p>
           </div>
-          <span className="settings-symbol">🔑</span>
+          <span className="settings-symbol"><Icon name="key" size={20} /></span>
         </div>
 
         <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -111,7 +112,7 @@ export function RecoveryCodesPanel({ isAdmin }: { isAdmin: boolean }) {
           </div>
 
           <div className="recovery-warning" style={{ fontSize: '0.78rem' }}>
-            <b>⚠ Regenerating will invalidate all current unused codes.</b> Save the new codes immediately — they are only shown once.
+            <b><Icon name="warning-triangle" size={14} /> Regenerating will invalidate all current unused codes.</b> Save the new codes immediately — they are only shown once.
           </div>
 
           <details style={{ fontSize: '0.78rem' }}>
@@ -140,7 +141,7 @@ export function RecoveryCodesPanel({ isAdmin }: { isAdmin: boolean }) {
           <div className="modal-card" style={{ width: 'min(400px, 100%)' }}>
             <div className="modal-header">
               <h3>Regenerate Recovery Codes</h3>
-              <button className="modal-close" onClick={() => { setShowPasswordPrompt(false); setAdminPassword(''); }} aria-label="Close" disabled={regenerating}>×</button>
+              <button className="modal-close" onClick={() => { setShowPasswordPrompt(false); setAdminPassword(''); }} aria-label="Close" disabled={regenerating}><Icon name="close-x" size={16} /></button>
             </div>
             <div className="modal-body">
               <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>
@@ -173,7 +174,7 @@ export function RecoveryCodesPanel({ isAdmin }: { isAdmin: boolean }) {
           <div className="modal-card" style={{ width: 'min(620px, 100%)' }}>
             <div className="modal-header">
               <h3>New Recovery Codes</h3>
-              <button className="modal-close" onClick={() => setNewCodes(null)} aria-label="Close">×</button>
+              <button className="modal-close" onClick={() => setNewCodes(null)} aria-label="Close"><Icon name="close-x" size={16} /></button>
             </div>
             <div className="modal-body">
               <RecoveryCodesDisplay

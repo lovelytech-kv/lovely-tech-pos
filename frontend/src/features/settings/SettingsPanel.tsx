@@ -70,12 +70,12 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
       <div className="glass-panel settings-card">
         <div className="settings-card-title">
           <div><h3>Theme</h3><p className="muted">Switch the workspace between light and dark.</p></div>
-          <span className="settings-symbol">◐</span>
+          <span className="settings-symbol"><Icon name="sun-moon" size={20} /></span>
         </div>
         <div className="segmented-control" role="group" aria-label="Theme">
           {(['light', 'dark', 'system'] as Theme[]).map((x) => (
             <button key={x} className={theme === x ? 'selected' : ''} onClick={() => setTheme(x)}>
-              {x === 'light' ? '☀ Light' : x === 'dark' ? '☾ Dark' : '◒ System'}
+              {x === 'light' ? <><Icon name="sun" size={14} /> Light</> : x === 'dark' ? <><Icon name="moon" size={14} /> Dark</> : <><Icon name="sun-moon" size={14} /> System</>}
             </button>
           ))}
         </div>

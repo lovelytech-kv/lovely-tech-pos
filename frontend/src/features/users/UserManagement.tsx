@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { UserCreateModal } from './UserCreateModal';
 import { UserEditModal } from './UserEditModal';
 import { UserResetPasswordModal } from './UserResetPasswordModal';
@@ -180,8 +181,8 @@ export function UserManagement({ isAdmin, onError }: Props) {
               Showing {pageStart}-{pageEnd} of {total}
             </span>
             <div className="button-row">
-              <button className="ghost" disabled={offset === 0 || loading} onClick={() => void load(Math.max(0, offset - LIMIT))}>← Prev</button>
-              <button className="ghost" disabled={offset + LIMIT >= total || loading} onClick={() => void load(offset + LIMIT)}>Next →</button>
+              <button className="ghost" disabled={offset === 0 || loading} onClick={() => void load(Math.max(0, offset - LIMIT))}><Icon name="arrow-left" size={15} /> Prev</button>
+              <button className="ghost" disabled={offset + LIMIT >= total || loading} onClick={() => void load(offset + LIMIT)}>Next <Icon name="arrow-right" size={15} /></button>
             </div>
           </div>
         </>

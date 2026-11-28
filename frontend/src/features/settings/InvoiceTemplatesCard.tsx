@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { InvoiceTemplateEditor } from './InvoiceTemplateEditor';
 
 type SummaryRow = {
@@ -60,7 +61,7 @@ export function InvoiceTemplatesCard({ isAdmin }: { isAdmin: boolean }) {
                 : `${count} template${count === 1 ? '' : 's'} configured. Customize receipt layout and live preview in a dedicated editor.`}
             </p>
           </div>
-          <span className="settings-symbol">🧾</span>
+          <span className="settings-symbol"><Icon name="receipt" size={20} /></span>
         </div>
         <div className="invoice-summary-badges">
           {paperSizes.map((size) => (

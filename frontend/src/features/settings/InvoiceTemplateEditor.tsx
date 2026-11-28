@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 import { useModal } from '../../ui/modals';
 import { useShopProfile } from './ShopContext';
@@ -139,7 +140,7 @@ function EditorFrame({ modal, onRequestClose, children }: {
             <h2>Invoice Templates</h2>
             <p className="muted">Customize receipt layout for 80mm thermal, A4, A5 and A6 printing. The Lovely Tech branding line is locked and always printed last.</p>
           </div>
-          <button type="button" className="modal-close" onClick={onRequestClose} aria-label="Close template editor">×</button>
+          <button type="button" className="modal-close" onClick={onRequestClose} aria-label="Close template editor"><Icon name="close-x" size={16} /></button>
         </div>
         {children}
       </div>
@@ -428,7 +429,7 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
         {mode !== 'modal' && (
           <div className="settings-card-title">
             <div><h3>Invoice Template</h3><p className="muted">Loading templates…</p></div>
-            <span className="settings-symbol">🧾</span>
+            <span className="settings-symbol"><Icon name="receipt" size={20} /></span>
           </div>
         )}
         <div style={{ textAlign: 'center', padding: '1rem' }}><span className="spinner" /></div>
@@ -447,7 +448,7 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
             <h3>Invoice Template</h3>
             <p className="muted">Customize receipt layout for 80mm thermal, A4, A5 and A6 printing. The Lovely Tech branding line is locked and always printed last.</p>
           </div>
-          <span className="settings-symbol">🧾</span>
+          <span className="settings-symbol"><Icon name="receipt" size={20} /></span>
         </div>
       )}
 
@@ -466,7 +467,7 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
               <span className="invoice-template-name">{template.name}</span>
               <span className="invoice-template-meta">
                 <span className="invoice-paper-badge">{template.paper_size}</span>
-                {template.is_default && <span className="invoice-default-badge">★ Default</span>}
+                {template.is_default && <span className="invoice-default-badge"><Icon name="star" size={10} /> Default</span>}
                 {!template.is_active && <span className="invoice-inactive-badge">Inactive</span>}
               </span>
             </button>
@@ -594,7 +595,7 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
                 <Toggle label="Show footer note" checked={draft.show_footer_note} onChange={(value) => patch({ show_footer_note: value })} />
 
                 <div className="invoice-locked-note" title="Required branding — cannot be edited">
-                  <span aria-hidden="true">🔒</span>
+                  <span aria-hidden="true"><Icon name="lock" size={15} /></span>
                   <span>
                     <b>Software by Lovely Tech · {shop.getDeveloperPhone()}</b>
                     <small>Required branding — cannot be edited</small>

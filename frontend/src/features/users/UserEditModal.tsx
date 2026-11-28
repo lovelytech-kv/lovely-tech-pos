@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 import type { UserRow } from './UserManagement';
 
@@ -76,12 +77,12 @@ export function UserEditModal({ user, onClose, onSuccess }: Props) {
       <div className="modal-card">
         <div className="modal-header">
           <h3>Edit User — {user.username}</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close" disabled={busy}>×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close" disabled={busy}><Icon name="close-x" size={16} /></button>
         </div>
         <div className="modal-body">
           {submitAttempted && errorList.length > 0 && (
             <div className="modal-error-banner">
-              <div className="modal-error-banner-title"><span>⚠</span> Please fix {errorList.length} {errorList.length === 1 ? 'error' : 'errors'}:</div>
+              <div className="modal-error-banner-title"><span><Icon name="warning-triangle" size={14} /></span> Please fix {errorList.length} {errorList.length === 1 ? 'error' : 'errors'}:</div>
               <ul className="modal-error-banner-list">
                 {errorList.map((e, i) => <li key={i}>{e}</li>)}
               </ul>
@@ -90,13 +91,13 @@ export function UserEditModal({ user, onClose, onSuccess }: Props) {
           <div className="field"><label>Username</label><input value={user.username} readOnly disabled /></div>
           <div className="field"><label>Role</label><input value={user.role} readOnly disabled /></div>
           <div className="field">
-            <label>Display Name * {displayName && !inlineErrs.displayName && <span className="field-ok">✓</span>}</label>
+            <label>Display Name * {displayName && !inlineErrs.displayName && <span className="field-ok"><Icon name="check" size={12} /></span>}</label>
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} onBlur={() => markTouched('displayName')} maxLength={150} className={showError('displayName') ? 'input-error' : ''} />
             {showError('displayName') && <span className="field-error">{inlineErrs.displayName}</span>}
           </div>
           {user.role === 'CASHIER' && (
             <div className="field">
-              <label>Discount Limit % {discount && !inlineErrs.discount && <span className="field-ok">✓</span>}</label>
+              <label>Discount Limit % {discount && !inlineErrs.discount && <span className="field-ok"><Icon name="check" size={12} /></span>}</label>
               <input
                 type="text"
                 inputMode="decimal"

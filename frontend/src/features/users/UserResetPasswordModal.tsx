@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 import type { UserRow } from './UserManagement';
 
@@ -69,12 +70,12 @@ export function UserResetPasswordModal({ user, onClose, onSuccess }: Props) {
       <div className="modal-card">
         <div className="modal-header">
           <h3>Reset Password — {user.username}</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close" disabled={busy}>×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close" disabled={busy}><Icon name="close-x" size={16} /></button>
         </div>
         <div className="modal-body">
           {submitAttempted && errorList.length > 0 && (
             <div className="modal-error-banner">
-              <div className="modal-error-banner-title"><span>⚠</span> Please fix {errorList.length} {errorList.length === 1 ? 'error' : 'errors'}:</div>
+              <div className="modal-error-banner-title"><span><Icon name="warning-triangle" size={14} /></span> Please fix {errorList.length} {errorList.length === 1 ? 'error' : 'errors'}:</div>
               <ul className="modal-error-banner-list">
                 {errorList.map((e, i) => <li key={i}>{e}</li>)}
               </ul>
@@ -84,7 +85,7 @@ export function UserResetPasswordModal({ user, onClose, onSuccess }: Props) {
             User will be forced to change password on next login.
           </p>
           <div className="field">
-            <label>New Password * {newPassword && !inlineErrs.newPassword && <span className="field-ok">✓</span>}</label>
+            <label>New Password * {newPassword && !inlineErrs.newPassword && <span className="field-ok"><Icon name="check" size={12} /></span>}</label>
             <div className="pwd-wrapper">
               <input
                 type={showPwd ? 'text' : 'password'}
@@ -96,7 +97,7 @@ export function UserResetPasswordModal({ user, onClose, onSuccess }: Props) {
                 className={showError('newPassword') ? 'input-error' : ''}
               />
               <button type="button" className="pwd-toggle-btn" onClick={() => setShowPwd((v) => !v)} aria-label={showPwd ? 'Hide password' : 'Show password'}>
-                {showPwd ? '🙈' : '👁'}
+                {showPwd ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}
               </button>
             </div>
             <small className="muted" style={{ fontSize: '0.7rem' }}>
@@ -105,7 +106,7 @@ export function UserResetPasswordModal({ user, onClose, onSuccess }: Props) {
             {showError('newPassword') && <span className="field-error">{inlineErrs.newPassword}</span>}
           </div>
           <div className="field">
-            <label>Confirm New Password * {confirm && !inlineErrs.confirm && <span className="field-ok">✓</span>}</label>
+            <label>Confirm New Password * {confirm && !inlineErrs.confirm && <span className="field-ok"><Icon name="check" size={12} /></span>}</label>
             <input
               type={showPwd ? 'text' : 'password'}
               value={confirm}

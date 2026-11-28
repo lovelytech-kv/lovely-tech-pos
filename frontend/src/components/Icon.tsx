@@ -60,6 +60,43 @@ export type IconName =
   | 'arrow-left'
   | 'arrow-right'
   | 'external-link'
+  // Auth & visibility (10)
+  | 'eye'
+  | 'eye-off'
+  | 'key'
+  | 'lock'
+  | 'unlock'
+  | 'user'
+  | 'user-plus'
+  | 'user-cog'
+  | 'crown'
+  | 'briefcase'
+  // Objects & files (9)
+  | 'folder'
+  | 'receipt'
+  | 'copy'
+  | 'clipboard'
+  | 'monitor'
+  | 'link'
+  | 'cloud'
+  | 'cloud-upload'
+  | 'store'
+  // Payments (3)
+  | 'cash'
+  | 'card'
+  | 'bank'
+  // Time, theme & status (8)
+  | 'clock'
+  | 'hourglass'
+  | 'sun'
+  | 'moon'
+  | 'sun-moon'
+  | 'star'
+  | 'sparkle'
+  | 'ban'
+  // Shapes (2)
+  | 'circle'
+  | 'dot'
   // Fallback
   | 'circle-question';
 
@@ -309,6 +346,184 @@ const ICONS: Record<IconName, ReactNode> = {
       <path d="M15 3h6v6M10 14 21 3" />
     </>
   ),
+
+  // ── Auth & visibility ───────────────────────────────────────
+  eye: (
+    <>
+      <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
+      <circle cx="12" cy="12" r="2.8" />
+    </>
+  ),
+  'eye-off': (
+    <>
+      <path d="M10.6 6.1A10.9 10.9 0 0 1 12 6c6.4 0 10 6 10 6a17.6 17.6 0 0 1-3.2 3.9M6.6 6.6C3.9 8.2 2 12 2 12s3.6 6 10 6a10.7 10.7 0 0 0 4.4-.9" />
+      <path d="M3 3l18 18M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="8" cy="15" r="4" />
+      <path d="m11 12 9-9M17 6l3 3M14 9l3 3" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="4.5" y="10" width="15" height="10.5" rx="2" />
+      <path d="M8 10V7.5a4 4 0 0 1 8 0V10" />
+    </>
+  ),
+  unlock: (
+    <>
+      <rect x="4.5" y="10" width="15" height="10.5" rx="2" />
+      <path d="M8 10V7.5a4 4 0 0 1 7.7-1.5" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 21c.7-4 3.5-6.2 7-6.2s6.3 2.2 7 6.2" />
+    </>
+  ),
+  'user-plus': (
+    <>
+      <circle cx="10" cy="8" r="3.5" />
+      <path d="M3 21c.6-3.6 3.1-5.7 6.5-5.7 1.1 0 2.1.2 3 .6" />
+      <path d="M18 14v6M15 17h6" />
+    </>
+  ),
+  'user-cog': (
+    <>
+      <circle cx="9" cy="8" r="3.4" />
+      <path d="M2.5 21c.6-3.5 3-5.5 6.3-5.5" />
+      <circle cx="18" cy="16.5" r="2.2" />
+      <path d="M18 12.5v1.3M18 19.2v1.3M15.8 13.3l.9.9M19.3 18.8l.9.9M14.5 16.5h1.3M20.2 16.5h1.3M15.8 19.7l.9-.9M19.3 14.2l.9-.9" />
+    </>
+  ),
+  crown: <path d="M3 8l4.5 3L12 5l4.5 6L21 8l-1.8 11H4.8z" />,
+  briefcase: (
+    <>
+      <rect x="2.5" y="7" width="19" height="13" rx="2" />
+      <path d="M8.5 7V5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2M2.5 12.5h19" />
+    </>
+  ),
+
+  // ── Objects & files ─────────────────────────────────────────
+  folder: (
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  ),
+  receipt: (
+    <>
+      <path d="M6 3h12v18l-2.2-1.4L13.6 21 12 19.6 10.4 21 8.2 19.6 6 21z" />
+      <path d="M9 8h6M9 12h4" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="9" y="9" width="13" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </>
+  ),
+  clipboard: (
+    <>
+      <rect x="5" y="4" width="14" height="18" rx="2" />
+      <path d="M9 4V2.5h6V4M9 11h6M9 15h4" />
+    </>
+  ),
+  monitor: (
+    <>
+      <rect x="2.5" y="4" width="19" height="12" rx="2" />
+      <path d="M8 20h8M12 16v4" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.5 1.5" />
+      <path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.5-1.5" />
+    </>
+  ),
+  cloud: (
+    <path d="M17.5 19H6.5a4.5 4.5 0 0 1 0-9 6 6 0 0 1 11.6-1.5A4.25 4.25 0 0 1 17.5 19z" />
+  ),
+  'cloud-upload': (
+    <>
+      <path d="M17.5 19H6.5a4.5 4.5 0 0 1 0-9 6 6 0 0 1 11.6-1.5A4.25 4.25 0 0 1 17.5 19z" />
+      <path d="M12 18v-6M9 15l3-3 3 3" />
+    </>
+  ),
+  store: (
+    <>
+      <path d="M4 9 5.5 4h13L20 9" />
+      <path d="M3 9h18" />
+      <path d="M4.5 9v11h15V9M9.5 20v-5h5v5" />
+      <path d="M8 9v3M12 9v3M16 9v3" />
+    </>
+  ),
+
+  // ── Payments ────────────────────────────────────────────────
+  cash: (
+    <>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M5.5 9.5h.01M18.5 14.5h.01" />
+    </>
+  ),
+  card: (
+    <>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M2 10h20M6 15h4" />
+    </>
+  ),
+  bank: (
+    <>
+      <path d="M3 9.5 12 4l9 5.5" />
+      <path d="M5 10v7M9.5 10v7M14.5 10v7M19 10v7M3 20h18" />
+    </>
+  ),
+
+  // ── Time, theme & status ────────────────────────────────────
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </>
+  ),
+  hourglass: (
+    <>
+      <path d="M6 2h12M6 22h12M8 2v3.5c0 1.5 4 4 4 6.5s-4 5-4 6.5V22M16 2v3.5c0 1.5-4 4-4 6.5s4 5 4 6.5V22" />
+    </>
+  ),
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5V5M12 19v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12H5M19 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8" />
+    </>
+  ),
+  moon: <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />,
+  'sun-moon': (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  star: (
+    <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9z" />
+  ),
+  sparkle: (
+    <>
+      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+      <path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+    </>
+  ),
+  ban: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m5.6 5.6 12.8 12.8" />
+    </>
+  ),
+
+  // ── Shapes ──────────────────────────────────────────────────
+  circle: <circle cx="12" cy="12" r="8.5" />,
+  dot: <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" />,
 
   // ── Fallback (G9) ───────────────────────────────────────────
   'circle-question': (

@@ -189,14 +189,14 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
           <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>Choose where your backup file is stored.</p>
           <div className="restore-source-cards">
             <button type="button" className="restore-source-card" onClick={() => setStep('R2')}>
-              <div className="restore-source-icon" style={{ fontSize: '1.6rem' }}>📁</div>
+              <div className="restore-source-icon"><Icon name="folder" size={22} /></div>
               <div style={{ textAlign: 'left' }}>
                 <b>Upload from file</b>
                 <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.78rem' }}>Select a .ltbak file from USB or local disk</p>
               </div>
             </button>
             <button type="button" className="restore-source-card" disabled>
-              <div className="restore-source-icon" style={{ fontSize: '1.6rem' }}>☁️</div>
+              <div className="restore-source-icon"><Icon name="cloud" size={22} /></div>
               <div style={{ textAlign: 'left' }}>
                 <b>Google Drive</b>
                 <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.78rem' }}>Available in Chunk 14c</p>
@@ -245,7 +245,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
               </div>
             ) : (
               <div>
-                <div style={{ fontSize: '2rem' }}>📁</div>
+                <div style={{ fontSize: '2rem' }}><Icon name="folder" size={32} /></div>
                 <b>Click to select file</b>
                 <p className="muted" style={{ margin: 0 }}>or drag and drop</p>
               </div>
@@ -273,7 +273,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
                 aria-label={showEmergency ? 'Hide' : 'Show'}
                 tabIndex={-1}
               >
-                {showEmergency ? '🙈' : '👁'}
+                {showEmergency ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}
               </button>
             </div>
             <small className="muted" style={{ fontSize: '0.7rem' }}>{emergencyKey.length}/255</small>

@@ -360,7 +360,7 @@ export function SetupWizard({ onComplete }: Props) {
                     className={(clientTouched.password || clientSubmitted) && clientPwdErr ? 'input-error' : ''}
                   />
                   <button type="button" className="pwd-toggle-btn" onClick={() => setShowClientPassword((v) => !v)} aria-label={showClientPassword ? 'Hide password' : 'Show password'}>
-                    {showClientPassword ? '🙈' : '👁'}
+                    {showClientPassword ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}
                   </button>
                 </div>
                 <small className="muted" style={{ fontSize: '0.7rem' }}>min 8 · from your server</small>
@@ -410,7 +410,7 @@ export function SetupWizard({ onComplete }: Props) {
               <div className="setup-role-options">
                 <label className={`setup-role-option ${machineRole === 'SERVER' ? 'selected' : ''}`}>
                   <input type="radio" name="role" value="SERVER" checked={machineRole === 'SERVER'} onChange={() => setMachineRole('SERVER')} style={{ display: 'none' }} />
-                  <div className="role-icon">🖥</div>
+                  <div className="role-icon"><Icon name="monitor" size={24} /></div>
                   <div>
                     <b>Yes, this is the server</b>
                     <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', lineHeight: 1.4 }}>
@@ -564,7 +564,7 @@ export function SetupWizard({ onComplete }: Props) {
                     className={errors.password ? 'input-error' : ''}
                   />
                   <button type="button" className="pwd-toggle-btn" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                    {showPassword ? '🙈' : '👁'}
+                    {showPassword ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}
                   </button>
                 </div>
                 <small className="muted" style={{ fontSize: '0.7rem' }}>At least 8 characters ({admin.password.length}/8)</small>

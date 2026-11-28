@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { currentUser, logout, ensureApiBaseResolved, resetApiBaseResolution, api } from './api/client';
+import { Icon } from './components/Icon';
 import { Login } from './features/auth/Login';
 import { ChangePassword } from './features/auth/ChangePassword';
 import { POSHome } from './features/pos/POSHome';
@@ -360,7 +361,7 @@ function App() {
       <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--page)', padding: '2rem' }}>
         <div style={{ maxWidth: 520, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '1.5rem', boxShadow: '0 20px 48px rgba(0,0,0,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-            <span style={{ fontSize: '1.8rem' }}>⚠</span>
+            <span><Icon name="warning-triangle" size={28} /></span>
             <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#dc2626' }}>Server Connection Issue</h2>
           </div>
           <p className="muted" style={{ margin: '0 0 1rem', lineHeight: 1.6, fontSize: '0.9rem' }}>

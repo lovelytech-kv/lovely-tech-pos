@@ -1,5 +1,6 @@
 import { useTheme } from '../../theme/ThemeProvider';
 import { currentUser } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { loadPermissions, getDefaultPermissions, type Permission } from '../../config/permissions';
 
 const CURATED_COLORS = [
@@ -27,7 +28,7 @@ export function AccentPicker() {
             <h3>Accent color</h3>
             <p className="muted">Change the primary accent color of the UI.</p>
           </div>
-          <span className="settings-symbol">✦</span>
+          <span className="settings-symbol"><Icon name="sparkle" size={20} /></span>
         </div>
         <div
           style={{
@@ -70,7 +71,7 @@ export function AccentPicker() {
           <h3>Accent color</h3>
           <p className="muted">Choose the primary accent used across the app.</p>
         </div>
-        <span className="settings-symbol">✦</span>
+        <span className="settings-symbol"><Icon name="sparkle" size={20} /></span>
       </div>
 
       <div
@@ -110,7 +111,7 @@ export function AccentPicker() {
                 justifySelf: 'center',
               }}
             >
-              {isActive ? '✓' : ''}
+              {isActive ? <Icon name="check" size={16} /> : ''}
             </button>
           );
         })}

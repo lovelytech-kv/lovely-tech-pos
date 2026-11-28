@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { todayLocal } from '../../utils/date';
 import { moneyInputProps, intInputProps } from '../../utils/numberInput';
 import { useModal } from '../../ui/modals';
@@ -146,7 +147,7 @@ export function DayEnd({ isAdmin = false, onError }: Props) {
     <div className="section-head"><div><h2>Cash / Day Start · Shift End · Day End</h2><p className="muted">One workflow for the physical cash drawer and business-day lifecycle.</p></div><button onClick={load}>Refresh</button></div>
     <div className="day-card"><span>Business Date</span><b>{status?.business_date || today()}</b><span>Status</span><b>{status?.status || 'NOT_STARTED'}</b><span>Expected Cash</span><b>Rs. {Number(status?.expected_cash || 0).toFixed(2)}</b><span>Live Difference</span><b>Rs. {(counted-Number(status?.expected_cash||0)).toFixed(2)}</b><span>Backup</span><b>{backup?.status || '—'}{backup?.last_backup_time ? ` · ${new Date(backup.last_backup_time).toLocaleString()}` : ''}</b></div>
 
-    {backupMsg && <div className="glass panel" role="status" aria-live="polite"><b>⏳ {backupMsg}</b></div>}
+    {backupMsg && <div className="glass panel" role="status" aria-live="polite"><b><Icon name="hourglass" size={15} /> {backupMsg}</b></div>}
 
     {!status?.day_session_id && <div className="glass panel"><h3>Day Start</h3><div className="form-grid compact"><label>Opening Cash<input {...moneyInputProps(opening, setOpening)} placeholder={openingCounted.toFixed(2)} /></label></div><div className="denomination-grid">{DENOMS.map(d => <label key={`open-${d}`}><span>Rs. {d}</span><input {...intInputProps(openingDenoms[String(d)] || '', (v) => setDenom('open', d, v), 0)} placeholder="0" /><small>× Rs. {d * Number(openingDenoms[String(d)] || 0)}</small></label>)}</div><div className="cash-total-box"><span>Denomination Total</span><strong>Rs. {openingCounted.toFixed(2)}</strong></div><button disabled={busy} onClick={startDay}>{busy ? 'Starting…' : 'Start Day'}</button></div>}
 

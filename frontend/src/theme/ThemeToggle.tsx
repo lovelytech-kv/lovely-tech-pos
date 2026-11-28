@@ -1,3 +1,4 @@
+import { Icon, type IconName } from '../components/Icon';
 import { useTheme, type Theme } from './ThemeProvider';
 
 const THEME_LABELS: Record<Theme, string> = {
@@ -6,10 +7,10 @@ const THEME_LABELS: Record<Theme, string> = {
   system: 'System',
 };
 
-const THEME_GLYPHS: Record<Theme, string> = {
-  light: '☀',
-  dark: '☾',
-  system: '◐',
+const THEME_ICONS: Record<Theme, IconName> = {
+  light: 'sun',
+  dark: 'moon',
+  system: 'sun-moon',
 };
 
 export function ThemeToggle() {
@@ -24,7 +25,7 @@ export function ThemeToggle() {
       title={`Theme: ${label} (click to change)`}
       aria-label={`Theme: ${label}. Click to change theme.`}
     >
-      <span aria-hidden='true'>{THEME_GLYPHS[theme]}</span>
+      <span aria-hidden='true'><Icon name={THEME_ICONS[theme]} size={18} /></span>
     </button>
   );
 }

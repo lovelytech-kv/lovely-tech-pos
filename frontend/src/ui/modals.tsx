@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { Icon } from '../components/Icon';
 
 type ConfirmOpts = { title?: string; message: string; confirmText?: string; cancelText?: string };
 type PromptOpts = {
@@ -117,7 +118,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
                       color: 'var(--muted)',
                     }}
                   >
-                    {revealed ? '🙈' : '👁'}
+                    {revealed ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}
                   </button>
                 )}
               </div>

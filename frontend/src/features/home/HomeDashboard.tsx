@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, checkServerHealth } from '../../api/client';
+import { Icon, type IconName } from '../../components/Icon';
 import { money } from '../../services/money';
 import { todayLocal } from '../../utils/date';
 import { useShopProfile } from '../settings/ShopContext';
@@ -15,13 +16,13 @@ type HomeDashboardProps = {
 
 const HIDDEN_KEY = 'ltpos_home_hidden_widgets';
 
-const QUICK_ACTIONS: { key: string; icon: string; label: string }[] = [
-  { key: 'Sales', icon: '＋', label: 'New Sale' },
-  { key: 'Repairs', icon: '⚒', label: 'New Repair' },
-  { key: 'Customers', icon: '♙', label: 'Find Customer' },
-  { key: 'Documents', icon: '↻', label: 'Reprint' },
-  { key: 'Reports', icon: '▥', label: 'Reports' },
-  { key: 'Cash/Day', icon: '◉', label: 'Cash / Day' },
+const QUICK_ACTIONS: { key: string; icon: IconName; label: string }[] = [
+  { key: 'Sales', icon: 'plus', label: 'New Sale' },
+  { key: 'Repairs', icon: 'wrench', label: 'New Repair' },
+  { key: 'Customers', icon: 'users', label: 'Find Customer' },
+  { key: 'Documents', icon: 'file-text', label: 'Reprint' },
+  { key: 'Reports', icon: 'chart', label: 'Reports' },
+  { key: 'Cash/Day', icon: 'cash-register', label: 'Cash / Day' },
 ];
 
 function loadHidden(): string[] {
@@ -308,7 +309,7 @@ export function HomeDashboard({ user, onNavigate }: HomeDashboardProps) {
                 fontSize: '0.85rem',
               }}
             >
-              <span style={{ fontSize: '1.8rem', lineHeight: 1 }}>{a.icon}</span>
+              <span style={{ lineHeight: 1, color: 'var(--accent)' }}><Icon name={a.icon} size={30} /></span>
               <span>{a.label}</span>
             </button>
           ))}
@@ -403,9 +404,9 @@ function WidgetHead({ title, onClose, actionLabel, onAction }: { title: string; 
           className="icon-button"
           aria-label={`Hide ${title}`}
           onClick={onClose}
-          style={{ width: '26px', height: '26px', fontSize: '13px', lineHeight: 1 }}
+          style={{ width: '26px', height: '26px' }}
         >
-          ×
+          <Icon name="close-x" size={15} />
         </button>
       </div>
     </div>

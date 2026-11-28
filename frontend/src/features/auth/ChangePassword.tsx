@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 
 type Props = {
   user: any;
@@ -113,7 +114,7 @@ export function ChangePassword({ user, onDone, onLogout }: Props) {
               onClick={() => setShowPw((v) => !v)}
               aria-label={showPw ? 'Hide passwords' : 'Show passwords'}
             >
-              {showPw ? '🙈' : '👁'}
+              {showPw ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}
             </button>
           </div>
           <div className="pwd-strength-bar" aria-hidden="true">
@@ -127,23 +128,23 @@ export function ChangePassword({ user, onDone, onLogout }: Props) {
           </div>
           <ul className="pwd-requirements">
             <li className={s.checks.length ? 'met' : 'not-met'}>
-              <span className="req-icon">{s.checks.length ? '✓' : '○'}</span>
+              <span className="req-icon">{s.checks.length ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>
               At least {MIN_LEN} characters ({next.length}/{MIN_LEN})
             </li>
             <li className={s.checks.lower ? 'met' : 'not-met'}>
-              <span className="req-icon">{s.checks.lower ? '✓' : '○'}</span>
+              <span className="req-icon">{s.checks.lower ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>
               Contains lowercase letter
             </li>
             <li className={s.checks.upper ? 'met' : 'not-met'}>
-              <span className="req-icon">{s.checks.upper ? '✓' : '○'}</span>
+              <span className="req-icon">{s.checks.upper ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>
               Contains uppercase letter
             </li>
             <li className={s.checks.digit ? 'met' : 'not-met'}>
-              <span className="req-icon">{s.checks.digit ? '✓' : '○'}</span>
+              <span className="req-icon">{s.checks.digit ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>
               Contains number
             </li>
             <li className={s.checks.symbol ? 'met' : 'not-met'}>
-              <span className="req-icon">{s.checks.symbol ? '✓' : '○'}</span>
+              <span className="req-icon">{s.checks.symbol ? <Icon name="success-check" size={13} /> : <Icon name="circle" size={13} />}</span>
               Contains symbol (!@#$…)
             </li>
           </ul>
@@ -162,7 +163,7 @@ export function ChangePassword({ user, onDone, onLogout }: Props) {
             onChange={(e) => setAgain(e.target.value)}
           />
           {again && errAgain && <span className="field-error">{errAgain}</span>}
-          {again && !errAgain && <span className="field-ok-inline">✓ Passwords match</span>}
+          {again && !errAgain && <span className="field-ok-inline"><Icon name="check" size={12} /> Passwords match</span>}
         </label>
 
         {error && <div className="error login-error" role="alert">{error}</div>}
@@ -173,7 +174,7 @@ export function ChangePassword({ user, onDone, onLogout }: Props) {
           disabled={!canSubmit}
           type="submit"
         >
-          {busy ? 'Saving…' : 'Save new password'} <span>→</span>
+          {busy ? 'Saving…' : 'Save new password'} <span><Icon name="arrow-right" size={16} /></span>
         </button>
         <button type="button" className="link-button" onClick={onLogout}>
           Sign out

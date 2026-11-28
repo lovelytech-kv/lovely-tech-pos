@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 
 type Cfg = {
@@ -104,7 +105,7 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
   if (loading) {
     return (
       <div className="glass-panel settings-card" style={{ gridColumn: '1 / -1' }}>
-        <div className="settings-card-title"><div><h3>Session Timeout</h3><p className="muted">Loading…</p></div><span className="settings-symbol">⏱</span></div>
+        <div className="settings-card-title"><div><h3>Session Timeout</h3><p className="muted">Loading…</p></div><span className="settings-symbol"><Icon name="clock" size={20} /></span></div>
         <div style={{ textAlign: 'center', padding: '1rem' }}><span className="spinner" /></div>
       </div>
     );
@@ -119,12 +120,12 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
           <h3>Session Timeout</h3>
           <p className="muted">Controls when users are automatically logged out. Active users are never kicked out mid-action.</p>
         </div>
-        <span className="settings-symbol">⏱</span>
+        <span className="settings-symbol"><Icon name="clock" size={20} /></span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
         <div style={{ display: 'grid', gap: '0.75rem', padding: '0.75rem', background: 'var(--surface-2)', borderRadius: 10, border: '1px solid var(--line)' }}>
-          <b style={{ fontSize: '0.85rem', color: 'var(--text)' }}>👑 Admin</b>
+          <b style={{ fontSize: '0.85rem', color: 'var(--text)' }}><Icon name="crown" size={14} /> Admin</b>
           <label style={labelStyle}>
             Idle logout (minutes)
             <input type="number" min={1} max={720} value={cfg.admin_minutes}
@@ -142,7 +143,7 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
         </div>
 
         <div style={{ display: 'grid', gap: '0.75rem', padding: '0.75rem', background: 'var(--surface-2)', borderRadius: 10, border: '1px solid var(--line)' }}>
-          <b style={{ fontSize: '0.85rem', color: 'var(--text)' }}>🧑‍💼 Cashier</b>
+          <b style={{ fontSize: '0.85rem', color: 'var(--text)' }}><Icon name="briefcase" size={14} /> Cashier</b>
           <label style={labelStyle}>
             Idle logout (minutes)
             <input type="number" min={1} max={720} value={cfg.cashier_minutes}
@@ -161,7 +162,7 @@ export function SessionTimeoutSettings({ isAdmin }: { isAdmin: boolean }) {
       </div>
 
       <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.75rem' }}>
-        ⓘ Idle logout and absolute session lifetime are enforced separately. The absolute lifetime is fixed when the user logs in and does not extend with activity.
+        <Icon name="info-circle" size={13} /> Idle logout and absolute session lifetime are enforced separately. The absolute lifetime is fixed when the user logs in and does not extend with activity.
       </p>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem' }}>

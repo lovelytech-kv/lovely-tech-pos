@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 
 type Props = { onClose: () => void; onSuccess: () => void };
@@ -104,13 +105,13 @@ export function UserCreateModal({ onClose, onSuccess }: Props) {
       <div className="modal-card">
         <div className="modal-header">
           <h3>Create User</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close" disabled={busy}>×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close" disabled={busy}><Icon name="close-x" size={16} /></button>
         </div>
         <div className="modal-body">
           {submitAttempted && errorList.length > 0 && (
             <div className="modal-error-banner">
               <div className="modal-error-banner-title">
-                <span>⚠</span> Please fix {errorList.length} {errorList.length === 1 ? 'error' : 'errors'}:
+                <span><Icon name="warning-triangle" size={14} /></span> Please fix {errorList.length} {errorList.length === 1 ? 'error' : 'errors'}:
               </div>
               <ul className="modal-error-banner-list">
                 {errorList.map((e, i) => <li key={i}>{e}</li>)}
@@ -119,14 +120,14 @@ export function UserCreateModal({ onClose, onSuccess }: Props) {
           )}
 
           <div className="field">
-            <label>Username * {username && !inlineErrs.username && <span className="field-ok">✓</span>}</label>
+            <label>Username * {username && !inlineErrs.username && <span className="field-ok"><Icon name="check" size={12} /></span>}</label>
             <input value={username} onChange={(e) => { setUsername(e.target.value); if (serverErrors.username) setServerErrors((p) => { const n = { ...p }; delete n.username; return n; }); }} onBlur={() => markTouched('username')} maxLength={80} autoFocus className={showError('username') ? 'input-error' : ''} />
             <small className="muted" style={{ fontSize: '0.7rem' }}>Min 3 characters, must be unique</small>
             {showError('username') && <span className="field-error">{serverErr('username') || inlineErrs.username}</span>}
           </div>
 
           <div className="field">
-            <label>Display Name * {displayName && !inlineErrs.displayName && <span className="field-ok">✓</span>}</label>
+            <label>Display Name * {displayName && !inlineErrs.displayName && <span className="field-ok"><Icon name="check" size={12} /></span>}</label>
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} onBlur={() => markTouched('displayName')} maxLength={150} className={showError('displayName') ? 'input-error' : ''} />
             {showError('displayName') && <span className="field-error">{inlineErrs.displayName}</span>}
           </div>
@@ -140,17 +141,17 @@ export function UserCreateModal({ onClose, onSuccess }: Props) {
           </div>
 
           <div className="field">
-            <label>Password * {password && !inlineErrs.password && <span className="field-ok">✓</span>}</label>
+            <label>Password * {password && !inlineErrs.password && <span className="field-ok"><Icon name="check" size={12} /></span>}</label>
             <div className="pwd-wrapper">
               <input type={showPwd ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} onBlur={() => markTouched('password')} maxLength={200} autoComplete="new-password" className={showError('password') ? 'input-error' : ''} />
-              <button type="button" className="pwd-toggle-btn" onClick={() => setShowPwd((v) => !v)} aria-label={showPwd ? 'Hide password' : 'Show password'}>{showPwd ? '🙈' : '👁'}</button>
+              <button type="button" className="pwd-toggle-btn" onClick={() => setShowPwd((v) => !v)} aria-label={showPwd ? 'Hide password' : 'Show password'}>{showPwd ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}</button>
             </div>
             <small className="muted" style={{ fontSize: '0.7rem' }}>At least {MIN_PWD} characters <span style={{ color: password.length >= MIN_PWD ? '#16a34a' : 'var(--muted)' }}>({password.length}/{MIN_PWD})</span></small>
             {showError('password') && <span className="field-error">{inlineErrs.password}</span>}
           </div>
 
           <div className="field">
-            <label>Confirm Password * {confirm && !inlineErrs.confirm && <span className="field-ok">✓</span>}</label>
+            <label>Confirm Password * {confirm && !inlineErrs.confirm && <span className="field-ok"><Icon name="check" size={12} /></span>}</label>
             <input type={showPwd ? 'text' : 'password'} value={confirm} onChange={(e) => setConfirm(e.target.value)} onBlur={() => markTouched('confirm')} maxLength={200} autoComplete="new-password" className={showError('confirm') ? 'input-error' : ''} />
             <small className="muted" style={{ fontSize: '0.7rem' }}>Must match the password above</small>
             {showError('confirm') && <span className="field-error">{inlineErrs.confirm}</span>}
@@ -158,7 +159,7 @@ export function UserCreateModal({ onClose, onSuccess }: Props) {
 
           {role === 'CASHIER' && (
             <div className="field">
-              <label>Discount Limit % {discount && !inlineErrs.discount && <span className="field-ok">✓</span>}</label>
+              <label>Discount Limit % {discount && !inlineErrs.discount && <span className="field-ok"><Icon name="check" size={12} /></span>}</label>
               <input type="text" inputMode="decimal" value={discount} onChange={(e) => { const v = e.target.value; if (v === '' || /^\d*\.?\d{0,2}$/.test(v)) setDiscount(v); }} onBlur={() => { markTouched('discount'); const n = Number(discount); if (discount === '' || !Number.isFinite(n)) setDiscount('0'); else if (n < 0) setDiscount('0'); else if (n > 100) setDiscount('100'); }} placeholder="0" className={showError('discount') ? 'input-error' : ''} />
               <small className="muted" style={{ fontSize: '0.7rem' }}>0–100 (percentage)</small>
               {showError('discount') && <span className="field-error">{inlineErrs.discount}</span>}

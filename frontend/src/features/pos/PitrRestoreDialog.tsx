@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
+import { Icon } from '../../components/Icon';
 import { toast } from '../../ui/toast';
 
 type Range = {
@@ -129,14 +130,14 @@ export function PitrRestoreDialog({ onClose }: Props) {
         <div className="modal-card" style={{ width: 'min(580px, 100%)' }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
             <h3>PITR Restore (Point-in-Time)</h3>
-            <button className="modal-close" onClick={requestClose} disabled={busy} aria-label="Close">×</button>
+            <button className="modal-close" onClick={requestClose} disabled={busy} aria-label="Close"><Icon name="close-x" size={16} /></button>
           </div>
           <div className="modal-body">
             <div
               className="recovery-warning"
               style={{ background: 'rgba(220, 38, 38, 0.1)', borderColor: 'rgba(220, 38, 38, 0.35)', color: '#b91c1c' }}
             >
-              <b>⚠ DESTRUCTIVE OPERATION</b>
+              <b><Icon name="warning-triangle" size={15} /> DESTRUCTIVE OPERATION</b>
               <p style={{ margin: '0.3rem 0 0' }}>
                 This will restore the ENTIRE database to the chosen time. All data after that time will be LOST.
                 A safety backup is taken automatically. The script must be run manually in elevated PowerShell.
@@ -160,7 +161,7 @@ export function PitrRestoreDialog({ onClose }: Props) {
                   onClick={() => setShowPwd((v) => !v)}
                   aria-label={showPwd ? 'Hide' : 'Show'}
                 >
-                  {showPwd ? '🙈' : '👁'}
+                  {showPwd ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}
                 </button>
               </div>
               <button
@@ -211,7 +212,7 @@ export function PitrRestoreDialog({ onClose }: Props) {
                     autoComplete="off"
                   />
                   <small className="muted" style={{ fontSize: '0.7rem' }}>
-                    {replaceText === 'RESTORE' ? '✓ Matches' : 'Must type exactly: RESTORE'}
+                    {replaceText === 'RESTORE' ? <><Icon name="check" size={12} /> Matches</> : 'Must type exactly: RESTORE'}
                   </small>
                 </div>
 
@@ -224,7 +225,7 @@ export function PitrRestoreDialog({ onClose }: Props) {
                 className="recovery-warning"
                 style={{ background: 'rgba(22, 163, 74, 0.1)', borderColor: 'rgba(22, 163, 74, 0.35)', color: '#16a34a' }}
               >
-                <b>✓ PITR plan ready</b>
+                <b><Icon name="check" size={15} /> PITR plan ready</b>
                 <p style={{ margin: '0.3rem 0' }}>Run this command in ELEVATED PowerShell:</p>
                 <pre style={{ background: 'rgba(0, 0, 0, 0.05)', padding: '0.5rem', borderRadius: 6, fontSize: '0.72rem', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{result}</pre>
                 <p style={{ margin: '0.3rem 0 0', fontSize: '0.75rem' }}>

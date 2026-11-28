@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AdminManualServerPanel } from '../components/AdminManualServerPanel';
+import { Icon } from '../components/Icon';
 import type { SetupState } from '../services/machine-config';
 
 type Props = {
@@ -109,7 +110,7 @@ export function SetupRequired({
           {state === 'DISCOVERING' || state === 'UNINITIALIZED' ? (
             <div className="discovery-spinner" aria-hidden="true" />
           ) : (
-            <div className="status-good" style={{ fontSize: '28px' }}>●</div>
+            <div className="status-good"><Icon name="dot" size={28} /></div>
           )}
           <h2>{info.title}</h2>
           <p className="muted">{info.description}</p>

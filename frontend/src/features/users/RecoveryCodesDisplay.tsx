@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icon } from '../../components/Icon';
 import { todayLocal } from '../../utils/date';
 import { trackPopup } from '../../ui/popupToast';
 
@@ -96,7 +97,7 @@ export function RecoveryCodesDisplay({
         {subtitle && <p className="recovery-subtitle">{subtitle}</p>}
 
         <div className="recovery-warning">
-          <b>⚠ Important:</b> These codes will NOT be shown again. Each code can be used ONCE to reset your password.
+          <b><Icon name="warning-triangle" size={14} /> Important:</b> These codes will NOT be shown again. Each code can be used ONCE to reset your password.
           If you lose all codes AND forget your password, you will need physical access to the server laptop for emergency reset.
         </div>
 
@@ -112,13 +113,13 @@ export function RecoveryCodesDisplay({
 
       <div className="recovery-codes-actions">
         <button type="button" className="btn-secondary" onClick={copyAll}>
-          {copied ? '✓ Copied' : '📋 Copy All'}
+          {copied ? <><Icon name="check" size={14} /> Copied</> : <><Icon name="clipboard" size={14} /> Copy All</>}
         </button>
         <button type="button" className="btn-secondary" onClick={downloadTxt}>
-          💾 Download .txt
+          <Icon name="save" size={14} /> Download .txt
         </button>
         <button type="button" className="btn-secondary" onClick={print}>
-          🖨 Print
+          <Icon name="print" size={14} /> Print
         </button>
       </div>
 
