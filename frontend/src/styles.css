@@ -3215,13 +3215,24 @@ button.btn-lg,
   filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), 0.28));
 }
 
-/* Modal close buttons — subtle accent glow on hover. */
-.modal-close .icon-svg {
+/* Modal close buttons — accent glow on hover (FS-5).
+   Covers every close pattern: `.modal-close` with the shared Icon, header
+   buttons labelled Close, and legacy `[class*="modal"] [class*="close"]`. */
+.modal-close .icon-svg,
+.modal-close svg,
+[class*="modal"] [class*="close"] .icon-svg,
+[class*="modal"] [class*="close"] svg {
   transition: color var(--transition-fast), filter var(--transition-fast);
 }
-.modal-close:hover .icon-svg {
+.modal-close:hover,
+.modal-close:hover .icon-svg,
+.modal-close:hover svg,
+button[aria-label*="close" i]:hover,
+button[aria-label*="close" i]:hover svg,
+[class*="modal"] [class*="close"]:hover,
+[class*="modal"] [class*="close"]:hover svg {
   color: var(--accent);
-  filter: drop-shadow(0 0 5px rgba(var(--accent-rgb), 0.5));
+  filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.55));
 }
 
 /* Dark theme: stronger halos so they read on near-black surfaces. */
@@ -3240,8 +3251,14 @@ button.btn-lg,
 [data-theme="dark"] .empty-state .icon-svg {
   filter: drop-shadow(0 0 14px rgba(var(--accent-rgb), 0.42));
 }
-[data-theme="dark"] .modal-close:hover .icon-svg {
-  filter: drop-shadow(0 0 7px rgba(var(--accent-rgb), 0.7));
+[data-theme="dark"] .modal-close:hover,
+[data-theme="dark"] .modal-close:hover .icon-svg,
+[data-theme="dark"] .modal-close:hover svg,
+[data-theme="dark"] button[aria-label*="close" i]:hover,
+[data-theme="dark"] button[aria-label*="close" i]:hover svg,
+[data-theme="dark"] [class*="modal"] [class*="close"]:hover,
+[data-theme="dark"] [class*="modal"] [class*="close"]:hover svg {
+  filter: drop-shadow(0 0 8px rgba(var(--accent-rgb), 0.75));
 }
 
 /* ============ SESSION 3D-4b - ENTERPRISE DATA TABLES ============ */
