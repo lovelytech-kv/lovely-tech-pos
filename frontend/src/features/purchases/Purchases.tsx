@@ -667,15 +667,15 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
               )}
 
               {lines.length > 0 && (
-                <div className="purchase-table-wrap">
-                  <table className="purchase-line-table">
+                <div className="data-table-wrap">
+                  <table className="data-table data-table--compact data-table--wide">
                     <thead>
                       <tr>
                         <th>Item *</th>
                         <th>Qty *</th>
-                        {isAdmin && <th>Unit cost</th>}
-                        {isAdmin && <th>Line total</th>}
-                        <th aria-label="Actions" />
+                        {isAdmin && <th className="num">Unit cost</th>}
+                        {isAdmin && <th className="num">Line total</th>}
+                        <th className="actions" aria-label="Actions" />
                       </tr>
                     </thead>
                     <tbody>
@@ -750,8 +750,8 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                                 {showError && errors.cost && <span className="item-field-error">{errors.cost}</span>}
                               </td>
                             )}
-                            {isAdmin && <td className="purchase-line-total">{costValue(line.unitCost) === null ? '—' : `Rs. ${lineTotal(line)}`}</td>}
-                            <td>
+                            {isAdmin && <td className="num">{costValue(line.unitCost) === null ? '—' : `Rs. ${lineTotal(line)}`}</td>}
+                            <td className="actions">
                               <button
                                 type="button"
                                 className="danger-button purchase-line-remove"
@@ -838,15 +838,15 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
           {!historyLoaded && !historyLoading && <p className="muted">Loading purchase history…</p>}
           {historyLoaded && filteredHistory.length === 0 && <p className="muted">No purchases match these filters.</p>}
           {filteredHistory.length > 0 && (
-            <div className="purchase-table-wrap">
-              <table className="purchase-history-table">
+            <div className="data-table-wrap">
+              <table className="data-table data-table--compact data-table--interactive data-table--wide">
                 <thead>
                   <tr>
                     <th>Date</th>
                     <th>Supplier</th>
                     <th>Invoice ref</th>
-                    <th>Lines</th>
-                    {isAdmin && <th>Total</th>}
+                    <th className="num">Lines</th>
+                    {isAdmin && <th className="num">Total</th>}
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -861,8 +861,8 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                       <td>{row.purchase_date}</td>
                       <td>{row.supplier_name || 'No supplier'}</td>
                       <td>{row.reference_no || '—'}</td>
-                      <td>{row.line_count} · {money(row.total_quantity)} qty</td>
-                      {isAdmin && <td>{row.total_cost == null ? '—' : `Rs. ${money(row.total_cost)}`}</td>}
+                      <td className="num">{row.line_count} · {money(row.total_quantity)} qty</td>
+                      {isAdmin && <td className="num">{row.total_cost == null ? '—' : `Rs. ${money(row.total_cost)}`}</td>}
                       <td>{statusBadge(row)}</td>
                     </tr>
                   ))}
@@ -903,24 +903,24 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
               </div>
               {detail.notes && <p className="muted">{detail.notes}</p>}
 
-              <div className="purchase-table-wrap">
-                <table className="purchase-line-table">
+              <div className="data-table-wrap">
+                <table className="data-table data-table--compact data-table--wide">
                   <thead>
                     <tr>
                       <th>Item</th>
-                      <th>Qty</th>
-                      {isAdmin && <th>Unit cost</th>}
-                      {isAdmin && <th>Line total</th>}
-                      {isAdmin && <th>Actions</th>}
+                      <th className="num">Qty</th>
+                      {isAdmin && <th className="num">Unit cost</th>}
+                      {isAdmin && <th className="num">Line total</th>}
+                      {isAdmin && <th className="actions">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {detail.lines.map(line => (
                       <tr key={line.purchase_line_id}>
                         <td><b>{line.item_code}</b> · {line.item_description}</td>
-                        <td>{money(line.quantity)}</td>
+                        <td className="num">{money(line.quantity)}</td>
                         {isAdmin && (
-                          <td>
+                          <td className="num">
                             {line.unit_cost == null ? (
                               <div className="purchase-cost-entry">
                                 <input
@@ -935,9 +935,9 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                             ) : `Rs. ${money(line.unit_cost)}`}
                           </td>
                         )}
-                        {isAdmin && <td>{line.line_total == null ? '—' : `Rs. ${money(line.line_total)}`}</td>}
+                        {isAdmin && <td className="num">{line.line_total == null ? '—' : `Rs. ${money(line.line_total)}`}</td>}
                         {isAdmin && (
-                          <td>
+                          <td className="actions">
                             <div className="button-row purchase-row-actions">
                               <button type="button" disabled={line.unit_cost == null} onClick={() => openCorrection('cost', { purchaseId: detail.purchase_id, purchaseVersion: detail.version, lineId: line.purchase_line_id, lineVersion: line.version, initial: String(line.unit_cost ?? ''), title: `Correct cost · ${line.item_code}` })}>Cost</button>
                               <button type="button" onClick={() => openCorrection('quantity', { purchaseId: detail.purchase_id, purchaseVersion: detail.version, lineId: line.purchase_line_id, lineVersion: line.version, initial: String(line.quantity), title: `Correct quantity · ${line.item_code}` })}>Qty</button>

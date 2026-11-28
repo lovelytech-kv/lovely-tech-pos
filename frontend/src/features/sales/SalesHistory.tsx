@@ -490,15 +490,15 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
             </div>
           ) : (
             <>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="data-table" style={{ width: '100%' }}>
+              <div className="data-table-wrap">
+                <table className="data-table data-table--interactive">
                   <thead>
                     <tr>
                       <th>Invoice</th>
                       <th>Time</th>
                       <th>Customer</th>
-                      <th style={{ textAlign: 'right' }}>Items</th>
-                      <th style={{ textAlign: 'right' }}>Total</th>
+                      <th className="num">Items</th>
+                      <th className="num">Total</th>
                       <th>Payment</th>
                       {isAdmin && <th>Cashier</th>}
                       <th>Status</th>
@@ -508,20 +508,14 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                     {sales.map((s) => (
                       <tr
                         key={s.sale_id}
+                        className={selectedItem?.sale_id === s.sale_id ? 'is-selected' : undefined}
                         onClick={() => void openSale(s)}
-                        style={{
-                          cursor: 'pointer',
-                          background:
-                            selectedItem?.sale_id === s.sale_id
-                              ? 'rgba(var(--accent-rgb), 0.08)'
-                              : undefined,
-                        }}
                       >
                         <td><b>{s.invoice_no}</b></td>
                         <td>{new Date(s.sale_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                         <td>{customerText(s.customer_name, s.customer_contact)}</td>
-                        <td style={{ textAlign: 'right' }}>{s.item_count}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        <td className="num">{s.item_count}</td>
+                        <td className="num">
                           Rs. {money(s.grand_total)}
                         </td>
                         <td>{s.payment_summary}</td>

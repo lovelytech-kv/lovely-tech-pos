@@ -1070,15 +1070,15 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
       </div>
     ) : (
       <>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table" style={{ width: '100%' }}>
+        <div className="data-table-wrap">
+          <table className="data-table">
             <thead>
               <tr>
                 <th>Type</th>
                 <th>Document No</th>
                 <th>Date</th>
                 <th>Status</th>
-                <th></th>
+                <th className="actions" aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
@@ -1097,7 +1097,7 @@ function DocumentsTab({onError}:{onError:(x:string)=>void}){
                     <td>
                       <span className={`sh-status ${isBad ? 'sh-status-void' : 'sh-status-ok'}`}>{r.status}</span>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td className="actions">
                       <button disabled={busy} onClick={()=>void reprint(r)}>Reprint</button>
                     </td>
                   </tr>
