@@ -207,11 +207,11 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
           </div>
           <div className="search-row">
             <input value={serial} onChange={(event) => setSerial(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void lookupSerial(); }} placeholder="Serial / IMEI" />
-            <button onClick={() => void lookupSerial()}>Search Serial</button>
+            <button className="btn-secondary warranty-search-btn" onClick={() => void lookupSerial()}>Search Serial</button>
           </div>
           <div className="search-row">
             <input value={warrantyNo} onChange={(event) => setWarrantyNo(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void lookupWarranty(); }} placeholder="Warranty number" />
-            <button onClick={() => void lookupWarranty()}>Search Warranty</button>
+            <button className="btn-secondary warranty-search-btn" onClick={() => void lookupWarranty()}>Search Warranty</button>
           </div>
           {lookup && (
             <div className="day-card">
@@ -270,7 +270,7 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
           <input {...intInputProps(claimQuantity, setClaimQuantity, 1)} placeholder="Quantity" />
           <input value={warrantyId} onChange={(event) => setWarrantyId(event.target.value)} placeholder="Product warranty ID (optional)" />
           <input value={claimNotes} onChange={(event) => setClaimNotes(event.target.value)} placeholder="Reported issue / claim notes" />
-          <button disabled={!itemId} onClick={() => void createClaim()}>Create Warranty Claim</button>
+          <button className="btn-primary" disabled={!itemId} onClick={() => void createClaim()}>Create Warranty Claim</button>
         </div>
 
         <div className="list-stack">
