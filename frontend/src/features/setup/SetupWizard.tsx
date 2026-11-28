@@ -393,7 +393,7 @@ export function SetupWizard({ onComplete }: Props) {
               {joinMode === 'SERVER_REQUIRES_SETUP' && (
                 <button className="btn-secondary" onClick={() => setStep(0)} disabled={joiningClient}><Icon name="arrow-left" size={16} /> Back</button>
               )}
-              <button className="primary" onClick={() => void submitClientJoin()} disabled={!canClientJoin || joiningClient}>
+              <button className="btn-primary" onClick={() => void submitClientJoin()} disabled={!canClientJoin || joiningClient}>
                 {joiningClient ? 'Joining…' : 'Join as Client'}
               </button>
             </div>
@@ -432,7 +432,7 @@ export function SetupWizard({ onComplete }: Props) {
               </div>
             </div>
             <div className="setup-actions">
-              <button className="primary" onClick={() => setStep(machineRole === 'SERVER' ? 0.5 : -1)}>
+              <button className="btn-primary" onClick={() => setStep(machineRole === 'SERVER' ? 0.5 : -1)}>
                 Continue <Icon name="arrow-right" size={16} />
               </button>
             </div>
@@ -494,7 +494,7 @@ export function SetupWizard({ onComplete }: Props) {
             </div>
             <div className="setup-actions" style={{ justifyContent: 'center' }}>
               <button className="btn-secondary" onClick={() => setStep(0.5)}><Icon name="arrow-left" size={16} /> Back</button>
-              <button className="primary" onClick={() => setStep(2)}>Get Started <Icon name="arrow-right" size={16} /></button>
+              <button className="btn-primary" onClick={() => setStep(2)}>Get Started <Icon name="arrow-right" size={16} /></button>
             </div>
           </>
         )}
@@ -530,7 +530,7 @@ export function SetupWizard({ onComplete }: Props) {
             </div>
             <div className="setup-actions">
               <button className="btn-secondary" onClick={() => setStep(1)}><Icon name="arrow-left" size={16} /> Back</button>
-              <button className="primary" onClick={() => { if (validateShop()) setStep(3); }}>Continue <Icon name="arrow-right" size={16} /></button>
+              <button className="btn-primary" onClick={() => { if (validateShop()) setStep(3); }}>Continue <Icon name="arrow-right" size={16} /></button>
             </div>
           </>
         )}
@@ -578,7 +578,7 @@ export function SetupWizard({ onComplete }: Props) {
             </div>
             <div className="setup-actions">
               <button className="btn-secondary" onClick={() => setStep(2)} disabled={submitting}><Icon name="arrow-left" size={16} /> Back</button>
-              <button className="primary" onClick={submitServer} disabled={submitting}>{submitting ? 'Creating account…' : 'Create Account & Continue'}</button>
+              <button className="btn-primary" onClick={submitServer} disabled={submitting}>{submitting ? 'Creating account…' : 'Create Account & Continue'}</button>
             </div>
           </>
         )}
@@ -622,7 +622,7 @@ export function SetupWizard({ onComplete }: Props) {
               )}
             </div>
             <div className="setup-actions" style={{ justifyContent: 'center' }}>
-              <button className="primary" onClick={onComplete}>Go to Login <Icon name="arrow-right" size={16} /></button>
+              <button className="btn-primary" onClick={onComplete}>Go to Login <Icon name="arrow-right" size={16} /></button>
             </div>
           </>
         )}

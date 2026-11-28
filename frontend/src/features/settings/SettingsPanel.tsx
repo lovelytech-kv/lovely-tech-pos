@@ -57,7 +57,7 @@ export function SettingsPanel({ isAdmin }: { isAdmin: boolean }) {
         </div>
         <div className="settings-facts"><span><small>Manual override</small><b>Admin only</b></span></div>
         <div className="button-row" style={{ marginTop: '0.5rem' }}>
-          <button className="primary" onClick={() => setShowManualConfig(true)}>Configure server manually</button>
+          <button className="btn-primary" onClick={() => setShowManualConfig(true)}>Configure server manually</button>
         </div>
       </div>
     )}

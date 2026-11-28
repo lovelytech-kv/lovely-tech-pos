@@ -80,7 +80,7 @@ export function AppHeader({ title, user, onLogout, children }: AppHeaderProps) {
             <small>{user.role}</small>
           </span>
         </span>
-        <button type="button" className="app-header-logout" onClick={onLogout}>Logout</button>
+        <button type="button" className="app-header-logout btn-ghost" onClick={onLogout}>Logout</button>
       </div>
     </header>
   );

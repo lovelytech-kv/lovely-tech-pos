@@ -283,7 +283,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
         </div>
         <div className="setup-actions">
           <button type="button" className="btn-secondary" onClick={handleBackToR1} disabled={inspecting}><Icon name="arrow-left" size={16} /> Back</button>
-          <button type="button" className="primary" onClick={handleInspect} disabled={!canInspect}>
+          <button type="button" className="btn-primary" onClick={handleInspect} disabled={!canInspect}>
             {inspecting ? 'Inspecting…' : <>Continue <Icon name="arrow-right" size={16} /></>}
           </button>
         </div>
@@ -396,7 +396,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
         </div>
         <div className="setup-actions">
           <button type="button" className="btn-secondary" onClick={handleBackToR2} disabled={restoring}><Icon name="arrow-left" size={16} /> Back</button>
-          <button type="button" className="primary danger-button" onClick={handleRestore} disabled={!canConfirmRestore || restoring}>
+          <button type="button" className="btn-danger" onClick={handleRestore} disabled={!canConfirmRestore || restoring}>
             {restoring ? 'Restoring… do not close' : 'Restore Now'}
           </button>
         </div>
@@ -415,7 +415,7 @@ export function RestoreFlow({ onComplete, onCancel }: Props) {
         <p className="muted" style={{ fontSize: '0.72rem', margin: '0.4rem 0 0' }}>Restore event logged in audit trail.</p>
       </div>
       <div className="setup-actions" style={{ justifyContent: 'center' }}>
-        <button type="button" className="primary" onClick={onComplete}>Go to Login <Icon name="arrow-right" size={16} /></button>
+        <button type="button" className="btn-primary" onClick={onComplete}>Go to Login <Icon name="arrow-right" size={16} /></button>
       </div>
     </div>
   );

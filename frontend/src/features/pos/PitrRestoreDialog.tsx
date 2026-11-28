@@ -278,7 +278,7 @@ export function PitrRestoreDialog({ onClose }: Props) {
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowDiscard(false)}>Keep editing</button>
               <button
-                className="primary danger-button"
+                className="btn-danger"
                 onClick={() => { setShowDiscard(false); onClose(); }}
               >
                 Discard

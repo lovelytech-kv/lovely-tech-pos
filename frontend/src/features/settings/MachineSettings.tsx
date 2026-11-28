@@ -425,7 +425,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
 
           {isAdmin && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button type="button" className="primary" onClick={() => void saveName()} disabled={!canSaveName}>{savingName ? 'Saving…' : 'Save Machine Name'}</button>
+              <button type="button" className="btn-primary" onClick={() => void saveName()} disabled={!canSaveName}>{savingName ? 'Saving…' : 'Save Machine Name'}</button>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {!isServer && (
                   <>
@@ -494,7 +494,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={closeRoleModal} disabled={savingRole}>Cancel</button>
-              <button className="primary" onClick={() => void submitRoleChange()} disabled={!canSubmitRole}>{savingRole ? 'Saving…' : 'Change Role & Reload'}</button>
+              <button className="btn-primary" onClick={() => void submitRoleChange()} disabled={!canSubmitRole}>{savingRole ? 'Saving…' : 'Change Role & Reload'}</button>
             </div>
           </div>
         </div>
@@ -552,7 +552,7 @@ export function MachineSettings({ isAdmin }: { isAdmin: boolean }) {
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={closeReconnectModal} disabled={reconnectJoining}>Cancel</button>
-              <button className="primary" onClick={() => void submitReconnect()} disabled={!canReconnectJoin || reconnectJoining}>{reconnectJoining ? 'Reconnecting…' : 'Reconnect'}</button>
+              <button className="btn-primary" onClick={() => void submitReconnect()} disabled={!canReconnectJoin || reconnectJoining}>{reconnectJoining ? 'Reconnecting…' : 'Reconnect'}</button>
             </div>
           </div>
         </div>

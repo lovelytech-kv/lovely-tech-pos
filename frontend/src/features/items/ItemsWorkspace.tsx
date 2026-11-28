@@ -234,7 +234,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           </div>
           <div className="button-row">
             {isAdmin && <button className="ghost" onClick={openMasterManager}>Manage Categories &amp; Types</button>}
-            {isAdmin && <button className="primary" onClick={addItem}>+ Add Item</button>}
+            {isAdmin && <button className="btn-primary" onClick={addItem}><Icon name="plus" size={15} /> Add Item</button>}
             <span className="feature-badge">FIFO • IMEI • BARCODE</span>
           </div>
         </div>
@@ -339,7 +339,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           <span className="items-empty-icon" aria-hidden="true"><Icon name="empty-box" size={40} /></span>
           <b>No items yet</b>
           <span>{isAdmin ? 'Add your first item to start selling, tracking stock and scanning barcodes.' : 'Ask an Admin to add items to the shop.'}</span>
-          {isAdmin && <button className="primary" onClick={addItem}><Icon name="plus" size={15} /> Add First Item</button>}
+          {isAdmin && <button className="btn-primary" onClick={addItem}><Icon name="plus" size={15} /> Add First Item</button>}
         </div>
       )}
 
@@ -444,7 +444,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                   ) : (
                     <button
                       type="button"
-                      className="primary items-reactivate-btn"
+                      className="btn-primary items-reactivate-btn"
                       onClick={() => void reactivateItem(item)}
                       disabled={reactivatingId !== null}
                     >
@@ -1282,7 +1282,7 @@ function ItemFormModal({
             </button>
           )}
           {item && !readOnly && !item.is_active && (
-            <button type="button" className="primary inv-card-reactivate" onClick={() => void reactivate()} disabled={busy || reactivating}>
+            <button type="button" className="btn-primary inv-card-reactivate" onClick={() => void reactivate()} disabled={busy || reactivating}>
               {reactivating ? 'Reactivating…' : 'Reactivate item'}
             </button>
           )}
@@ -1290,7 +1290,7 @@ function ItemFormModal({
             {readOnly ? 'Close' : 'Cancel'}
           </button>
           {!readOnly && (
-            <button type="button" className="primary" onClick={() => void save()} disabled={!canSave}>
+            <button type="button" className="btn-primary" onClick={() => void save()} disabled={!canSave}>
               {busy ? <><span className="spinner" aria-hidden="true" /> Saving…</> : item ? 'Save Item' : 'Create Item'}
             </button>
           )}
@@ -1386,7 +1386,7 @@ function ItemFormModal({
               <button type="button" className="ghost" onClick={() => void requestCloseMaster()} disabled={masterBusy}>Cancel</button>
               <button
                 type="button"
-                className="primary"
+                className="btn-primary"
                 disabled={masterBusy || (masterModal === 'category' ? !newCategoryName.trim() : !newTypeName.trim())}
                 onClick={() => void (masterModal === 'category' ? createCategoryInline() : createTypeInline())}
               >

@@ -794,7 +794,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                 <button type="button" className="ghost" onClick={() => void cancelEntry()} disabled={busy}>Cancel</button>
                 <button
                   type="button"
-                  className="primary"
+                  className="btn-primary"
                   disabled={!canSavePurchase}
                   title={!canSavePurchase && !busy ? 'Complete the required fields to save' : undefined}
                   onClick={() => void save()}
