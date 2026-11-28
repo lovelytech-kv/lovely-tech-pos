@@ -144,7 +144,6 @@ export function DashboardLayout({ user, activeKey, onNavigate, onLogout, childre
         <AppHeader title={activeLabel} user={user} onLogout={onLogout}>
           <span className={`header-status header-${serverState}`} aria-live="polite"><i className="online-dot" /> {serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Checking…'}</span>
           <ThemeToggle />
-          <button className="icon-button app-header-notifications" aria-label="Notifications">♢</button>
           {headerActions}
         </AppHeader>
         <div className="v0-content"><div className="tab-content" key={activeKey}>{children}</div></div>

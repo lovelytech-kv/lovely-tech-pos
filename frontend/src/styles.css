@@ -329,7 +329,7 @@ html,body,#root{height:100%;max-height:100%}
 .app-header-action{padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:var(--text-sm);font-weight:var(--fw-semibold);white-space:nowrap;transition:border-color var(--transition-fast),color var(--transition-fast),background var(--transition-fast)}
 .app-header-action:hover{border-color:var(--accent);color:var(--accent);background:rgba(var(--accent-rgb),.06)}
 @media(max-width:1400px){.app-header-title h1{max-width:min(260px,22vw)}}
-@media(max-width:1240px){.app-header-user-text{display:none}.app-header .header-status,.app-header-notifications{display:none}}
+@media(max-width:1240px){.app-header-user-text{display:none}.app-header .header-status{display:none}}
 @media(max-width:1180px){.app-header-title h1{max-width:280px}}
 
 /* ============ SESSION 3B-3 — RECEIPT FOOTER ============ */
