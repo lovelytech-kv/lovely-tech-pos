@@ -3150,6 +3150,12 @@ button.warranty-search-btn {
   min-width: 0;
 }
 
+/* Stock tab action spacing (3D-4b-3). */
+.stock-actions {
+  gap: var(--space-3);
+  align-items: center;
+}
+
 /* Keep ghost hierarchy inside legacy dense action bars. */
 .form-actions .btn-ghost,
 .button-row .btn-ghost {
