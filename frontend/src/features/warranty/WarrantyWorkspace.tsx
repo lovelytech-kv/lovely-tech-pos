@@ -258,7 +258,7 @@ export function WarrantyWorkspace({ isAdmin, onError }: Props) {
             <h2>Create and manage claims</h2>
             <p className="muted">Claims hold the reported quantity. Admin decisions are version-protected, so a stale screen cannot approve the same claim twice.</p>
           </div>
-          <button className="ghost" onClick={() => void loadClaims()}>Refresh</button>
+          <button className="ghost btn-sm" onClick={() => void loadClaims()}>Refresh</button>
         </div>
         <div className="form-grid compact">
           <input value={itemQuery} onChange={(event) => setItemQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchItems(); }} placeholder="Item code / barcode / description" />

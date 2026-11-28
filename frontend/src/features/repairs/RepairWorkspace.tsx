@@ -454,7 +454,7 @@ function RepairDetailPanel({
           </p>
         </div>
 
-        <button className="ghost" onClick={() => void onReload()}>
+        <button className="ghost btn-sm" onClick={() => void onReload()}>
           Reload
         </button>
       </div>
@@ -486,13 +486,13 @@ function RepairDetailPanel({
       <h4>Status workflow</h4>
       <div className="button-row">
         {(STATUS_FLOW[detail.status] ?? []).map((status) => (
-          <button key={status} onClick={() => void onStatus(status)}>
+          <button key={status} className="btn-sm" onClick={() => void onStatus(status)}>
             {status === 'WAITING FOR PART' ? 'Waiting for Part' : `Move to ${status}`}
           </button>
         ))}
 
         {detail.status === 'READY' && (
-          <button onClick={() => void onDeliver()}>Deliver / Hand Over</button>
+          <button className="btn-sm" onClick={() => void onDeliver()}>Deliver / Hand Over</button>
         )}
 
         {!['DELIVERED', 'CANCELLED'].includes(detail.status) && (
@@ -566,6 +566,7 @@ function RepairDetailPanel({
               {part.status === 'USED' && (
                 <>
                   <button
+                    className="btn-sm"
                     onClick={() =>
                       void onAction(
                         `/repairs/${detail.repair_id}/part/${part.id}/remove`,
@@ -656,6 +657,7 @@ function RepairDetailPanel({
             <span>Rs. {money(payment.amount)}</span>
             {payment.proof_no && (
               <button
+                className="btn-sm"
                 onClick={async () => {
                   try {
                     await api(`/documents/REPAIR_PAYMENT/${payment.id}/reprint`, {

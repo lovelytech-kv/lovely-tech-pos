@@ -374,7 +374,7 @@ export function CategoryTypeManager({
                         {categoryOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                       </select>
                       <span className="category-manager-actions">
-                        <button type="button" disabled={busy === 'edit-category'} onClick={() => void saveCategory()}>
+                        <button type="button" className="btn-sm" disabled={busy === 'edit-category'} onClick={() => void saveCategory()}>
                           {busy === 'edit-category' ? 'Saving…' : 'Save'}
                         </button>
                         <button type="button" className="btn-ghost btn-sm" disabled={busy === 'edit-category'} onClick={() => setEditCat(null)}>Cancel</button>
@@ -386,7 +386,7 @@ export function CategoryTypeManager({
                       <span className="category-manager-actions">
                         <button
                           type="button"
-                          className="ghost"
+                          className="ghost btn-sm"
                           disabled={!!busy}
                           onClick={() => setEditCat({ id: category.id, name: category.name, parent_id: category.parent_id || null })}
                         >Edit</button>
@@ -478,7 +478,7 @@ export function CategoryTypeManager({
                         />
                       )}
                       <span className="category-manager-actions">
-                        <button type="button" disabled={busy === 'edit-type'} onClick={() => void saveType()}>
+                        <button type="button" className="btn-sm" disabled={busy === 'edit-type'} onClick={() => void saveType()}>
                           {busy === 'edit-type' ? 'Saving…' : 'Save'}
                         </button>
                         <button
@@ -497,7 +497,7 @@ export function CategoryTypeManager({
                         {type.is_serialized ? <span className="category-manager-tag">IMEI</span> : null}
                       </span>
                       <span className="category-manager-actions">
-                        <button type="button" className="ghost" disabled={!!busy} onClick={() => startEditType(type)}>Edit</button>
+                        <button type="button" className="ghost btn-sm" disabled={!!busy} onClick={() => startEditType(type)}>Edit</button>
                         <button
                           type="button"
                           className="btn-danger btn-sm"

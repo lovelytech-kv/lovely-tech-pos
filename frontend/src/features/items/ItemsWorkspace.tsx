@@ -233,7 +233,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
             </p>
           </div>
           <div className="button-row">
-            {isAdmin && <button className="ghost" onClick={openMasterManager}>Manage Categories &amp; Types</button>}
+            {isAdmin && <button className="ghost btn-sm" onClick={openMasterManager}>Manage Categories &amp; Types</button>}
             {isAdmin && <button className="btn-primary" onClick={addItem}><Icon name="plus" size={15} /> Add Item</button>}
             <span className="feature-badge">FIFO • IMEI • BARCODE</span>
           </div>
@@ -302,7 +302,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
         {isAdmin && (
           <button
             type="button"
-            className="ghost"
+            className="ghost btn-sm"
             onClick={() => setShowInactive((value) => !value)}
             aria-pressed={showInactive}
             title="Include deactivated items for audit"
@@ -311,7 +311,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           </button>
         )}
 
-        <button type="button" className="ghost items-refresh" onClick={() => void load()} disabled={loading}>
+        <button type="button" className="ghost items-refresh btn-sm" onClick={() => void load()} disabled={loading}>
           {loading ? 'Refreshing…' : <><Icon name="refresh" size={15} /> Refresh</>}
         </button>
       </div>
@@ -348,7 +348,7 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
           <span className="items-empty-icon" aria-hidden="true"><Icon name="empty-search" size={40} /></span>
           <b>No items match</b>
           <span>Try a different name, barcode or item code, or clear the filters.</span>
-          <button className="ghost" onClick={clearFilters}>Clear filters</button>
+          <button className="ghost btn-sm" onClick={clearFilters}>Clear filters</button>
         </div>
       )}
 
@@ -440,11 +440,11 @@ export function ItemsWorkspace({ isAdmin, onError }: { isAdmin: boolean; onError
                 <span className="items-list-price">{item.master_sale_price == null ? 'No price' : `Rs. ${money(item.master_sale_price)}`}</span>
                 {isAdmin && (
                   item.is_active ? (
-                    <button type="button" className="ghost" onClick={() => openItem(item)}>Edit</button>
+                    <button type="button" className="ghost btn-sm" onClick={() => openItem(item)}>Edit</button>
                   ) : (
                     <button
                       type="button"
-                      className="btn-primary items-reactivate-btn"
+                      className="btn-primary items-reactivate-btn btn-sm"
                       onClick={() => void reactivateItem(item)}
                       disabled={reactivatingId !== null}
                     >

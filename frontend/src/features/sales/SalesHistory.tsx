@@ -371,7 +371,7 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                 : 'Your sales history. Search, filter, view details or start a return.'}
             </p>
           </div>
-          <button className="ghost" onClick={() => void fetchSales(false)} disabled={loading}>
+          <button className="ghost btn-sm" onClick={() => void fetchSales(false)} disabled={loading}>
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
@@ -630,12 +630,13 @@ export function SalesHistory({ isAdmin, onError, onNavigate, user }: Props) {
                 </label>
                 <button
                   type="button"
+                  className="btn-sm"
                   onClick={() => selectedDetail && printReceipt(selectedDetail)}
                   disabled={!selectedDetail}
                 >
                   <Icon name="print" size={15} /> Print
                 </button>
-                <button type="button" onClick={goToReturn}>
+                <button type="button" className="btn-sm" onClick={goToReturn}>
                   <Icon name="return-undo" size={15} /> Return
                 </button>
                 {isAdmin && !selectedItem.is_voided && (
