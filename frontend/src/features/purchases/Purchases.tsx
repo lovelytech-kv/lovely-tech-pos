@@ -791,7 +791,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                 <p className="muted">Buy cost is entered by an Admin. Your purchase will be marked “Awaiting admin review”.</p>
               )}
               <div className="form-actions purchase-summary-actions">
-                <button type="button" className="ghost" onClick={() => void cancelEntry()} disabled={busy}>Cancel</button>
+                <button type="button" className="btn-ghost" onClick={() => void cancelEntry()} disabled={busy}>Cancel</button>
                 <button
                   type="button"
                   className="btn-primary"
@@ -958,7 +958,7 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
                 </div>
               )}
               <div className="modal-actions">
-                <button type="button" className="ghost" onClick={() => setDetail(null)}>Close</button>
+                <button type="button" className="btn-ghost" onClick={() => setDetail(null)}>Close</button>
               </div>
             </div>
           </div>
@@ -1014,8 +1014,8 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
               <label className="wide-field">Reason<textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Why is this correction required?" /></label>
               <label className="wide-field">Admin password<input type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} placeholder="Re-authentication" /></label>
               <div className="modal-actions">
-                <button type="button" className="ghost" onClick={() => setCorrection(null)} disabled={savingCorrection}>Cancel</button>
-                <button type="button" disabled={savingCorrection} onClick={() => void applyCorrection()}>{savingCorrection ? 'Applying…' : 'Apply audited correction'}</button>
+                <button type="button" className="btn-ghost" onClick={() => setCorrection(null)} disabled={savingCorrection}>Cancel</button>
+                <button type="button" className="btn-primary" disabled={savingCorrection} onClick={() => void applyCorrection()}>{savingCorrection ? 'Applying…' : 'Apply audited correction'}</button>
               </div>
             </div>
           </div>
@@ -1080,8 +1080,8 @@ export function Purchases({ isAdmin, onError, initialStatusFilter = 'ALL' }: { i
               </label>
               <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>The new supplier is selected for this purchase. Supplier payment is not part of purchase entry.</p>
               <div className="modal-actions">
-                <button type="button" className="ghost" onClick={() => setSupplierModalOpen(false)} disabled={supplierSaving}>Cancel</button>
-                <button type="button" disabled={supplierSaving || !supplierForm.name.trim()} onClick={() => void saveSupplier()}>
+                <button type="button" className="btn-ghost" onClick={() => setSupplierModalOpen(false)} disabled={supplierSaving}>Cancel</button>
+                <button type="button" className="btn-primary" disabled={supplierSaving || !supplierForm.name.trim()} onClick={() => void saveSupplier()}>
                   {supplierSaving ? 'Adding…' : 'Add supplier'}
                 </button>
               </div>

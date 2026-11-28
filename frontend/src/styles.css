@@ -420,6 +420,9 @@ html,body,#root{height:100%;max-height:100%}
   .v0-nav button,
   .btn-primary,
   .btn-secondary,
+  .btn-ghost,
+  .btn-danger,
+  .btn-success,
   .quick-actions button,
   .payment-grid button,
   .button-row button,
@@ -2897,13 +2900,15 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 11px 18px;
+  min-height: 40px;
+  padding: 10px 20px;
   border: 0;
   border-radius: 10px;
   background: var(--accent);
   color: #fff;
-  font-size: 12px;
+  font-size: var(--text-base);
   font-weight: 700;
+  line-height: 1.2;
   cursor: pointer;
   box-shadow:
     0 1px 2px rgba(var(--accent-rgb), 0.2),
@@ -2937,14 +2942,17 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 11px 18px;
+  min-height: 40px;
+  padding: 10px 20px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--text-base);
   font-weight: 700;
+  line-height: 1.2;
   cursor: pointer;
+  box-shadow: none;
   transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 .btn-secondary:hover:not(:disabled) {
@@ -2963,18 +2971,22 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 11px 18px;
+  min-height: 40px;
+  padding: 10px 20px;
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--text);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: var(--text-base);
   font-weight: 700;
+  line-height: 1.2;
   cursor: pointer;
+  box-shadow: none;
   transition: background-color 150ms ease, color 150ms ease;
 }
 .btn-ghost:hover:not(:disabled) {
   background: var(--surface-2);
+  color: var(--text);
 }
 .btn-ghost:disabled {
   opacity: 0.5;
@@ -2987,20 +2999,22 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 11px 18px;
+  min-height: 40px;
+  padding: 10px 20px;
   border: 0;
   border-radius: 10px;
   background: var(--color-danger);
   color: #fff;
-  font-size: 12px;
+  font-size: var(--text-base);
   font-weight: 700;
+  line-height: 1.2;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.2), 0 4px 12px rgba(220, 38, 38, 0.28);
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.16), 0 4px 10px rgba(220, 38, 38, 0.2);
   transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 .btn-danger:hover:not(:disabled) {
   background: var(--color-danger-hover);
-  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.25), 0 6px 16px rgba(220, 38, 38, 0.36);
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.2), 0 5px 12px rgba(220, 38, 38, 0.26);
   transform: translateY(-1px);
 }
 .btn-danger:active:not(:disabled) {
@@ -3018,15 +3032,17 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 11px 18px;
+  min-height: 40px;
+  padding: 10px 20px;
   border: 0;
   border-radius: 10px;
   background: var(--color-success);
   color: #fff;
-  font-size: 12px;
+  font-size: var(--text-base);
   font-weight: 700;
+  line-height: 1.2;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(22, 163, 74, 0.2), 0 4px 12px rgba(22, 163, 74, 0.28);
+  box-shadow: 0 1px 2px rgba(22, 163, 74, 0.16), 0 4px 10px rgba(22, 163, 74, 0.2);
   transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 .btn-success:hover:not(:disabled) {
@@ -3043,6 +3059,33 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
   box-shadow: none;
 }
 
+/* Size modifiers: small inline actions and large primary CTAs. */
+.btn-sm {
+  min-height: 32px;
+  padding: 8px 16px;
+  font-size: var(--text-sm);
+}
+
+.btn-lg {
+  min-height: 52px;
+  padding: 14px 28px;
+  font-size: var(--text-lg);
+}
+
+/* Keep ghost hierarchy inside legacy dense action bars. */
+.form-actions .btn-ghost,
+.button-row .btn-ghost {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+.form-actions .btn-ghost:hover:not(:disabled),
+.button-row .btn-ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
 /* Backward-compatible danger modifier used by legacy tab buttons. */
 .danger-button {
   background: var(--color-danger) !important;
@@ -3054,6 +3097,7 @@ html[data-theme="dark"] .sh-status-ok { color: #4ade80 !important; }
 
 /* Compact header logout keeps its original dimensions. */
 .app-header-logout.btn-ghost {
+  min-height: 32px;
   padding: 7px 11px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);

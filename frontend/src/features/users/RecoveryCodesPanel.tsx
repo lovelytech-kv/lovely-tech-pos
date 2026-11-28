@@ -160,7 +160,7 @@ export function RecoveryCodesPanel({ isAdmin }: { isAdmin: boolean }) {
               </div>
             </div>
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => { setShowPasswordPrompt(false); setAdminPassword(''); }} disabled={regenerating}>Cancel</button>
+              <button className="btn-ghost" onClick={() => { setShowPasswordPrompt(false); setAdminPassword(''); }} disabled={regenerating}>Cancel</button>
               <button className="primary" onClick={regenerate} disabled={regenerating || !adminPassword}>
                 {regenerating ? 'Generating…' : 'Regenerate'}
               </button>

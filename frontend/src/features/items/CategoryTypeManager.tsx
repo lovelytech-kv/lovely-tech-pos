@@ -514,7 +514,7 @@ export function CategoryTypeManager({
         </div>
 
         <div className="modal-actions">
-          <button type="button" className="btn-secondary" onClick={() => closeRef.current()} disabled={!!busy}>Close</button>
+          <button type="button" className="btn-ghost" onClick={() => closeRef.current()} disabled={!!busy}>Close</button>
         </div>
       </div>
     </div>

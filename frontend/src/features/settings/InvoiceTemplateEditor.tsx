@@ -691,7 +691,7 @@ export function InvoiceTemplateEditor({ isAdmin, mode = 'inline', onClose }: {
               </select>
             </label>
             <div className="button-row" style={{ marginTop: '1rem', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn-secondary" onClick={() => setNewOpen(false)} disabled={creating}>Cancel</button>
+              <button type="button" className="btn-ghost" onClick={() => setNewOpen(false)} disabled={creating}>Cancel</button>
               <button type="button" className="primary" onClick={() => void create()} disabled={creating || !newForm.name.trim()}>
                 {creating ? 'Creating…' : 'Create'}
               </button>

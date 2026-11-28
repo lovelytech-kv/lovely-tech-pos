@@ -1277,7 +1277,7 @@ function ItemFormModal({
 
         <div className="modal-actions">
           {item && !readOnly && item.is_active && (
-            <button type="button" className="danger-button" onClick={() => void deactivate()} disabled={busy || deactivating}>
+            <button type="button" className="btn-danger" onClick={() => void deactivate()} disabled={busy || deactivating}>
               {deactivating ? 'Deactivating…' : 'Deactivate item'}
             </button>
           )}
@@ -1286,7 +1286,7 @@ function ItemFormModal({
               {reactivating ? 'Reactivating…' : 'Reactivate item'}
             </button>
           )}
-          <button type="button" className="btn-secondary" onClick={() => void requestClose()} disabled={busy}>
+          <button type="button" className="btn-ghost" onClick={() => void requestClose()} disabled={busy}>
             {readOnly ? 'Close' : 'Cancel'}
           </button>
           {!readOnly && (
@@ -1383,7 +1383,7 @@ function ItemFormModal({
             )}
 
             <div className="modal-actions">
-              <button type="button" className="ghost" onClick={() => void requestCloseMaster()} disabled={masterBusy}>Cancel</button>
+              <button type="button" className="btn-ghost" onClick={() => void requestCloseMaster()} disabled={masterBusy}>Cancel</button>
               <button
                 type="button"
                 className="btn-primary"

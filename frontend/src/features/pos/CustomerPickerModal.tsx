@@ -272,7 +272,7 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
               )}
 
               <div className="modal-actions">
-                <button type="button" onClick={requestClose}>Cancel</button>
+                <button type="button" className="btn-ghost" onClick={requestClose}>Cancel</button>
               </div>
             </>
           ) : (
@@ -320,8 +320,8 @@ export function CustomerPickerModal({ onSelect, onClose }: Props) {
               {formError && <p className="field-error" role="alert">{formError}</p>}
 
               <div className="modal-actions">
-                <button type="button" onClick={requestClose} disabled={saving}>Cancel</button>
-                <button type="button" onClick={() => void save()} disabled={saving} style={{ background: 'var(--accent)', color: '#fff', border: 0, borderRadius: 'var(--radius-sm)', padding: '0.5rem 1rem', fontWeight: 600, cursor: saving ? 'wait' : 'pointer' }}>
+                <button type="button" className="btn-ghost" onClick={requestClose} disabled={saving}>Cancel</button>
+                <button type="button" className="btn-primary" onClick={() => void save()} disabled={saving}>
                   {saving ? 'Saving…' : 'Save Customer'}
                 </button>
               </div>
